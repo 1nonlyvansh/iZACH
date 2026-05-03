@@ -1,0 +1,90 @@
+venv/
+.venv/
+__pycache__/
+.env
+api_keys
+izach_messenger/.wwebjs_auth/
+izach_messenger/node_modules/
+*.db
+*.pyc
+.env
+node_modules
+
+#Python
+__pycache__/
+*.pyc
+*.pyo
+#Virtual Environments
+venv/       
+
+#Node
+node_modules/
+dist/
+
+#Secrets (Critical)
+api_keys.json
+.env
+.env.local
+.env.development
+.env.production
+
+#Logs
+*.log
+
+#OS Junk
+.DS_Store
+Thumbs.db   
+
+#Electron/build
+out/
+build/
+
+#Vite cache
+.vite/
+
+#Specific sensitive files
+keys and ids*
+*keys*.txt
+*ids*.txt
+*api*.txt
+real_ui_file.txt
+*zip*.zip
+
+# Logs & temp
+*.txt
+*.log
+logs/
+.cache/
+
+# WhatsApp session
+.wwebjs_auth/
+.wwebjs_cache/
+
+# OS junk
+desktop.ini
+Thumbs.db
+
+# Audio/test junk
+*.mp3
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Env
+.env
+
+*.txt
+.cache/
+.wwebjs_auth/
+.wwebjs_cache/
+logs/
+
+
+#ZIP Files
+*.zip
+iZACH_13Apr2026.zip
+
+
+#Test Files
+test_mic.py

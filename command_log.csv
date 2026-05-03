@@ -1,0 +1,107 @@
+timestamp,input_type,command,response,time_taken_s,status
+14-04-2026 00:44,voice,play dark entries on spotify,,3.14,success
+14-04-2026 00:44,voice,play imposter syndrome on spotify,,1.732,success
+14-04-2026 00:45,voice,special,,2.628,success
+14-04-2026 00:45,voice,hello brother,,1.861,success
+14-04-2026 13:40,voice,hello bro,unknown intent,0,fail
+14-04-2026 13:40,text,hello bro,I didn't understand that.,0,success
+14-04-2026 13:41,voice,hello,unknown intent,0,fail
+14-04-2026 13:41,voice,hello,,2.138,success
+14-04-2026 14:35,text,open notepad,Opening notepad,0,success
+14-04-2026 14:35,text,hi bro,"What's up, Vansh?",0,success
+14-04-2026 14:35,voice,open chat gpt,,4.684,success
+14-04-2026 14:39,voice,play tuka tuka on spotify,,3.755,success
+14-04-2026 14:39,voice,switch to elite node,,2.158,success
+14-04-2026 14:41,voice,play fashion kila on spotify,,3.665,success
+14-04-2026 14:42,voice,play how deep is your love on spotify,,2.85,success
+14-04-2026 14:42,voice,come to me on a summer break,,4.149,success
+14-04-2026 14:43,voice,who is kanye west,,2.889,success
+14-04-2026 14:43,voice,hello bro,,3.776,success
+14-04-2026 14:56,voice,hello,,0.755,success
+14-04-2026 14:57,voice,hello brother,,0.529,success
+14-04-2026 15:31,voice,hello bro,,2.728,success
+14-04-2026 15:32,voice,open obsidian,,0,success
+14-04-2026 15:37,voice,open obsidian,,0.912,success
+14-04-2026 20:28,voice,hello bro hello,,2.702,success
+14-04-2026 20:28,voice,can you tell me who is childish gambino,,2.655,success
+14-04-2026 20:29,voice,what is this age,,2.858,success
+14-04-2026 20:29,voice,which famous song,,3.563,success
+14-04-2026 20:34,voice,open spotify,,3.5,success
+15-04-2026 00:00,voice,hello,,1.608,success
+15-04-2026 00:00,voice,play sex tape on spotify,,2.506,success
+15-04-2026 00:36,voice,can you tell me what you can do,,3.711,success
+15-04-2026 01:04,voice,open chrome,,2.971,success
+15-04-2026 01:06,voice,reply him during my college project work,,3.157,success
+15-04-2026 01:07,voice,reply reminder,,3.098,success
+15-04-2026 01:08,voice,reply him i will send you assignments later,,2.769,success
+16-04-2026 14:35,voice,play take on me on spotify,,3.62,success
+16-04-2026 14:44,voice,play how deep is your love on spotify,,4.198,success
+16-04-2026 14:44,voice,play my cosmic pulse playlist,,1.228,success
+16-04-2026 14:48,voice,next song,,6.684,success
+16-04-2026 14:59,voice,play heartbeat on spotify,,2.825,success
+16-04-2026 15:00,voice,what is my email address,,4.282,success
+16-04-2026 15:01,voice,hello,,2.55,success
+16-04-2026 15:01,voice,you know what i talked about yesterday,,3.662,success
+16-04-2026 15:07,voice,hello,,2.602,success
+16-04-2026 15:57,voice,can you tell me time,,3.746,success
+16-04-2026 15:58,voice,system temperature,,2.289,success
+16-04-2026 16:00,voice,hello can you tell me my name my phone number and my email address,,4.485,success
+16-04-2026 16:01,voice,file syllabus,,5.127,success
+16-04-2026 16:02,voice,open file syllabus,,11.856,success
+17-04-2026 07:49,voice,whatsapp is not connected,,3.526,success
+17-04-2026 07:49,voice,should be back up in a sec,,0.895,success
+17-04-2026 07:49,voice,still not backup i see let me try something else,,1.783,success
+17-04-2026 07:50,voice,let me die deeper into the issue,,3.424,success
+2026-04-17 11:28:27,voice,gold necklace,,2.32,success
+2026-04-17 11:30:36,voice,kaise chal raha hai na isliye,,3.286,success
+2026-04-17 21:27:13,voice,but it's not showing up,,1.185,success
+2026-04-17 21:27:24,voice,it's not showing up exactly,,0.837,success
+2026-04-17 21:27:44,voice,supposed to be,,1.194,success
+2026-04-17 21:30:10,voice,open command prompt open command prompt,,12.858,success
+2026-04-17 21:30:51,voice,open chrome,,3.001,success
+2026-04-19 14:33:13,voice,what's the weather,,2.267,success
+2026-04-19 14:33:32,voice,tell me what you know about me,,4.433,success
+2026-04-19 14:33:54,voice,stop,,1.863,success
+2026-04-19 14:34:24,voice,play i want things to be beautiful,,2.488,success
+2026-04-19 17:33:27,voice,hello bro,,3.854,success
+2026-04-19 21:21:54,voice,open chrome,,11.521,success
+2026-04-19 21:22:08,voice,open prime video,,2.198,success
+2026-04-19 21:22:25,voice,open obsidian,,7.121,success
+2026-04-19 23:53:00,voice,search my name on internet,,4.24,success
+2026-04-19 23:53:32,voice,like what groups,,3.662,success
+2026-04-19 23:53:59,voice,can you find my instagram,,7.096,success
+2026-04-19 23:54:17,voice,find my account on instagram in internet,,5.725,success
+2026-04-19 23:54:59,voice,can you tell me my total followers,,4.711,success
+2026-04-19 23:55:32,voice,can you tell me how it is your data is,,4.095,success
+2026-04-19 23:56:08,voice,the instagram username you are saying and that is mine it's about 5 years old,,4.642,success
+2026-04-19 23:56:40,voice,1 n o n l y v a n s h,,3.792,success
+2026-04-20 16:41:48,voice,open file sem 1,,3.23,success
+2026-04-27 17:41:19,voice,whatsapp is not connected exceeding 90% consider closing some applications,,3.42,success
+2026-04-27 17:42:20,voice,hey open notepad,,11.503,success
+2026-04-27 17:42:41,voice,can you tell me my ram health,,4.286,success
+2026-04-27 17:43:20,voice,set a timer for 1 minute,,4.457,success
+2026-04-27 17:43:45,voice,lights on spotify,,7.629,success
+2026-04-29 11:58:55,voice,hello niga,,1.727,success
+2026-04-29 11:59:13,voice,what time is it,,0.915,success
+2026-04-29 11:59:42,voice,who is elon musk,,2.826,success
+2026-04-29 12:30:20,voice,hello,,2.269,success
+2026-04-29 13:15:19,voice,play tear you apart on spotify,,2.771,success
+2026-04-29 13:31:07,voice,play dexter blood theme on spotify,,6.144,success
+2026-04-29 13:37:21,voice,hello i am vansh kishore sharma the founder of you,,3.69,success
+2026-04-29 13:37:56,voice,open notepad,,2.475,success
+2026-04-29 13:39:08,voice,introduce yourself,,3.587,success
+2026-04-29 13:39:33,voice,tell me how will you introduce yourself in front of my teacher,,3.72,success
+2026-04-29 13:39:57,voice,can you tell my teacher what you can do,,4.15,success
+2026-04-29 19:51:01,voice,hello,,1.6,success
+2026-04-29 19:52:22,voice,hello,,2.937,success
+2026-04-29 19:52:48,voice,open notepad,,2.494,success
+2026-04-30 11:09:07,voice,what do you see,,4.77,success
+2026-04-30 11:15:03,voice,what am i holding,,3.315,success
+2026-04-30 15:01:30,voice,open chrome,,2.482,success
+2026-05-01 09:56:08,voice,tell me how will you introduce yourself in front of others,,3.283,success
+2026-05-01 09:56:29,voice,list the features you can do,,3.789,success
+2026-05-01 09:57:08,voice,can you access system,,6.219,success
+2026-05-01 11:49:45,voice,what you see on camera,,4.746,success
+2026-05-01 14:34:59,voice,tell me what is this on camera,,6.087,success
+2026-05-01 14:35:34,voice,what you see on camera,,4.888,success
+2026-05-02 11:43:49,voice,play dark entries on spotify,,2.762,success

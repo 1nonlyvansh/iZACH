@@ -1,0 +1,11 @@
+{
+  "permission_level": "balanced",
+  "sandbox_enabled": false,
+  "sandbox_folder": "C:\\Users\\vansh/Documents/iZACH_Sandbox",
+  "protected_paths": [
+    "C:\\Windows",
+    "C:\\Program Files",
+    "C:\\Program Files (x86)"
+  ],
+  "password_hash": ""
+}
