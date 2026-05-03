@@ -17,9 +17,9 @@ class SpotifyController:
     def __init__(self):
         self.last_device_id = None
         self.last_device_name = None
-        self.client_id = os.getenv("2c028d49f4de42988a988fb486d89611")
-        self.client_secret = os.getenv("3fa2771ef3eb4a8cb26a7e6e549c3a28")
-        self.redirect_uri = os.getenv("http://127.0.0.1:8888/callback")
+        self.client_id = os.getenv("SPOTIPY_CLIENT_ID", "")
+        self.client_secret = os.getenv("SPOTIPY_CLIENT_SECRET", "")
+        self.redirect_uri = os.getenv("SPOTIPY_REDIRECT_URI", "http://127.0.0.1:8888/callback")
         self.music_context = {
             "last_track": None,
             "last_artist": None
