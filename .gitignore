@@ -70,7 +70,57 @@ Thumbs.db
 # backups
 *.zip
 *.rar
+izach_env/
 
 # structure dumps
 *structure*.txt
 structure.txt
+
+
+# ========================
+# WhatsApp / Browser Cache
+# ========================
+.wwebjs_cache/
+.wwebjs_auth/
+
+# ========================
+# Cache
+# ========================
+.cache/
+
+# ========================
+# Logs & reports
+# ========================
+*.log
+*.csv
+*.txt
+
+# BUT allow important docs
+!README.md
+
+# ========================
+# Audio
+# ========================
+*.mp3
+
+# ========================
+# Structure dumps
+# ========================
+*structure*.txt
+
+# ========================
+# Runtime memory
+# ========================
+memory.json
+device_memory.json
+contacts.json
+
+# ========================
+# Suspicious files
+# ========================
+keys and ids*
+.cache
+*.log
+*.txt
+!README.md
+desktop.ini
