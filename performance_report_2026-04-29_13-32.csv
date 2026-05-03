@@ -1,0 +1,27 @@
+generated_at,total_commands,success,failures,success_rate,avg_time
+=== SESSION SUMMARY ===
+generated_at,2026-04-29 13:32:08
+total_commands,88
+success_count,86
+failure_count,2
+success_rate_%,97.7
+most_used_command,hello
+
+=== LATENCY BREAKDOWN ===
+avg_response_time_s,0.0
+min_response_time_s,0.0
+max_response_time_s,0.0
+
+=== INTENT ACCURACY ===
+total_intents,88
+unknown_intents,0
+unknown_intent_%,0.0
+
+=== FAILURE REASONS ===
+reason,count
+unknown_intent,2
+
+=== VOICE VS TEXT ===
+input_type,total,success,success_%,avg_time_s
+voice,85,83,97.6,0.0
+text,3,3,100.0,0.0

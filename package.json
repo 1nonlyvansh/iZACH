@@ -1,0 +1,11 @@
+{
+  "name": "izach-whatsapp-bridge",
+  "version": "1.0.0",
+  "description": "WhatsApp bridge for iZACH",
+  "main": "whatsapp_bridge.js",
+  "dependencies": {
+    "express": "^4.18.2",
+    "qrcode-terminal": "^0.12.0",
+    "whatsapp-web.js": "^1.34.6"
+  }
+}

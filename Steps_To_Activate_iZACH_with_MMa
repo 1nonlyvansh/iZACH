@@ -1,0 +1,13 @@
+Run n8n via Command Prompt
+
+Open iZACH Folder in .env by 
+python main.py
+
+then run iZACHMMA Folder in .env by 
+python main.py
+
+then confirm connection status by 
+curl http://localhost:5050/health
+ 
+then execute the command by
+curl -X POST http://localhost:5678/webhook/mma-command -H "Content-Type: application/json" -d "{\"input\": \"{YOUR_COMMAND}\", \"totp\": \"\"}"

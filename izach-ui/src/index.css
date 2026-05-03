@@ -1,0 +1,148 @@
+@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=JetBrains+Mono:wght@300;400;500;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  --cyan: #00e5ff;
+  --cyan-dim: #005060;
+  --cyan-dark: #002030;
+  --cyan-glow: rgba(0, 229, 255, 0.15);
+  --bg-deep: #050d1a;
+  --bg-panel: #071020;
+  --bg-card: #0a1628;
+  --green-neon: #1db954;
+  --amber: #ffb300;
+  --red-neon: #ff3d3d;
+  --border: #0d2a3a;
+  --border-hi: #1a4a5a;
+  --text-pri: #c8e8f0;
+  --text-sec: #3a6070;
+}
+
+html, body, #root {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+  background: var(--bg-deep);
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--text-pri);
+}
+
+/* scrollbar */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: var(--bg-deep); }
+::-webkit-scrollbar-thumb { background: var(--cyan-dim); border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover { background: var(--cyan); }
+
+/* scanline overlay */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0, 0, 0, 0.03) 2px,
+    rgba(0, 0, 0, 0.03) 4px
+  );
+  pointer-events: none;
+  z-index: 9999;
+}
+
+/* cyan glow text */
+.glow-text {
+  color: var(--cyan);
+  text-shadow: 0 0 8px rgba(0, 229, 255, 0.6), 0 0 20px rgba(0, 229, 255, 0.3);
+}
+
+/* card glow border */
+.card-glow {
+  border: 1px solid var(--border-hi);
+  box-shadow: 0 0 0 1px rgba(0, 229, 255, 0.05) inset,
+              0 2px 20px rgba(0, 0, 0, 0.4);
+}
+
+/* animated neural orb */
+@keyframes neuralPulse {
+  0%, 100% { opacity: 0.6; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.05); }
+}
+
+@keyframes rotateHex {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes scanLine {
+  0% { top: 0%; opacity: 0; }
+  10% { opacity: 0.5; }
+  90% { opacity: 0.5; }
+  100% { top: 100%; opacity: 0; }
+}
+
+@keyframes chatFadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+@keyframes statusPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(29, 185, 84, 0.4); }
+  50% { box-shadow: 0 0 0 4px rgba(29, 185, 84, 0); }
+}
+
+@keyframes statusPulseRed {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 61, 61, 0.4); }
+  50% { box-shadow: 0 0 0 4px rgba(255, 61, 61, 0); }
+}
+
+.status-online { animation: statusPulse 2s infinite; }
+.status-offline { animation: statusPulseRed 2s infinite; }
+.blink { animation: blink 1s infinite; }
+.chat-message { animation: chatFadeIn 0.25s ease-out; }
+
+/* neural node lines */
+.neural-line {
+  stroke: var(--cyan);
+  stroke-opacity: 0.3;
+  stroke-width: 0.5;
+  animation: neuralPulse 3s ease-in-out infinite;
+}
+
+/* volume bar */
+@keyframes barPulse {
+  0%, 100% { opacity: 0.7; }
+  50% { opacity: 1; }
+}
+
+/* progress bars */
+.progress-bar-fill {
+  background: linear-gradient(90deg, var(--cyan-dim), var(--cyan));
+  box-shadow: 0 0 6px var(--cyan);
+  transition: width 0.5s ease;
+}
+
+/* input glow */
+.input-glow:focus {
+  outline: none;
+  border-color: var(--cyan);
+  box-shadow: 0 0 0 1px var(--cyan), 0 0 12px rgba(0,229,255,0.2);
+}
+
+/* button hover glow */
+.btn-glow:hover {
+  box-shadow: 0 0 8px rgba(0,229,255,0.4);
+}
