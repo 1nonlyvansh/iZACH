@@ -1,90 +1,66 @@
-venv/
-.venv/
-__pycache__/
-.env
-api_keys
-izach_messenger/.wwebjs_auth/
-izach_messenger/node_modules/
-*.db
-*.pyc
-.env
-node_modules
-
-#Python
+# ========================
+# Python
+# ========================
 __pycache__/
 *.pyc
 *.pyo
-#Virtual Environments
-venv/       
+*.pyd
+*.db
+*.sqlite3
 
-#Node
-node_modules/
-dist/
+# Virtual environments
+venv/
+.venv/
+env/
 
-#Secrets (Critical)
-api_keys.json
+# Environment variables / secrets
 .env
-.env.local
-.env.development
-.env.production
+.env.*
+api_keys.json
+api_keys/
 
-#Logs
-*.log
-
-#OS Junk
-.DS_Store
-Thumbs.db   
-
-#Electron/build
-out/
-build/
-
-#Vite cache
-.vite/
-
-#Specific sensitive files
-keys and ids*
-*keys*.txt
-*ids*.txt
-*api*.txt
-real_ui_file.txt
-*zip*.zip
-
-# Logs & temp
-*.txt
+# Logs
 *.log
 logs/
+
+# ========================
+# Node (WhatsApp bridge, UI)
+# ========================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# WhatsApp auth session (CRITICAL)
+izach_messenger/.wwebjs_auth/
+
+# Build outputs
+dist/
+build/
+out/
+
+# ========================
+# Electron / React
+# ========================
+*.tsbuildinfo
+.vite/
 .cache/
 
-# WhatsApp session
-.wwebjs_auth/
-.wwebjs_cache/
-
+# ========================
 # OS junk
-desktop.ini
+# ========================
+.DS_Store
 Thumbs.db
 
-# Audio/test junk
-*.mp3
+# ========================
+# IDE
+# ========================
+.vscode/
+.idea/
 
-# Python cache
-__pycache__/
-*.pyc
-
-# Env
-.env
-
-*.txt
-.cache/
-.wwebjs_auth/
-.wwebjs_cache/
-logs/
-
-
-#ZIP Files
-*.zip
-iZACH_13Apr2026.zip
-
-
-#Test Files
-test_mic.py
+# ========================
+# Temp / misc
+# ========================
+*.tmp
+*.bak
+*.swp
