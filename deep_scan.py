@@ -2,7 +2,10 @@ import requests
 import json
 
 # Your API Key
-API_KEY = "AIzaSyBq3wHiWTNRqse3sqcvp3xL0BZ3mZCEEjw"
+import os
+from dotenv import load_dotenv
+load_dotenv()
+API_KEY = os.getenv("GEMINI_KEY_1", "")
 
 print("--- DEEP SCAN DIAGNOSTIC ---")
 print(f"Key being used: {API_KEY[:10]}... (Hidden)")

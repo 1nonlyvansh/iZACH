@@ -30,6 +30,9 @@ node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+.wwebjs_auth/
+.cache/
+*.csv
 
 # WhatsApp auth session (CRITICAL)
 izach_messenger/.wwebjs_auth/

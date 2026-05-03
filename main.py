@@ -37,12 +37,12 @@ load_dotenv()
 # --- 2. CONFIGURATION ---
 pyautogui.FAILSAFE = False
 
+GROQ_KEY    = os.getenv("GROQ_API_KEY", "")
 GEMINI_KEYS = [
-    "AIzaSyB7Dx5hx0HYvGKLPaytbCHZq7VH8mOLfNo",
-    "AIzaSyAwb6UDEHkGgVwxTP5wPLa00vzAoG80Sfw",
-    "AIzaSyA2X7oypXqRBaHYCFTIpeJx4Favn8CjQGQ"
+    os.getenv("GEMINI_KEY_1", ""),
+    os.getenv("GEMINI_KEY_2", ""),
+    os.getenv("GEMINI_KEY_3", ""),
 ]
-GROQ_KEY   = "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"
 VOICE      = "en-US-ChristopherNeural"
 import uuid
 TEMP_AUDIO = "speech.mp3"  # fallback, overridden per call

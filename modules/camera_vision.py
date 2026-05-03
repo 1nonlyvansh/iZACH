@@ -10,10 +10,14 @@ import time
 from google import genai
 
 
+import os as _os
+from dotenv import load_dotenv as _ldenv
+_ldenv()
+
 GEMINI_KEYS = [
-    "AIzaSyB7Dx5hx0HYvGKLPaytbCHZq7VH8mOLfNo",
-    "AIzaSyAwb6UDEHkGgVwxTP5wPLa00vzAoG80Sfw",
-    "AIzaSyA2X7oypXqRBaHYCFTIpeJx4Favn8CjQGQ"
+    _os.getenv("GEMINI_KEY_1", ""),
+    _os.getenv("GEMINI_KEY_2", ""),
+    _os.getenv("GEMINI_KEY_3", ""),
 ]
 
 _current_key_idx = 0

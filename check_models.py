@@ -2,7 +2,10 @@ import google.generativeai as genai
 import os # noqa: F401
 
 # PASTE YOUR KEY HERE
-GENAI_API_KEY = "AIzaSyBq3wHiWTNRqse3sqcvp3xL0BZ3mZCEEjw" 
+import os
+from dotenv import load_dotenv
+load_dotenv()
+GENAI_API_KEY = os.getenv("GEMINI_KEY_1", "")
 
 try:
     client = genai.Client(api_key=GENAI_API_KEY)
