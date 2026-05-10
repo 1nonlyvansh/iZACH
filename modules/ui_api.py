@@ -79,7 +79,7 @@ def ui_command():
     _log_message("YOU", text)
     try:
         from modules.ws_bridge import broadcast
-        broadcast({"type": "user", "sender": "YOU", "text": text, "ts": time.strftime("%H:%M")})
+        broadcast({"type": "chat", "sender": "YOU", "text": text, "ts": time.strftime("%H:%M")})
     except Exception:
         pass
 
@@ -488,6 +488,72 @@ def vision_stream():
                 time.sleep(0.1)
     return Response(generate(),
                     mimetype="multipart/x-mixed-replace; boundary=frame")
+
+
+# ─────────────────────────────────────────────────────────────
+# GET /vision/cameras   — list available cameras + active index
+# POST /vision/camera   — { "index": N } switch active camera
+# ─────────────────────────────────────────────────────────────
+
+@ui_bp.route("/vision/cameras")
+def vision_cameras():
+    try:
+        from modules.vision_engine import get_vision_engine, list_cameras
+        ve = get_vision_engine()
+        available = (ve._available_cameras or list_cameras()) if ve else list_cameras()
+        active = ve._cam_idx if ve else 0
+        return jsonify({"ok": True, "cameras": available, "active": active})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+@ui_bp.route("/vision/camera", methods=["POST"])
+def vision_camera_switch():
+    try:
+        data = request.get_json(silent=True) or {}
+        idx = int(data.get("index", 0))
+        from modules.vision_engine import get_vision_engine
+        ve = get_vision_engine()
+        if ve:
+            ve.switch_camera(idx)
+        return jsonify({"ok": True, "active": idx})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+# ─────────────────────────────────────────────────────────────
+# GET /mic/devices   — list audio input devices
+# POST /mic/select   — { "index": N } switch active mic
+# ─────────────────────────────────────────────────────────────
+
+@ui_bp.route("/mic/devices")
+def mic_devices():
+    try:
+        import pyaudio
+        p = pyaudio.PyAudio()
+        devices = []
+        for i in range(p.get_device_count()):
+            info = p.get_device_info_by_index(i)
+            if info.get("maxInputChannels", 0) > 0:
+                devices.append({"index": i, "name": info["name"]})
+        p.terminate()
+        import main as _main
+        active = getattr(_main, "_mic_device_index", None)
+        return jsonify({"ok": True, "devices": devices, "active": active})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+@ui_bp.route("/mic/select", methods=["POST"])
+def mic_select():
+    try:
+        data = request.get_json(silent=True) or {}
+        idx = data.get("index", None)
+        if idx is not None:
+            idx = int(idx)
+        import main as _main
+        _main.set_mic_device(idx)
+        return jsonify({"ok": True, "active": idx})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
 
 
 # ─────────────────────────────────────────────────────────────

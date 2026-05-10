@@ -50,7 +50,7 @@ export default function InputBar({
             height: 1,
             background:
               'linear-gradient(90deg, transparent 0%, #00e5ff 50%, transparent 100%)',
-            animation: 'scan 1.4s linear infinite',
+            animation: 'scanLine 1.4s linear infinite',
             opacity: 0.85,
           }}
         />

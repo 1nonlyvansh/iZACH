@@ -1,18 +1,40 @@
 import json
 import threading
 import asyncio
+import time as _time
 
-_clients = set()
+_clients = set()           # all connected WS clients
+_extension_clients = set() # only chrome extension clients
 _loop = None
 
 async def _handler(ws):
     _clients.add(ws)
-    
+    identified = False
+
     try:
         async for msg in ws:
             try:
                 data = json.loads(msg)
-                if data.get("type") == "command":
+
+                if data.get("type") == "client_hello":
+                    if data.get("name") == "chrome_extension":
+                        _extension_clients.add(ws)
+                        identified = True
+                        print("[WS] Chrome extension connected.")
+
+                elif data.get("type") == "fill_result":
+                    filled = data.get("filled", 0)
+                    input_count = data.get("inputCount", -1)
+                    from modules.command_chain import _chain_ref
+                    if _chain_ref and hasattr(_chain_ref, 'speak'):
+                        if filled > 0:
+                            _chain_ref.speak(f"Filled {filled} field{'s' if filled != 1 else ''}. Review before submitting.")
+                        elif input_count == 0:
+                            _chain_ref.speak("No form inputs found on this page. Navigate to a form first, then say fill my details.")
+                        else:
+                            _chain_ref.speak("Found the form but couldn't match your saved details to the fields. Make sure your profile is saved in memory.")
+
+                elif data.get("type") == "command":
                     from modules.command_chain import _chain_ref
                     if _chain_ref:
                         threading.Thread(
@@ -26,6 +48,10 @@ async def _handler(ws):
         pass
     finally:
         _clients.discard(ws)
+        _extension_clients.discard(ws)
+        if identified:
+            print("[WS] Chrome extension disconnected.")
+
 
 async def _server():
     try:
@@ -40,6 +66,7 @@ async def _server():
     except Exception as e:
         print(f"[WS] Bridge error: {e}")
 
+
 def start_ws_bridge():
     global _loop
     if _loop and _loop.is_running():
@@ -48,20 +75,27 @@ def start_ws_bridge():
     t = threading.Thread(target=_loop.run_until_complete, args=(_server(),), daemon=True)
     t.start()
 
+
+def has_clients() -> bool:
+    return bool(_clients)
+
+def has_extension_client() -> bool:
+    return bool(_extension_clients)
+
+def send_notification(text: str):
+    broadcast({"type": "notification", "text": text, "ts": _time.strftime("%H:%M")})
+
 def broadcast(event: dict):
     if not _loop or not _clients:
         return
     try:
         msg = json.dumps(event)
-        try:
-            future = asyncio.run_coroutine_threadsafe(_broadcast_all(msg), _loop)
-            future.result(timeout=0.2)
-        except Exception:
-            pass
+        asyncio.run_coroutine_threadsafe(_broadcast_all(msg), _loop)
     except Exception:
         pass
 
 async def _broadcast_all(msg: str):
+    global _clients, _extension_clients
     dead = set()
     for ws in list(_clients):
         try:
@@ -69,3 +103,4 @@ async def _broadcast_all(msg: str):
         except Exception:
             dead.add(ws)
     _clients -= dead
+    _extension_clients -= dead

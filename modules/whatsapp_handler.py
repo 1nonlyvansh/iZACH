@@ -6,6 +6,7 @@ import os
 from flask import Flask, request, jsonify
 
 app = Flask(__name__)
+_OWNER = os.getenv("OWNER_NAME", "User")
 _speak_func = None
 _chain_func = None
 _pending_call = None
@@ -95,7 +96,7 @@ def incoming_call():
     caller = _resolve_name(number, raw_caller)
     _pending_call = {'caller': caller, 'number': number, 'type': 'call'}
     if _speak_func:
-        _speak_func(f"Vansh, {caller} is calling you on WhatsApp. Should I pick up, ignore, or reply later?")
+        _speak_func(f"{_OWNER}, {caller} is calling you on WhatsApp. Should I pick up, ignore, or reply later?")
     return jsonify({'status': 'notified'})
 
 @app.route('/health', methods=['GET'])
@@ -118,6 +119,38 @@ def remote_command():
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
 
+@app.route('/whatsapp/qr', methods=['POST'])
+def whatsapp_qr():
+    data = request.json or {}
+    qr_string = data.get('qr', '')
+    if qr_string:
+        _print_qr_terminal(qr_string)
+        try:
+            from modules.ws_bridge import broadcast
+            broadcast({"type": "whatsapp_qr", "qr": qr_string})
+        except Exception:
+            pass
+    return jsonify({'status': 'ok'})
+
+def _print_qr_terminal(qr_string: str):
+    try:
+        import qrcode
+        import io
+        qr = qrcode.QRCode(border=1)
+        qr.add_data(qr_string)
+        qr.make(fit=True)
+        f = io.StringIO()
+        qr.print_ascii(out=f, invert=True)
+        art = f.getvalue()
+        border = "─" * 50
+        print(f"\n{border}")
+        print("  WhatsApp — Scan QR to connect")
+        print(border)
+        print(art)
+        print(border + "\n")
+    except Exception as e:
+        print(f"[WHATSAPP QR] Could not render QR: {e}")
+
 @app.route('/whatsapp/status', methods=['POST'])
 def whatsapp_status():
     data = request.json
@@ -127,7 +160,7 @@ def whatsapp_status():
             _speak_func("WhatsApp connected.")
     elif status == 'disconnected':
         if _speak_func:
-            _speak_func("Vansh, WhatsApp disconnected.")
+            _speak_func(f"{_OWNER}, WhatsApp disconnected.")
     return jsonify({'status': 'ok'})
 
 _last_message = {"sender": None, "text": None, "number": None}
@@ -161,6 +194,7 @@ def incoming_message():
         import time as _time
         broadcast({
             "type": "notification",
+            "source": "whatsapp",
             "text": f"WhatsApp — {sender}: {text[:60]}",
             "ts": _time.strftime("%H:%M")
         })
@@ -179,8 +213,8 @@ def incoming_message():
 def _announce_message(sender: str, text: str, number: str = ""):
     """Generate natural announcement — context-aware, always English."""
     try:
-        prompt = f"""You are iZACH, a JARVIS-style voice assistant for Vansh.
-Someone sent Vansh a WhatsApp message. Announce it in ONE short English sentence.
+        prompt = f"""You are iZACH, a JARVIS-style voice assistant for {_OWNER}.
+Someone sent {_OWNER} a WhatsApp message. Announce it in ONE short English sentence.
 
 Sender: {sender}
 Message: "{text}"
@@ -190,7 +224,7 @@ Rules:
 - Summarize what the message means — never quote it word for word
 - Always start with the sender's name
 - Max 12 words
-- Never say: "you have received", "you've got a message", "Vansh,"
+- Never say: "you have received", "you've got a message", "{_OWNER},"
 - Never add filler like "Good", "Sure", "Alright" at the start
 
 Good examples:
@@ -232,20 +266,20 @@ def handle_whatsapp_command(cmd, speak):
         _pending_call = None
 
     elif any(w in cmd for w in ["ignore", "reject", "decline", "don't want to talk"]):
-        reply = f"Hi, Vansh is busy right now and will contact you later."
+        reply = f"Hi, {_OWNER} is busy right now and will contact you later."
         ok, status = _send_message(number, reply, caller)
         speak(f"Call ignored. Sent a message to {caller}." if ok else f"Couldn't send message to {caller}.")
         _pending_call = None
 
     elif any(w in cmd for w in ["contact later", "reply later", "message them"]):
-        reply = f"Hey! Vansh saw your message and will get back to you soon."
+        reply = f"Hey! {_OWNER} saw your message and will get back to you soon."
         _send_message(number, reply)
         speak(f"Replied to {caller} saying you'll contact them later.")
         _pending_call = None
 
     elif any(w in cmd for w in ["send voice", "voice note"]):
         audio_path = _generate_voice_note(
-            f"Hey, this is Vansh's assistant. He's busy right now but will call you back soon."
+            f"Hey, this is {_OWNER}'s assistant. He's busy right now but will call you back soon."
         )
         _send_voice(number, audio_path)
         speak(f"Sent a voice note to {caller}.")

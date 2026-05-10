@@ -8,28 +8,27 @@ Local MongoDB only — no cloud.
 
 from datetime import datetime
 
-from click import command
-
-from colorama import init
 from pymongo import MongoClient
-from datetime import datetime
 
 _client = None
 _db = None
+_mongo_failed = False
 
 def init_db():
-    global _client, _db
+    global _client, _db, _mongo_failed
     if _db is not None:
         return _db
+    if _mongo_failed:
+        return None
     try:
         _client = MongoClient("mongodb://127.0.0.1:27017/", serverSelectionTimeoutMS=2000)
         _client.server_info()
         _db = _client["izach"]
         print("[MONGO] Connected to MongoDB")
         return _db
-    except Exception as e:
-        print("[MONGO ERROR]", e)
-        _db = None
+    except Exception:
+        _mongo_failed = True
+        print("[MONGO] MongoDB not connected — memory disabled.")
         return None
 
 def get_db():
@@ -53,6 +52,8 @@ def save_preference(key: str, value):
         {"$set": {f"preferences.{key}": value, "updated_at": datetime.now()}},
         upsert=True
     )
+
+store_preference = save_preference  # alias used by command_chain
 
 def get_preference(key: str, default=None):
     db = init_db()
@@ -97,7 +98,7 @@ def retrieve_context(key: str, default=None):
     if db is None:
         return default
     doc = db.context.find_one({"_id": key})
-    return doc["value"] if doc else default
+    return doc.get("value", default) if doc else default
 
 
 # ── COMMAND HISTORY ───────────────────────────────────────────
@@ -130,4 +131,3 @@ def debug_insert():
         print("[MONGO] Skipping debug insert — MongoDB not connected.")
         return
     db.history.insert_one({"msg": "Hello from iZACH!", "timestamp": datetime.now()})
-    print("[DEBUG] Inserted test document into MongoDB.")

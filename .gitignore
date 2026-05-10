@@ -16,6 +16,7 @@ env/
 # Environment variables / secrets
 .env
 .env.*
+!.env.example
 api_keys.json
 api_keys/
 

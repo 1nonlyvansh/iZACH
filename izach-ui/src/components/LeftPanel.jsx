@@ -1,5 +1,7 @@
-import React from 'react'
+import React, { useState, useEffect } from 'react'
 import CameraPanel from './CameraPanel.jsx'
+
+const BASE = 'http://localhost:5050'
 
 function SectionHeader({ label }) {
   return (
@@ -77,7 +79,79 @@ function ProcessStats({ procCpu, procMem }) {
   )
 }
 
-export default function LeftPanel({ cpuUsage, ramUsage, gpuUsage, procCpu, procMem }) {
+const selectStyle = {
+  width: '100%',
+  background: '#0a1628',
+  color: '#00e5ff',
+  border: '1px solid #0d2a3a',
+  borderRadius: 3,
+  padding: '4px 6px',
+  fontSize: '10px',
+  fontFamily: "'Share Tech Mono'",
+  outline: 'none',
+  cursor: 'pointer',
+}
+
+function DeviceSelect({ label, devices, active, onSelect, nameKey = 'name', indexKey = 'index' }) {
+  return (
+    <div style={{ padding: '6px 12px 8px' }}>
+      <p style={{
+        color: '#1a4a5a',
+        fontFamily: "'Share Tech Mono'",
+        fontSize: '8px',
+        letterSpacing: '0.15em',
+        marginBottom: 4,
+      }}>{label}</p>
+      <select
+        style={selectStyle}
+        value={active ?? ''}
+        onChange={e => onSelect(e.target.value === '' ? null : Number(e.target.value))}
+      >
+        {devices.map(d => (
+          <option key={d[indexKey]} value={d[indexKey]} style={{ background: '#0a1628' }}>
+            {d[nameKey]}
+          </option>
+        ))}
+      </select>
+    </div>
+  )
+}
+
+export default function LeftPanel({ cpuUsage, ramUsage, gpuUsage, procCpu, procMem, faceState }) {
+  const [cameras, setCameras] = useState([{ index: 0, name: 'Default Camera' }])
+  const [activeCam, setActiveCam] = useState(0)
+  const [mics, setMics] = useState([{ index: null, name: 'Default Microphone' }])
+  const [activeMic, setActiveMic] = useState(null)
+  const [devicesLoaded, setDevicesLoaded] = useState(false)
+
+  const fetchDevices = () => {
+    fetch(`${BASE}/vision/cameras`).then(r => r.json()).then(d => {
+      if (d.ok && (d.cameras || []).length > 0) {
+        setCameras((d.cameras || []).map(i => ({ index: i, name: `Camera ${i}` })))
+        setActiveCam(d.active ?? 0)
+      }
+    }).catch(() => {})
+    fetch(`${BASE}/mic/devices`).then(r => r.json()).then(d => {
+      if (d.ok && (d.devices || []).length > 0) {
+        setMics(d.devices || [])
+        setActiveMic(d.active ?? null)
+      }
+      setDevicesLoaded(true)
+    }).catch(() => { setDevicesLoaded(true) })
+  }
+
+  useEffect(() => { fetchDevices() }, [])
+
+  const switchCamera = (idx) => {
+    setActiveCam(idx)
+    fetch(`${BASE}/vision/camera`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ index: idx }) }).catch(() => {})
+  }
+
+  const switchMic = (idx) => {
+    setActiveMic(idx)
+    fetch(`${BASE}/mic/select`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ index: idx }) }).catch(() => {})
+  }
+
   return (
     <div
       style={{
@@ -103,7 +177,43 @@ export default function LeftPanel({ cpuUsage, ramUsage, gpuUsage, procCpu, procM
 
       {/* Camera / Vision block — scrolls if needed */}
       <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden' }}>
-        <CameraPanel />
+        <CameraPanel faceState={faceState} />
+
+        <div style={{ height: 1, margin: '0 12px', background: '#0d2a3a' }} />
+
+        {/* Device selects — always visible */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 12px 2px' }}>
+          <span style={{ color: '#1a4a5a', fontFamily: "'Share Tech Mono'", fontSize: '8px', letterSpacing: '0.15em' }}>
+            HARDWARE
+          </span>
+          <button
+            onClick={fetchDevices}
+            title="Refresh devices"
+            style={{
+              background: 'transparent', border: 'none', color: '#1a4a5a',
+              fontFamily: "'Share Tech Mono'", fontSize: '9px', cursor: 'pointer',
+              padding: '0 2px', lineHeight: 1,
+            }}
+          >
+            ⟳
+          </button>
+        </div>
+
+        <DeviceSelect
+          label="CAMERA INPUT"
+          devices={cameras}
+          active={activeCam}
+          onSelect={switchCamera}
+        />
+
+        <div style={{ height: 1, margin: '0 12px', background: '#0d2a3a' }} />
+
+        <DeviceSelect
+          label="MICROPHONE INPUT"
+          devices={mics}
+          active={activeMic}
+          onSelect={switchMic}
+        />
       </div>
     </div>
   )

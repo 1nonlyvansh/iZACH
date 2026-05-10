@@ -1,3 +1,7 @@
+import os
+import sys
+os.environ.setdefault("PYTHONIOENCODING", "utf-8")  # prevent DeepFace emoji crash on Windows
+
 import subprocess
 import threading
 import time
@@ -5,7 +9,6 @@ import queue
 import asyncio
 import edge_tts
 import pygame
-import os
 import re
 import speech_recognition as sr
 import pyautogui
@@ -31,21 +34,33 @@ from modules.whatsapp_handler import init_whatsapp
 
 
 
+# First-run onboarding
+try:
+    from setup.onboarding import needs_onboarding, run_onboarding  # type: ignore[import]
+    if needs_onboarding():
+        run_onboarding()
+except (ImportError, ModuleNotFoundError):
+    pass
+
 # Load environment variables
 load_dotenv()
 
 # --- 2. CONFIGURATION ---
-pyautogui.FAILSAFE = False
-
 GROQ_KEY    = os.getenv("GROQ_API_KEY", "")
 GEMINI_KEYS = [
     os.getenv("GEMINI_KEY_1", ""),
     os.getenv("GEMINI_KEY_2", ""),
     os.getenv("GEMINI_KEY_3", ""),
 ]
-VOICE      = "en-US-ChristopherNeural"
+
+_AI_ENABLED = True
+for _key_name, _key_val in [("GROQ_API_KEY", GROQ_KEY), ("GEMINI_KEY_1", GEMINI_KEYS[0])]:
+    if not _key_val:
+        print(f"[WARNING] Missing API key: {_key_name} — AI features will be disabled.")
+        _AI_ENABLED = False
 import uuid
-TEMP_AUDIO = "speech.mp3"  # fallback, overridden per call
+VOICE      = "en-US-ChristopherNeural"
+TEMP_AUDIO = "speech.wav"  # fallback, overridden per call
 
 # --- 3. GLOBAL OBJECTS ---
 SPEECH_QUEUE = queue.Queue()
@@ -76,26 +91,21 @@ async def generate_and_play(text):
         clean_text, rate = extract_tone_rate(text)
         communicate = edge_tts.Communicate(clean_text, VOICE, rate=rate)
 
+        # Stop previous audio BEFORE generating new — runs in parallel with TTS synthesis
+        try:
+            pygame.mixer.music.stop()
+            pygame.mixer.music.unload()
+        except Exception:
+            pass
+
         await communicate.save(audio_file)
-        try:
-            pygame.mixer.music.stop()
-            pygame.mixer.music.unload()
-        except Exception:
-            pass
-        await asyncio.sleep(0.15)
-        try:
-            pygame.mixer.music.stop()
-            pygame.mixer.music.unload()
-        except Exception:
-            pass
-        await asyncio.sleep(0.15)
         pygame.mixer.music.load(audio_file)
         pygame.mixer.music.play()
-        
+
         _speaking = True
         ie.set_speaking(True)
 
-       # Word-by-word live text — always runs, synced to audio duration
+        # Word-by-word live text — synced to audio duration
         words = clean_text.split()
         if words:
             chars_total = max(len(clean_text), 1)
@@ -145,9 +155,8 @@ async def generate_and_play(text):
         print(f"[TTS ERROR] {e}")
     finally:
         try:
-            import os as _os
-            if _os.path.exists(audio_file):
-                _os.remove(audio_file)
+            if os.path.exists(audio_file):
+                os.remove(audio_file)
         except Exception:
             pass
         _speaking = False
@@ -156,6 +165,7 @@ async def generate_and_play(text):
             get_interrupt_engine().set_speaking(False)
         except Exception:
             pass
+
 
 def tts_worker():
     loop = asyncio.new_event_loop()
@@ -176,7 +186,6 @@ def tts_worker():
             print(f"[TTS WORKER ERROR] {e}")
             traceback.print_exc()
             continue
-    loop.close()
 
 def stop_speech():
     pygame.mixer.music.stop()
@@ -212,11 +221,8 @@ def speak(text, tone: str = "casual"):
         app.set_speaking(True)
     try:
         from modules.ws_bridge import broadcast
-        broadcast({
-            "type": "chat",
-            "sender": "iZACH",
-            "text": display_text,
-            "ts": time.strftime("%H:%M")})
+        _ts = time.strftime("%H:%M")
+        broadcast({"type": "chat", "sender": "iZACH", "text": display_text, "ts": _ts})
     except Exception:
         pass
     try:
@@ -228,9 +234,12 @@ def speak(text, tone: str = "casual"):
 
 
 def get_ai_response(query):
+    if not _AI_ENABLED:
+        return "AI is unavailable — missing API keys. Check your .env file."
     from modules.memory import get_memory_as_context
     from modules.context_memory import get_context_memory
     from modules.personality import PERSONALITY_PROMPT, detect_sentiment, get_companion_response, get_tone_for_sentiment
+    from modules.state_engine import state
     cm = get_context_memory()
 
     resolved    = cm.resolve_followup(query)
@@ -243,7 +252,8 @@ def get_ai_response(query):
     if history:
         parts.append(f"Recent conversation:\n{history}")
 
-    parts.insert(0, PERSONALITY_PROMPT)
+    persona_prefix = state.get_persona_prefix()
+    parts.insert(0, persona_prefix + PERSONALITY_PROMPT)
 
     if parts:
         full_query = "\n\n".join(parts) + f"\n\nUser: {resolved}"
@@ -266,6 +276,8 @@ def get_ai_response(query):
 
 
 def get_ai_response_raw(query):
+    if not _AI_ENABLED:
+        return "AI is unavailable — missing API keys. Check your .env file."
     return ai_manager.send_message(query)
 
 
@@ -278,10 +290,16 @@ _recognizer.non_speaking_duration   = 1.0
 _recognizer.energy_threshold        = 250
 _recognizer.dynamic_energy_threshold = False
 _mic = None
+_mic_device_index = None
+
+def set_mic_device(index):
+    global _mic, _mic_device_index
+    _mic_device_index = index
+    _mic = None
 
 def _init_mic():
     global _mic
-    _mic = sr.Microphone()
+    _mic = sr.Microphone(device_index=_mic_device_index)
     with _mic as source:
         _recognizer.adjust_for_ambient_noise(source, duration=1.5)
     print(f"[MIC] Calibrated. Energy threshold: {_recognizer.energy_threshold:.0f}")
@@ -341,9 +359,7 @@ def safe_shutdown():
 
     print("[SYSTEM] Shutting down cleanly...")
 
-    # 🔥 FORCE EXIT EVERYTHING
-    import os
-    os._exit(0)
+    sys.exit(0)
 
 
 # ─────────────────────────────────────────────────────────────
@@ -381,6 +397,12 @@ def start_brain(ui=None):
         context_manager=ctx_mgr,
         spotify_handler=spotify_api
     )
+    command_chain._chain_ref = chain_engine  # expose to ws_bridge for fill_result + command messages
+
+    # Start device watchers after speak and chain are ready
+    from modules import system_control as _sc
+    _sc.start_bluetooth_watcher(speak)
+    _sc.start_drive_watcher(speak)
 
     # 4. WhatsApp callbacks — real ones if old UI, dummy lambdas if headless
     from modules.whatsapp_handler import set_ui_callbacks
@@ -417,6 +439,14 @@ def start_brain(ui=None):
                 "show_desktop": "Showing desktop.",
             }
             msg = GESTURE_SPEECH.get(action)
+            if msg is None:
+                val = metadata.get("value", "")
+                if action == "volume_control":
+                    msg = f"Volume at {val} percent." if val != "" else "Volume adjusted."
+                elif action == "brightness_control":
+                    msg = f"Brightness at {val} percent." if val != "" else "Brightness adjusted."
+                elif action == "switch_desktops":
+                    msg = "Switching desktop."
             if msg:
                 speak(msg)
 
@@ -430,33 +460,6 @@ def start_brain(ui=None):
     except Exception as _ve_err:
         print(f"[VISION] Could not start camera: {_ve_err}")
 
-
-    def _handle_gesture(gesture_name: str, action: str, metadata: dict):
-        print(f"[GESTURE] {gesture_name} → {action}")
-        if app and hasattr(app, '_camera_panel'):
-            try:
-                app.root.after(0, lambda g=gesture_name:
-                    app._camera_panel.update_gesture_label(g))
-            except Exception:
-                pass
-        GESTURE_SPEECH = {
-            "volume_control":     None,
-            "brightness_control": None,
-            "play_pause":         "Toggled playback.",
-            "mute_unmute":        "Toggled mute.",
-            "next_track":         "Next track.",
-            "prev_track":         "Previous track.",
-            "show_desktop":       "Showing desktop.",
-            "switch_desktops":    None,
-        }
-        msg = GESTURE_SPEECH.get(action)
-        if msg:
-            speak(msg)
-
-    # tkinter camera panel (legacy — not used in Electron mode)
-    if app and hasattr(app, '_camera_panel'):
-        app._camera_panel.start(on_gesture=_handle_gesture)
-
     # 6. Interrupt engine
     from modules.interrupt_engine import get_interrupt_engine
     ie = get_interrupt_engine()
@@ -469,7 +472,7 @@ def start_brain(ui=None):
     try:
         from modules.mongo_brain import get_db, save_user_profile
         if get_db() is not None:
-            save_user_profile("Vansh", {
+            save_user_profile(os.getenv("OWNER_NAME", "User"), {
                 "response_style": "casual",
                 "language":       "hinglish",
                 "tts_voice":      "Christopher"
@@ -500,6 +503,32 @@ def start_brain(ui=None):
     except Exception:
         speak("MMA agent is offline.")
 
+    # ── Startup status summary ────────────────────────────────
+    from modules.mongo_brain import get_db as _get_db
+    _mongo_ok = _get_db() is not None
+    _tts_ok   = pygame.mixer.get_init() is not None
+    _ok  = "OK"
+    _no  = "MISSING"
+    print("\n" + "─" * 38)
+    print("  iZACH Startup Status")
+    print("─" * 38)
+    print(f"  GROQ_API_KEY   {'OK' if GROQ_KEY   else 'MISSING'}")
+    print(f"  GEMINI_KEY_1   {'OK' if GEMINI_KEYS[0] else 'MISSING'}")
+    print(f"  MongoDB        {'Connected' if _mongo_ok else 'Not Connected'}")
+    print(f"  TTS Engine     {'Ready' if _tts_ok else 'Failed'}")
+    print(f"  AI Features    {'Enabled' if _AI_ENABLED else 'Disabled'}")
+    print("─" * 38)
+    print("  Try saying:")
+    print("    • play something chill on spotify")
+    print("    • open my notes")
+    print("    • what's on my screen")
+    print("    • remind me to call mom at 6pm")
+    print("    • fill my details  (on any form)")
+    print("    • delete old files in downloads")
+    print("    • what can you do")
+    print("─" * 38 + "\n")
+    # ─────────────────────────────────────────────────────────
+
     speak("Assistant System Online.")
 
     # 10. Wake word
@@ -516,10 +545,12 @@ def start_brain(ui=None):
     # Kill any leftover process on port 5051
     import subprocess
     try:
-        result = subprocess.run(
-            'for /f "tokens=5" %a in (\'netstat -aon ^| findstr :5051\') do taskkill /F /PID %a',
-            shell=True, capture_output=True
-        )
+        netstat = subprocess.run(["netstat", "-aon"], capture_output=True, text=True)
+        for line in netstat.stdout.splitlines():
+            if ":5051 " in line:
+                parts = line.split()
+                if parts:
+                    subprocess.run(["taskkill", "/F", "/PID", parts[-1]], capture_output=True)
     except Exception:
         pass
 
@@ -531,9 +562,8 @@ def start_brain(ui=None):
     import subprocess
     ui_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "izach-ui")
     subprocess.Popen(
-        "npm run electron:dev",
+        ["cmd", "/c", "npm", "run", "electron:dev"],
         cwd=ui_path,
-        shell=True,
         creationflags=subprocess.CREATE_NEW_CONSOLE
     )
     print("[UI] Electron UI launching...")
@@ -607,14 +637,10 @@ def start_brain(ui=None):
         input("Press Enter to exit...")
 
 if __name__ == "__main__":
-    try:
-        from modules.mongo_brain import debug_insert
-        debug_insert()
-    except Exception as _e:
-        print(f"[MONGO] debug_insert skipped: {_e}")
-
     from modules.mongo_brain import init_db
-    init_db()
+    db = init_db()
+    if db is None:
+        print("[MONGO] Warning: MongoDB not connected — memory features degraded.")
 
     try:
         from modules.log_analyzer import analyze_logs

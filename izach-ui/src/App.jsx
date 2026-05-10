@@ -21,6 +21,8 @@ export default function App() {
     memoryEntries, settings,
     addMemoryEntry, deleteMemoryEntry, saveSettings,
     notifications,
+    faceState,
+    whatsappQr,
     chatBottomRef,
     send, stopSpeech,
   } = useIZACH()
@@ -35,7 +37,7 @@ export default function App() {
       <div className="flex flex-1 overflow-hidden">
         {/* Left panel — always visible */}
         <div style={{ width: 240, minWidth: 240, flexShrink: 0, overflow: 'hidden' }}>
-          <LeftPanel cpuUsage={cpuUsage} ramUsage={ramUsage} gpuUsage={gpuUsage} procCpu={procCpu} procMem={procMem} />
+          <LeftPanel cpuUsage={cpuUsage} ramUsage={ramUsage} gpuUsage={gpuUsage} procCpu={procCpu} procMem={procMem} faceState={faceState} />
         </div>
 
         {/* Center — switches between Home and Settings */}
@@ -93,6 +95,7 @@ export default function App() {
             mmaStatus={mmaStatus}
             spotifyTrack={spotifyTrack}
             notifications={notifications}
+            whatsappQr={whatsappQr}
           />
         </div>
       </div>

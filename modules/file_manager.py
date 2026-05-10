@@ -34,6 +34,10 @@ DEFAULT_CONFIG = {
         os.path.expanduser("~/Documents"),
         os.path.expanduser("~/Desktop"),
         os.path.expanduser("~/Downloads"),
+        os.path.expanduser("~/Pictures"),
+        os.path.expanduser("~/Videos"),
+        os.path.expanduser("~/Music"),
+        os.path.expanduser("~/OneDrive"),
     ],
 }
 
@@ -297,6 +301,14 @@ class FileManager:
             return False, "File not found."
         return self._queue_dangerous(self._do_delete, [path], "delete")
 
+    def delete_verified(self, path: str) -> tuple[bool, str]:
+        """Delete after face verification has already passed — skips permission/password checks."""
+        if self._is_protected(path):
+            return False, "That path is protected and cannot be deleted."
+        if not os.path.exists(path):
+            return False, "File not found."
+        return self._do_delete(path)
+
     def _do_delete(self, path: str) -> tuple[bool, str]:
         try:
             if os.path.isdir(path):
@@ -405,7 +417,11 @@ Example: "Time Series Analysis" or "assignment notes" or "handwritten notes"."""
                     for fname in files:
                         name_lower = fname.lower()
                         query_lower = name_hint.lower()
-                        match = any(word in name_lower for word in query_lower.split())
+                        words = [w for w in query_lower.split() if len(w) >= 3]
+                        if words:
+                            match = all(word in name_lower for word in words)
+                        else:
+                            match = query_lower in name_lower
                         if type_hint and not fname.lower().endswith(f".{type_hint}"):
                             match = False
                         if match:
@@ -518,6 +534,154 @@ Example: "Time Series Analysis" or "assignment notes" or "handwritten notes"."""
             return True, f"Running {os.path.basename(path)}."
         except Exception as e:
             return False, f"Could not run script: {e}"
+
+    # ─────────────────────────────────────────
+    # PHASE 4 — Folder Management
+    # ─────────────────────────────────────────
+
+    _TYPE_FOLDERS = {
+        "Documents": [".pdf", ".doc", ".docx", ".txt", ".md", ".rtf", ".odt", ".pptx", ".xlsx", ".csv", ".xls"],
+        "Images":    [".jpg", ".jpeg", ".png", ".gif", ".bmp", ".svg", ".webp", ".ico", ".tiff", ".raw"],
+        "Videos":    [".mp4", ".mkv", ".avi", ".mov", ".wmv", ".flv", ".webm", ".m4v"],
+        "Music":     [".mp3", ".wav", ".flac", ".aac", ".ogg", ".m4a", ".wma"],
+        "Archives":  [".zip", ".rar", ".7z", ".tar", ".gz", ".bz2"],
+        "Scripts":   [".py", ".js", ".ts", ".sh", ".bat", ".ps1", ".java", ".cpp", ".c", ".html", ".css"],
+        "Executables": [".exe", ".msi", ".apk"],
+    }
+
+    def sort_folder(self, path: str, sort_by: str = "name") -> tuple[bool, str, list]:
+        """Return files in a folder sorted by name/date/size/type."""
+        if not self._can("read"):
+            return False, "Permission denied.", []
+        target = os.path.expandvars(os.path.expanduser(path))
+        if not os.path.isdir(target):
+            return False, f"Folder not found: {path}", []
+        try:
+            items = [os.path.join(target, f) for f in os.listdir(target)
+                     if os.path.isfile(os.path.join(target, f))]
+            if sort_by == "date":
+                items.sort(key=lambda x: os.path.getmtime(x), reverse=True)
+            elif sort_by == "size":
+                items.sort(key=lambda x: os.path.getsize(x), reverse=True)
+            elif sort_by == "type":
+                items.sort(key=lambda x: Path(x).suffix.lower())
+            else:
+                items.sort(key=lambda x: os.path.basename(x).lower())
+            names = [os.path.basename(f) for f in items]
+            self._log("sort", target, f"by {sort_by}, {len(items)} files")
+            return True, f"Sorted {len(items)} files by {sort_by}.", names
+        except Exception as e:
+            return False, f"Could not sort folder: {e}", []
+
+    def organize_by_type(self, path: str) -> tuple[bool, str]:
+        """Move files in a folder into type-based subfolders (Documents, Images, etc.)."""
+        if not self._can("create"):
+            return False, "Permission denied. Need balanced or admin level."
+        target = os.path.expandvars(os.path.expanduser(path))
+        if not os.path.isdir(target):
+            return False, f"Folder not found: {path}"
+        moved, skipped, failed = 0, 0, []
+        for fname in os.listdir(target):
+            src = os.path.join(target, fname)
+            if not os.path.isfile(src):
+                continue
+            ext = Path(src).suffix.lower()
+            dest_cat = "Other"
+            for cat, exts in self._TYPE_FOLDERS.items():
+                if ext in exts:
+                    dest_cat = cat
+                    break
+            dest_dir = os.path.join(target, dest_cat)
+            os.makedirs(dest_dir, exist_ok=True)
+            dest = os.path.join(dest_dir, fname)
+            if os.path.exists(dest):
+                skipped += 1
+                continue
+            try:
+                shutil.move(src, dest)
+                moved += 1
+            except Exception:
+                failed.append(fname)
+        self._log("organize", target, f"moved={moved} skipped={skipped}")
+        msg = f"Organized {moved} files into type folders."
+        if skipped:
+            msg += f" {skipped} already existed, skipped."
+        if failed:
+            msg += f" {len(failed)} failed to move."
+        return True, msg
+
+    def rename_file(self, path: str, new_name: str) -> tuple[bool, str]:
+        """Rename a file or folder."""
+        if not self._can("create"):
+            return False, "Permission denied."
+        if not os.path.exists(path):
+            return False, "File not found."
+        if self._is_protected(path):
+            return False, "That path is protected."
+        new_path = os.path.join(os.path.dirname(path), new_name)
+        if os.path.exists(new_path):
+            return False, f"A file named {new_name} already exists there."
+        try:
+            os.rename(path, new_path)
+            self._log("rename", path, f"→ {new_name}")
+            return True, f"Renamed to {new_name}."
+        except Exception as e:
+            return False, f"Could not rename: {e}"
+
+    def move_file(self, src: str, dest_folder: str) -> tuple[bool, str]:
+        """Move a file to a destination folder."""
+        if not self._can("create"):
+            return False, "Permission denied."
+        if not os.path.exists(src):
+            return False, "File not found."
+        if self._is_protected(src):
+            return False, "That path is protected."
+        if not os.path.isdir(dest_folder):
+            return False, f"Destination folder not found: {dest_folder}"
+        dest = os.path.join(dest_folder, os.path.basename(src))
+        if os.path.exists(dest):
+            return False, f"A file with that name already exists in {os.path.basename(dest_folder)}."
+        try:
+            shutil.move(src, dest)
+            self._log("move", src, f"→ {dest_folder}")
+            return True, f"Moved {os.path.basename(src)} to {os.path.basename(dest_folder)}."
+        except Exception as e:
+            return False, f"Could not move: {e}"
+
+    def copy_file(self, src: str, dest_folder: str) -> tuple[bool, str]:
+        """Copy a file to a destination folder."""
+        if not self._can("create"):
+            return False, "Permission denied."
+        if not os.path.exists(src):
+            return False, "File not found."
+        try:
+            os.makedirs(dest_folder, exist_ok=True)
+            dest = os.path.join(dest_folder, os.path.basename(src))
+            shutil.copy2(src, dest)
+            self._log("copy", src, f"→ {dest_folder}")
+            return True, f"Copied {os.path.basename(src)} to {os.path.basename(dest_folder)}."
+        except Exception as e:
+            return False, f"Could not copy: {e}"
+
+    def folder_stats(self, path: str = None) -> tuple[bool, str]:
+        """Get file count and total size of a folder (non-recursive)."""
+        target = os.path.expandvars(os.path.expanduser(path or self.current_dir))
+        if not os.path.isdir(target):
+            return False, "Folder not found."
+        try:
+            total_size, file_count, folder_count = 0, 0, 0
+            for entry in os.scandir(target):
+                if entry.is_file():
+                    file_count += 1
+                    total_size += entry.stat().st_size
+                elif entry.is_dir():
+                    folder_count += 1
+            mb = total_size / 1024 / 1024
+            size_str = f"{mb:.1f} MB" if mb >= 1 else f"{total_size / 1024:.1f} KB"
+            name = os.path.basename(target) or target
+            return True, f"{name} has {file_count} files and {folder_count} subfolders, using {size_str}."
+        except Exception as e:
+            return False, f"Could not read folder stats: {e}"
 
     # ─────────────────────────────────────────
     # Phase 2 — Logging helpers

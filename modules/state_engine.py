@@ -1,4 +1,7 @@
+import os
 import time
+
+_OWNER = os.getenv("OWNER_NAME", "User")
 
 class PersonalityState:
     def __init__(self):
@@ -11,7 +14,7 @@ class PersonalityState:
         modes = {
             "work": {"energy_mod": -5, "msg": "Switching to Work Mode. Productivity engaged."},
             "focus": {"energy_mod": -2, "msg": "Entering Focus Mode. Minimizing interruptions."},
-            "gym": {"energy_mod": -10, "msg": "Gym Mode active. Let's get it, Vansh."},
+            "gym": {"energy_mod": -10, "msg": f"Gym Mode active. Let's get it, {_OWNER}."},
             "idle": {"energy_mod": 5, "msg": "Returning to Idle."}
         }
         
