@@ -189,10 +189,9 @@ else:
     if izach_ok:
         log(C, "Electron", "Launching Electron UI ...")
         p_electron = subprocess.Popen(
-            ["npm", "run", "electron:dev"],
+            ["cmd", "/c", "npm", "run", "electron:dev"],
             cwd=ELECTRON_DIR,
             creationflags=subprocess.CREATE_NEW_CONSOLE,
-            shell=True,
         )
         log(C, "Electron", f"{G}✓ Electron window starting...{RST}")
     else:

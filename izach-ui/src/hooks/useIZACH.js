@@ -53,13 +53,23 @@ export function useIZACH() {
   const [settings,      setSettings]      = useState({})
   const [notifications, setNotifications] = useState([])
 
+  // face verification overlay state
+  const [faceState, setFaceState] = useState('idle')
+
+  // whatsapp QR code — raw string, cleared when connected
+  const [whatsappQr, setWhatsappQr] = useState(null)
+
   const chatBottomRef = useRef(null)
   const wsRef         = useRef(null)
   const liveTimer     = useRef(null)
 
   // ── WebSocket — voice chat + live text + notifications ────
   useEffect(() => {
+    let cancelled = false
+    let reconnectTimer = null
+
     function connect() {
+      if (cancelled) return
       try {
         const ws = new WebSocket('ws://127.0.0.1:5051')
         wsRef.current = ws
@@ -88,22 +98,34 @@ export function useIZACH() {
               setLiveText(data.text || '')
               setIsSpeaking(!!data.text)
             }
-            else if (data.type === 'notification') {
+            else if (data.type === 'notification' && data.source) {
+              // Only accept notifications that have an explicit source tag
+              // This prevents iZACH's own chat responses leaking into this panel
               setNotifications(prev => [
                 ...prev.slice(-9),
-                { text: data.text, ts: data.ts || nowStr() }
+                { text: data.text, ts: data.ts || nowStr(), source: data.source }
               ])
+            }
+            else if (data.type === 'face_verify') {
+              setFaceState(data.state || 'idle')
+              if (data.state === 'success' || data.state === 'failed') {
+                setTimeout(() => setFaceState('idle'), 3500)
+              }
+            }
+            else if (data.type === 'whatsapp_qr') {
+              setWhatsappQr(data.qr || null)
             }
           } catch {}
         }
 
         ws.onclose = () => {
-          console.log('[WS] Disconnected, reconnecting...')
-          setTimeout(connect, 3000)
+          if (!cancelled) {
+            console.log('[WS] Disconnected, reconnecting...')
+            reconnectTimer = setTimeout(connect, 3000)
+          }
         }
 
-        ws.onerror = (e) => {
-          console.error('[WS ERROR]', e)
+        ws.onerror = () => {
           ws.close()
         }
       } catch (err) {
@@ -112,7 +134,11 @@ export function useIZACH() {
     }
 
     connect()
-    return () => { wsRef.current?.close() }
+    return () => {
+      cancelled = true
+      if (reconnectTimer) clearTimeout(reconnectTimer)
+      wsRef.current?.close()
+    }
   }, [])
 
   // ── auto-scroll ───────────────────────────────────────────
@@ -142,7 +168,11 @@ export function useIZACH() {
         const r = await safeFetch(`${WA}/health`, {}, 2500)
         if (r.ok) {
           const d = await r.json().catch(() => ({}))
-          if (mounted) setWaStatus(d.status === 'connected' ? 'online' : 'offline')
+          const connected = d.status === 'connected'
+          if (mounted) {
+            setWaStatus(connected ? 'online' : 'offline')
+            if (connected) setWhatsappQr(null)
+          }
         } else {
           if (mounted) setWaStatus('offline')
         }
@@ -356,7 +386,7 @@ export function useIZACH() {
 
   // ── Stop speech ───────────────────────────────────────────
   const stopSpeech = useCallback(async () => {
-    clearLiveText()
+    setLiveText('')
     setIsSpeaking(false)
     try {
       await safeFetch(`${BASE}/stop`, { method: 'POST' }, 3000)
@@ -387,6 +417,8 @@ export function useIZACH() {
     memoryEntries, settings,
     addMemoryEntry, deleteMemoryEntry, saveSettings, loadMemory,
     notifications,
+    faceState,
+    whatsappQr,
     chatBottomRef,
     send, stopSpeech,
   }

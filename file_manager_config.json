@@ -7,5 +7,14 @@
     "C:\\Program Files",
     "C:\\Program Files (x86)"
   ],
-  "password_hash": ""
+  "password_hash": "",
+  "search_roots": [
+    "C:\\Users\\vansh/Documents",
+    "C:\\Users\\vansh/Desktop",
+    "C:\\Users\\vansh/Downloads",
+    "C:\\Users\\vansh/Pictures",
+    "C:\\Users\\vansh/Videos",
+    "C:\\Users\\vansh/Music",
+    "C:\\Users\\vansh/OneDrive"
+  ]
 }

@@ -48,6 +48,24 @@
 
 
 
+### Session — 2026-05-05 22:26
+- Total commands: **212**
+- Success rate: **96.7%**
+- Avg response time: **0.0s**
+- Most used command: **fill these details**
+- Voice commands: 209 | Text commands: 3
+
+
+
+### Session — 2026-05-07 15:54
+- Total commands: **247**
+- Success rate: **97.2%**
+- Avg response time: **0.0s**
+- Most used command: **fill these details**
+- Voice commands: 244 | Text commands: 3
+
+
+
 ## 2026-04-19 17:33
 
 - Intent: open_app
@@ -260,6 +278,186 @@
 - Intent: open_app
 - Command: open chrome
 - Response: Brought chrome to the front.
+
+
+---
+
+## 2026-05-04 12:11
+
+- Intent: switch_device
+- Command: switch to light mode
+- Response: I couldn't find any active Spotify devices. Make sure the app is open.
+
+
+---
+
+## 2026-05-05 20:16
+
+- Intent: open_app
+- Command: move on to something else while checking those pending emails from your gmail 1080605 at gmail.com
+- Response: I tried launching gmail, but it's not showing up.
+
+
+---
+
+## 2026-05-05 20:16
+
+- Intent: open_app
+- Command: i tried launching gmail but it's not showing up
+- Response: Brought gmail to the front.
+
+
+---
+
+## 2026-05-06 16:35
+
+- Intent: open_app
+- Command: open chrome
+- Response: Brought chrome to the front.
+
+
+---
+
+## 2026-05-06 16:39
+
+- Intent: open_app
+- Command: open apple music
+- Response: I tried launching apple music, but it's not showing up.
+
+
+---
+
+## 2026-05-06 16:39
+
+- Intent: open_app
+- Command: open apple music
+- Response: Brought apple music to the front.
+
+
+---
+
+## 2026-05-06 16:40
+
+- Intent: open_app
+- Command: open apple music
+- Response: Brought apple music to the front.
+
+
+---
+
+## 2026-05-07 13:24
+
+- Intent: play_music
+- Command: play my marmalade on spotify
+- Response: Playing My Marmalade (TikTok Version) by Katya Lel on OnePlus 12R
+
+
+---
+
+## 2026-05-07 13:25
+
+- Intent: open_app
+- Command: photos
+- Response: I tried launching photos, but it's not showing up.
+
+
+---
+
+## 2026-05-07 13:25
+
+- Intent: open_app
+- Command: i tried launching photos but it's not showing up
+- Response: Brought photos to the front.
+
+
+---
+
+## 2026-05-07 14:59
+
+- Intent: open_app
+- Command: abhi spotify
+- Response: Brought Spotify to the front.
+
+
+---
+
+## 2026-05-07 15:21
+
+- Intent: open_app
+- Command: open spotify
+- Response: Brought spotify to the front.
+
+
+---
+
+## 2026-05-07 15:59
+
+- Intent: open_app
+- Command: open spotify
+- Response: Brought spotify to the front.
+
+
+---
+
+## 2026-05-07 16:00
+
+- Intent: open_app
+- Command: open chrome
+- Response: Brought chrome to the front.
+
+
+---
+
+## 2026-05-07 16:02
+
+- Intent: open_app
+- Command: open powershell
+- Response: Brought powershell to the front.
+
+
+---
+
+## 2026-05-07 16:02
+
+- Intent: open_app
+- Command: open powershell
+- Response: Brought powershell to the front.
+
+
+---
+
+## 2026-05-08 12:19
+
+- Intent: open_app
+- Command: open apple music
+- Response: Brought apple music to the front.
+
+
+---
+
+## 2026-05-08 12:21
+
+- Intent: open_app
+- Command: open apple music
+- Response: Brought apple music to the front.
+
+
+---
+
+## 2026-05-10 13:14
+
+- Intent: open_app
+- Command: open alienware command centre
+- Response: Brought alienware command centre to the front.
+
+
+---
+
+## 2026-05-10 13:15
+
+- Intent: open_app
+- Command: open calculator
+- Response: Brought calculator to the front.
 
 
 ---

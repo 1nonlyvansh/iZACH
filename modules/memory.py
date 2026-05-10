@@ -36,7 +36,8 @@ def get_memory_as_context() -> str:
     for k, v in data.items():
         val = v["value"] if isinstance(v, dict) else str(v)
         lines.append(f"- {k}: {val}")
-    return "Things iZACH remembers about Vansh:\n" + "\n".join(lines)
+    owner = os.getenv("OWNER_NAME", "User")
+    return f"Things iZACH remembers about {owner}:\n" + "\n".join(lines)
 
 def list_memory() -> list:
     data = load_memory()

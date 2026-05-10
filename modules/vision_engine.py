@@ -33,11 +33,18 @@ _GESTURE_ENGINE_OK = False
 _FACE_AUTH_OK      = False
 
 try:
-    import sys, os
+    import sys, os, types
     # Allow importing AURA modules from modules/vision_config and modules/vision_modules
     _HERE = os.path.dirname(os.path.abspath(__file__))
     sys.path.insert(0, os.path.join(_HERE, "vision_config"))
-    sys.path.insert(0, os.path.join(_HERE, "vision_modules"))
+    sys.path.insert(0, _HERE)
+
+    # vision_modules internally import 'config.constants' — alias to vision_config
+    if "config" not in sys.modules:
+        _config_pkg = types.ModuleType("config")
+        _config_pkg.__path__ = [os.path.join(_HERE, "vision_config")]
+        _config_pkg.__package__ = "config"
+        sys.modules["config"] = _config_pkg
 
     from vision_modules.gesture_engine import GestureEngine
     from vision_config.constants import DEFAULT_DESKTOP_MAPPINGS, DEFAULT_MUSIC_MAPPINGS
@@ -83,6 +90,19 @@ class _FaceDB:
         names     = list(self._data.keys())
         encodings = list(self._data.values())
         return encodings, names
+
+    def reload(self):
+        """Reload encodings from disk in-place (keeps verifier reference valid)."""
+        import json as _json
+        self._data = {}
+        try:
+            with open(self._path) as f:
+                raw = _json.load(f)
+            for username, info in raw.items():
+                if "encoding" in info and info["encoding"]:
+                    self._data[username] = np.array(info["encoding"])
+        except Exception:
+            pass
 
 
 # ─────────────────────────────────────────────
@@ -145,16 +165,22 @@ class VisionEngine:
         # Gesture engine
         self._gesture_engine: Optional[GestureEngine] = None
         if _GESTURE_ENGINE_OK:
-            self._gesture_engine = GestureEngine(
-                on_gesture=self._gesture_callback,
-                draw_landmarks=True
-            )
+            try:
+                self._gesture_engine = GestureEngine(
+                    on_gesture=self._gesture_callback,
+                    draw_landmarks=True
+                )
+            except Exception as _ge_err:
+                print(f"[VISION] Gesture init failed (protobuf conflict?): {_ge_err}")
 
         # Face verifier
         self._face_db = _FaceDB("users.json")
         self._verifier: Optional[FaceVerifier] = None
         if _FACE_AUTH_OK:
-            self._verifier = FaceVerifier(self._face_db)
+            try:
+                self._verifier = FaceVerifier(self._face_db)
+            except Exception as _fv_err:
+                print(f"[VISION] Face verifier init failed: {_fv_err}")
 
         # Camera list
         self._available_cameras: list[int] = []
@@ -217,28 +243,113 @@ class VisionEngine:
         print(f"[VISION] Gesture mode → {mode}")
 
     # ─────────────────────────────────────────
-    # Face verification (blocking, ~200ms)
+    # Face auth — DeepFace (ArcFace) backend
+    # Reads/writes users.json directly on every
+    # call so enrolled faces persist across sessions
+    # with no stale in-memory reference issues.
     # ─────────────────────────────────────────
+
+    _DEEPFACE_MODEL    = "ArcFace"
+    _DEEPFACE_DETECTOR = "opencv"
+    _DEEPFACE_THRESHOLD = 0.68   # cosine distance; lower = stricter
+
+    def _load_face_db(self) -> dict:
+        """Read users.json fresh from disk."""
+        import json as _json
+        try:
+            with open(self._face_db._path) as f:
+                return _json.load(f)
+        except Exception:
+            return {}
+
+    def _save_face_db(self, data: dict):
+        """Write users.json to disk and reload in-memory cache."""
+        import json as _json
+        with open(self._face_db._path, "w") as f:
+            _json.dump(data, f, indent=2)
+        self._face_db.reload()
+
+    def _get_embedding(self, frame_bgr: np.ndarray, enforce_detection: bool = True):
+        """
+        Return DeepFace ArcFace embedding for a BGR frame.
+        Returns numpy array or raises on failure.
+        """
+        from deepface import DeepFace
+        rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
+        result = DeepFace.represent(
+            img_path=rgb,
+            model_name=self._DEEPFACE_MODEL,
+            detector_backend=self._DEEPFACE_DETECTOR,
+            enforce_detection=enforce_detection,
+            align=True,
+        )
+        if not result:
+            raise ValueError("No face detected.")
+        return np.array(result[0]["embedding"])
 
     def verify_face(self, expected_username: str = "vansh") -> bool:
         """
-        Quick face verification using the last captured frame.
-        Returns True if face matches expected_username.
-        Blocks for ~200ms.
+        Verify identity against stored DeepFace embedding.
+        Reads users.json fresh each call — persistent across sessions.
+        Returns True if face matches.
         """
-        if not self._verifier:
-            print("[VISION] Face auth not available — allowing command.")
-            return True
-
         frame = self._latest_frame
         if frame is None:
-            print("[VISION] No frame available for face check.")
+            print("[VISION] No frame — is camera running?")
             return False
 
-        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        result = self._verifier.verify(rgb, expected_username=expected_username)
-        print(f"[VISION] Face verify: {result.verified} ({result.message})")
-        return result.verified
+        data = self._load_face_db()
+        if expected_username not in data:
+            print(f"[VISION] No enrolled face for '{expected_username}'. Say 'enroll my face' first.")
+            return False
+
+        stored = np.array(data[expected_username].get("encoding", []))
+        if stored.size == 0:
+            print("[VISION] Stored encoding is empty — re-enroll.")
+            return False
+
+        try:
+            live = self._get_embedding(frame, enforce_detection=False)
+            # Cosine distance: 0 = identical, 1 = orthogonal, 2 = opposite
+            stored_n = stored / (np.linalg.norm(stored) + 1e-10)
+            live_n   = live   / (np.linalg.norm(live)   + 1e-10)
+            dist = float(1.0 - np.dot(stored_n, live_n))
+            verified = dist < self._DEEPFACE_THRESHOLD
+            conf = round(1.0 - dist, 3)
+            print(f"[VISION] DeepFace verify: dist={dist:.4f} threshold={self._DEEPFACE_THRESHOLD} match={verified} conf={conf}")
+            return verified
+        except ImportError:
+            print("[VISION] DeepFace not installed. Run: pip install deepface tf-keras")
+            return False
+        except Exception as e:
+            print(f"[VISION] Verification error: {e}")
+            return False
+
+    def enroll_face(self, username: str) -> tuple:
+        """
+        Capture current frame, extract ArcFace 512D embedding, save to users.json.
+        Face stays enrolled permanently — no need to re-enroll each session.
+        Returns (True, message) on success, (False, message) on failure.
+        """
+        frame = self._latest_frame
+        if frame is None:
+            return False, "No camera frame. Is the camera on?"
+        try:
+            embedding = self._get_embedding(frame, enforce_detection=True)
+            data = self._load_face_db()
+            data[username] = {
+                "encoding": embedding.tolist(),
+                "model": self._DEEPFACE_MODEL,
+            }
+            self._save_face_db(data)
+            print(f"[VISION] DeepFace enrolled '{username}' — {len(embedding)}D ArcFace embedding saved.")
+            return True, f"Face enrolled. I'll recognize you from now on, no need to enroll again."
+        except ImportError:
+            return False, "DeepFace not installed. Run: pip install deepface tf-keras"
+        except ValueError as e:
+            return False, f"No face detected. Look directly at the camera and try again."
+        except Exception as e:
+            return False, f"Enrollment failed: {e}"
 
     def get_latest_frame(self) -> Optional[np.ndarray]:
         return self._latest_frame

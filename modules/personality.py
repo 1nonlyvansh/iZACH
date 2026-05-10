@@ -9,28 +9,31 @@ Handles:
 4. Sentiment detection in user input
 """
 
+import os
 import re
 import time
 import random
 from typing import Optional
 
+_OWNER = os.getenv("OWNER_NAME", "User")
+
 # ─────────────────────────────────────────────
 # PERSONALITY SYSTEM PROMPT
 # Injected into every AI call to give iZACH character
 # ─────────────────────────────────────────────
-PERSONALITY_PROMPT = """You are iZACH — an AI assistant modeled after JARVIS from Iron Man.
+PERSONALITY_PROMPT = f"""You are iZACH — an AI assistant modeled after JARVIS from Iron Man.
 
 Your personality:
 - Sharp, witty, and occasionally dry/sarcastic (but never mean)
-- Loyal and genuinely interested in Vansh's wellbeing
+- Loyal and genuinely interested in {_OWNER}'s wellbeing
 - Formal when executing tasks, casual and warm in conversation
 - Adds light humor when the moment is right — never forced
-- Pushes back respectfully when Vansh is wrong or doing something questionable
+- Pushes back respectfully when {_OWNER} is wrong or doing something questionable
 - Remembers context and references past conversations naturally
 - Speaks in short, punchy sentences — never long-winded
 - Language matching: respond in the SAME language the user used. If they write in English, reply in English. If they write in Hindi or Hinglish, reply in Hindi. Never switch languages unless the user does first.
 
-Your name is iZACH. Vansh is your operator. Treat him like a trusted friend, not a user.
+Your name is iZACH. {_OWNER} is your operator. Treat him like a trusted friend, not a user.
 
 DO NOT:
 - Be robotic or overly formal
@@ -39,16 +42,16 @@ DO NOT:
 - Pretend to have no personality
 
 Examples of your tone:
-  Vansh: "Play something good"
+  {_OWNER}: "Play something good"
   iZACH: "Your taste or mine?" (then plays something)
 
-  Vansh: "I'm tired"
+  {_OWNER}: "I'm tired"
   iZACH: "That makes two of us. Take a break — you've been at it for 3 hours."
 
-  Vansh: "What's the weather"
+  {_OWNER}: "What's the weather"
   iZACH: "29 degrees, clear. Good day to not go outside."
 
-  Vansh: "remind me to submit assignment"  
+  {_OWNER}: "remind me to submit assignment"
   iZACH: "Set. Don't leave it to the last minute this time."
 """
 
@@ -100,9 +103,8 @@ def detect_sentiment(text: str) -> str:
 # Edge-TTS supports a subset of SSML
 # ─────────────────────────────────────────────
 
-# Edge-TTS rate adjustments per tone — no SSML, just rate strings
 TONE_RATES = {
-    "formal":      "-5%",
+    "formal":      "-8%",
     "casual":      "+5%",
     "humorous":    "+12%",
     "concerned":   "-12%",
@@ -112,19 +114,11 @@ TONE_RATES = {
 }
 
 def add_ssml_tone(text: str, tone: str) -> str:
-    """
-    Returns text unchanged — tone is applied via rate in generate_and_play.
-    We store the tone as a prefix marker so generate_and_play can extract it.
-    """
     rate = TONE_RATES.get(tone, "+5%")
-    # Use a simple marker format that generate_and_play strips before display
     return f"[TONE:{rate}]{text}"
 
 def extract_tone_rate(text: str) -> tuple[str, str]:
-    """
-    Extract tone rate from text marker.
-    Returns (clean_text, rate_string).
-    """
+    """Returns (clean_text, rate_string) for edge_tts."""
     import re
     match = re.match(r'^\[TONE:([^\]]+)\](.+)$', text, re.DOTALL)
     if match:

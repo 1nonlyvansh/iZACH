@@ -39,14 +39,15 @@ class IntentRouter:
         intent = parsed.get("intent")
 
         if intent == "open_app":
-            app = parsed.get("app")
+            app = parsed.get("app", "")
 
             from modules.context_engine import handle_open_with_position
 
-            result = handle_open_with_position(app, None)
-            print("[OPEN APP RESULT]:", result)
-
-            # self.speak(result)
+            apps = [a.strip() for a in app.split(" and ")] if " and " in app else [app]
+            result = None
+            for a in apps:
+                result = handle_open_with_position(a, None)
+                print("[OPEN APP RESULT]:", result)
             return result
 
         if intent == "play_music":

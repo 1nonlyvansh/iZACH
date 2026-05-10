@@ -1,14 +1,8 @@
 const { Client, LocalAuth, MessageMedia } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
 const express = require('express');
-const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
-
-// Kill any leftover Chrome processes before starting
-try {
-    execSync('taskkill /F /IM chrome.exe /T 2>nul', { stdio: 'ignore' });
-} catch (e) {}
 
 const SESSION_PATH = path.join(__dirname, '.wwebjs_auth');
 const STARTUP_TIME = Math.floor(Date.now() / 1000); // Unix timestamp in seconds
@@ -30,6 +24,7 @@ function createClient() {
     client.on('qr', qr => {
         console.log('[WHATSAPP] Scan QR code:');
         qrcode.generate(qr, { small: true });
+        notifyIZACH('/whatsapp/qr', { qr });
     });
 
     let acceptMessages = false;

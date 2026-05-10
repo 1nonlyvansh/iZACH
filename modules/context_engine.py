@@ -5,6 +5,16 @@ import time
 import pyautogui
 from screeninfo import get_monitors
 
+def safe_activate(window):
+    """Bring window to foreground using win32gui to avoid pygetwindow's error-code-0 false raise."""
+    try:
+        hwnd = window._hWnd
+        win32gui.ShowWindow(hwnd, win32con.SW_RESTORE)
+        win32gui.SetForegroundWindow(hwnd)
+    except Exception:
+        window.restore()
+        window.activate()
+
 def get_screen_resolution():
     """Gets the primary monitor's dimensions."""
     monitor = get_monitors()[0]
@@ -27,7 +37,7 @@ def snap_window(window, position):
         # Ensure window is restored and focusable
         if window.isMinimized:
             window.restore()
-        window.activate()
+        safe_activate(window)
         
         # Define Regions
         # Note: Windows handles taskbars/borders; these are raw offsets
@@ -89,5 +99,5 @@ def handle_open_with_position(app_name, position=None):
     
     # 3. Default behavior (just bring to front)
     target_window.restore()
-    target_window.activate()
+    safe_activate(target_window)
     return f"Brought {app_name} to the front."

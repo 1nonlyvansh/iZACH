@@ -503,9 +503,6 @@ class SpotifyController:
             normalized_target = self._normalize(target)
             device_map = {self._normalize(d['name']): d for d in devices}
 
-            print(f"[DEBUG] Normalized target: {normalized_target}")
-            print(f"[DEBUG] Available normalized devices: {list(device_map.keys())}")
-
             # 4. Fuzzy match
             result = process.extractOne(
                 normalized_target,
@@ -513,8 +510,6 @@ class SpotifyController:
                 scorer=fuzz.ratio,
                 score_cutoff=60
             )
-
-            print(f"[DEBUG] Match result: {result}")
 
             if not result:
                 return f"I couldn't find a device matching '{device_name}'."

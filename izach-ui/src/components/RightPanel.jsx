@@ -1,4 +1,5 @@
-import React from 'react'
+import React, { useState, useEffect } from 'react'
+import QRCode from 'qrcode'
 
 function SectionHeader({ label }) {
   return (
@@ -242,7 +243,52 @@ function SystemLog({ errors }) {
   )
 }
 
-export default function RightPanel({ waStatus, mmaStatus, spotifyTrack, notifications }) {
+function WhatsAppPanel({ status, qr }) {
+  const [qrDataUrl, setQrDataUrl] = useState(null)
+
+  useEffect(() => {
+    if (qr) {
+      QRCode.toDataURL(qr, { width: 188, margin: 1, color: { dark: '#c8e8f0', light: '#050d1a' } })
+        .then(url => setQrDataUrl(url))
+        .catch(() => setQrDataUrl(null))
+    } else {
+      setQrDataUrl(null)
+    }
+  }, [qr])
+
+  return (
+    <div>
+      <SectionHeader label="WHATSAPP BRIDGE" />
+      <div style={{ padding: '0 16px 12px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: qrDataUrl ? 10 : 0 }}>
+          <StatusDot status={status} />
+          <span style={{
+            color: status === 'online' ? '#1db954' : '#ff3d3d',
+            fontFamily: "'Share Tech Mono'", fontSize: '10px',
+            letterSpacing: '0.2em', textTransform: 'uppercase',
+          }}>
+            {status}
+          </span>
+          {status === 'online' && (
+            <span style={{ color: '#1a4a5a', fontFamily: "'JetBrains Mono'", fontSize: '9px', marginLeft: 2 }}>
+              Connected
+            </span>
+          )}
+        </div>
+        {qrDataUrl && status === 'offline' && (
+          <div>
+            <p style={{ color: '#3a6070', fontFamily: "'Share Tech Mono'", fontSize: '8px', letterSpacing: '0.12em', marginBottom: 6 }}>
+              SCAN TO CONNECT
+            </p>
+            <img src={qrDataUrl} alt="WhatsApp QR" style={{ width: '100%', borderRadius: 4, display: 'block' }} />
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+export default function RightPanel({ waStatus, mmaStatus, spotifyTrack, notifications, whatsappQr }) {
   return (
     <div style={{
       display: 'flex', flexDirection: 'column',
@@ -254,8 +300,7 @@ export default function RightPanel({ waStatus, mmaStatus, spotifyTrack, notifica
       <StatusPanel label="MMA REMOTE AGENT" status={mmaStatus}
         detail={mmaStatus === 'offline' ? 'MMA not running' : 'Online'} />
       <Divider />
-      <StatusPanel label="WHATSAPP BRIDGE" status={waStatus}
-        detail={waStatus === 'offline' ? '' : 'Connected'} />
+      <WhatsAppPanel status={waStatus} qr={whatsappQr} />
       <Divider />
       <NotificationsPanel notifications={notifications} />
       <Divider />

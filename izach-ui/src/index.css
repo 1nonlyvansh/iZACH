@@ -109,6 +109,45 @@ body::before {
   50% { box-shadow: 0 0 0 4px rgba(255, 61, 61, 0); }
 }
 
+@keyframes faceScanLine {
+  0%   { top: 12%; opacity: 0; }
+  5%   { opacity: 0.8; }
+  95%  { opacity: 0.8; }
+  100% { top: 88%; opacity: 0; }
+}
+
+@keyframes faceOvalPulse {
+  0%, 100% { stroke-opacity: 0.5; filter: drop-shadow(0 0 2px #00e5ff); }
+  50%       { stroke-opacity: 1;   filter: drop-shadow(0 0 6px #00e5ff); }
+}
+
+@keyframes enrollOvalPulse {
+  0%, 100% { stroke-opacity: 0.5; filter: drop-shadow(0 0 2px #ffb300); }
+  50%       { stroke-opacity: 1;   filter: drop-shadow(0 0 8px #ffb300); }
+}
+
+@keyframes faceGridFade {
+  0%, 100% { opacity: 0.25; }
+  50%       { opacity: 0.5; }
+}
+
+@keyframes resultFadeIn {
+  from { opacity: 0; transform: scale(0.92); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+@keyframes enrollSpin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+.face-scan-line  { animation: faceScanLine 2s ease-in-out infinite; }
+.face-oval       { animation: faceOvalPulse 1.5s ease-in-out infinite; }
+.enroll-oval     { animation: enrollOvalPulse 1s ease-in-out infinite; }
+.face-grid       { animation: faceGridFade 1.5s ease-in-out infinite; }
+.face-result     { animation: resultFadeIn 0.3s ease-out forwards; }
+.enroll-spinner  { animation: enrollSpin 2s linear infinite; }
+
 .status-online { animation: statusPulse 2s infinite; }
 .status-offline { animation: statusPulseRed 2s infinite; }
 .blink { animation: blink 1s infinite; }

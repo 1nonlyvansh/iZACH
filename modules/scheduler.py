@@ -1,7 +1,11 @@
+import os
 import threading
 import time
 import dateparser
 from datetime import datetime
+
+def _owner():
+    return os.getenv("OWNER_NAME", "User")
 
 class TaskScheduler:
     def __init__(self, speak_callback, orchestrator=None):
@@ -15,10 +19,10 @@ class TaskScheduler:
         target_time = dateparser.parse(time_str, settings={'PREFER_DATES_FROM': 'future'})
         
         if not target_time:
-            return "Vansh, that time format is invalid."
+            return f"{_owner()}, that time format is invalid."
         
         if target_time < datetime.now():
-            return "I can't remind you of something in the past, Vansh."
+            return f"I can't remind you of something in the past, {_owner()}."
 
         self.counter += 1
         reminder = {"id": self.counter, "task": task_text, "time": target_time}
@@ -38,9 +42,9 @@ class TaskScheduler:
             for r in triggered:
                 # IMPORTANT: Submit to orchestrator so it waits for current speech to finish
                 if self.orchestrator:
-                    self.orchestrator.submit_task(self.speak_callback, f"Vansh, reminder: {r['task']}")
+                    self.orchestrator.submit_task(self.speak_callback, f"{_owner()}, reminder: {r['task']}")
                 else:
-                    self.speak_callback(f"Vansh, reminder: {r['task']}")
+                    self.speak_callback(f"{_owner()}, reminder: {r['task']}")
                 
                 self.reminders.remove(r)
             
