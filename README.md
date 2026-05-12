@@ -9,7 +9,7 @@
 ╚═╝╚══════╝╚═╝  ╚═╝ ╚═════╝╚═╝  ╚═╝
 ```
 
-**Intelligent Zenith Adaptive Cognitive Handler**
+**Intent Zenith Adaptive Cognitive Handler**
 
 *A JARVIS-grade AI assistant for Windows — voice-driven, context-aware, system-deep.*
 
