@@ -566,24 +566,191 @@ const inputStyle = {
   boxSizing: 'border-box',
 }
 
-export default function RightPanel({ waStatus, mmaStatus, spotifyTrack, notifications, whatsappQr, androidDevices = [], calendarEvents = [], onCalendarUpdate }) {
+// ── TERMINAL PANEL ────────────────────────────────────────────────────────────
+
+function ShellInput() {
+  const [cmd, setCmd] = React.useState('')
+  const [busy, setBusy] = React.useState(false)
+
+  async function submit(e) {
+    e.preventDefault()
+    const trimmed = cmd.trim()
+    if (!trimmed || busy) return
+    setBusy(true)
+    try {
+      await fetch(`${BASE}/shell/run`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ command: trimmed }),
+      })
+      setCmd('')
+    } catch {}
+    setBusy(false)
+  }
+
+  return (
+    <form onSubmit={submit} style={{ display: 'flex', gap: 4, padding: '6px 10px 4px' }}>
+      <span style={{ fontFamily: "'JetBrains Mono'", fontSize: 8, color: '#38bdf8', alignSelf: 'center' }}>PS&gt;</span>
+      <input
+        value={cmd}
+        onChange={e => setCmd(e.target.value)}
+        placeholder="type command…"
+        disabled={busy}
+        style={{
+          flex: 1, background: '#050d1a', border: '1px solid #1e3a5f',
+          borderRadius: 3, color: '#c8e8f0', fontFamily: "'JetBrains Mono'",
+          fontSize: 8, padding: '3px 5px', outline: 'none',
+        }}
+      />
+      <button type="submit" disabled={busy || !cmd.trim()} style={{
+        background: busy ? '#0a1628' : '#1e3a5f', border: '1px solid #38bdf8',
+        borderRadius: 3, color: '#38bdf8', fontSize: 8, cursor: 'pointer', padding: '2px 7px',
+        fontFamily: "'JetBrains Mono'",
+      }}>run</button>
+    </form>
+  )
+}
+
+function TerminalPanel({ shellOutput, onClear }) {
+  if (!shellOutput) return null
+
+  const { command, lines, done, exitCode, truncated } = shellOutput
+  const statusColor = !done ? '#38bdf8' : exitCode === 0 ? '#22c55e' : '#f87171'
+  const statusLabel = !done ? 'running…' : exitCode === 0 ? `exit 0` : `exit ${exitCode}`
+
+  return (
+    <div style={{ padding: '8px 10px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+        <span style={{ color: '#38bdf8', fontSize: 9, fontFamily: "'JetBrains Mono'", letterSpacing: 1 }}>TERMINAL</span>
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          <span style={{ color: statusColor, fontSize: 8, fontFamily: "'JetBrains Mono'" }}>{statusLabel}</span>
+          {done && (
+            <button onClick={onClear} style={{
+              background: 'none', border: '1px solid #1e3a5f', borderRadius: 2,
+              color: '#4a90a4', fontSize: 8, cursor: 'pointer', padding: '1px 5px',
+            }}>clear</button>
+          )}
+        </div>
+      </div>
+
+      {/* Command */}
+      <div style={{
+        fontFamily: "'JetBrains Mono'", fontSize: 8, color: '#7dd3fc',
+        background: '#050d1a', borderRadius: 3, padding: '3px 6px',
+        marginBottom: 4, wordBreak: 'break-all',
+      }}>
+        PS&gt; {command}
+      </div>
+
+      {/* Output */}
+      <div style={{
+        fontFamily: "'JetBrains Mono'", fontSize: 8, color: '#c8e8f0',
+        background: '#050d1a', borderRadius: 3, padding: '4px 6px',
+        maxHeight: 160, overflowY: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-all',
+        lineHeight: 1.5,
+      }}>
+        {lines.length === 0 && !done
+          ? <span style={{ color: '#4a90a4' }}>waiting for output…</span>
+          : lines.join('')
+        }
+        {truncated && <div style={{ color: '#f87171' }}>[output truncated]</div>}
+      </div>
+    </div>
+  )
+}
+
+// ── SHELL CONFIRM MODAL ───────────────────────────────────────────────────────
+
+function ShellConfirmModal({ shellConfirm, onDismiss }) {
+  if (!shellConfirm) return null
+  const { id, command } = shellConfirm
+
+  async function handleRun() {
+    onDismiss()
+    await fetch(`${BASE}/shell/confirm`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id }),
+    }).catch(() => {})
+  }
+
+  async function handleCancel() {
+    onDismiss()
+    await fetch(`${BASE}/shell/cancel`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id }),
+    }).catch(() => {})
+  }
+
   return (
     <div style={{
-      display: 'flex', flexDirection: 'column',
-      height: '100%', overflowY: 'auto', overflowX: 'hidden',
-      background: '#0a1628', borderLeft: '1px solid #0d2a3a',
+      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999,
     }}>
-      <SpotifyPanel track={spotifyTrack} />
-      <Divider />
-      <CalendarPanel events={calendarEvents} onCalendarUpdate={onCalendarUpdate} />
-      <Divider />
-      <MmaPanel mmaStatus={mmaStatus} androidDevices={androidDevices} />
-      <Divider />
-      <WhatsAppPanel status={waStatus} qr={whatsappQr} />
-      <Divider />
-      <NotificationsPanel notifications={notifications} />
-      <Divider />
-      <SystemLog errors={[]} />
+      <div style={{
+        background: '#0a1628', border: '1px solid #1e3a5f', borderRadius: 8,
+        padding: '18px 20px', maxWidth: 420, width: '90%',
+        boxShadow: '0 0 32px rgba(0,120,200,0.2)',
+      }}>
+        <div style={{ color: '#f59e0b', fontSize: 11, fontFamily: "'JetBrains Mono'", marginBottom: 10 }}>
+          CONFIRM COMMAND EXECUTION
+        </div>
+        <div style={{
+          fontFamily: "'JetBrains Mono'", fontSize: 9, color: '#7dd3fc',
+          background: '#050d1a', borderRadius: 4, padding: '6px 10px',
+          marginBottom: 14, wordBreak: 'break-all', whiteSpace: 'pre-wrap',
+        }}>
+          PS&gt; {command}
+        </div>
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+          <button onClick={handleCancel} style={{
+            background: 'none', border: '1px solid #1e3a5f', borderRadius: 4,
+            color: '#4a90a4', fontSize: 9, cursor: 'pointer', padding: '4px 12px',
+            fontFamily: "'JetBrains Mono'",
+          }}>Cancel</button>
+          <button onClick={handleRun} style={{
+            background: '#1e3a5f', border: '1px solid #38bdf8', borderRadius: 4,
+            color: '#38bdf8', fontSize: 9, cursor: 'pointer', padding: '4px 12px',
+            fontFamily: "'JetBrains Mono'",
+          }}>Run</button>
+        </div>
+      </div>
     </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
+export default function RightPanel({ waStatus, mmaStatus, spotifyTrack, notifications, whatsappQr, androidDevices = [], calendarEvents = [], onCalendarUpdate, shellConfirm, setShellConfirm, shellOutput, setShellOutput }) {
+  return (
+    <>
+      <ShellConfirmModal shellConfirm={shellConfirm} onDismiss={() => setShellConfirm(null)} />
+      <div style={{
+        display: 'flex', flexDirection: 'column',
+        height: '100%', overflowY: 'auto', overflowX: 'hidden',
+        background: '#0a1628', borderLeft: '1px solid #0d2a3a',
+      }}>
+        <SpotifyPanel track={spotifyTrack} />
+        <Divider />
+        <CalendarPanel events={calendarEvents} onCalendarUpdate={onCalendarUpdate} />
+        <Divider />
+        <MmaPanel mmaStatus={mmaStatus} androidDevices={androidDevices} />
+        <Divider />
+        <WhatsAppPanel status={waStatus} qr={whatsappQr} />
+        <Divider />
+        <NotificationsPanel notifications={notifications} />
+        <Divider />
+        <div style={{ padding: '6px 10px 2px' }}>
+          <span style={{ color: '#38bdf8', fontSize: 9, fontFamily: "'JetBrains Mono'", letterSpacing: 1 }}>TERMINAL</span>
+        </div>
+        <ShellInput />
+        {shellOutput && (
+          <TerminalPanel shellOutput={shellOutput} onClear={() => setShellOutput(null)} />
+        )}
+        <Divider />
+        <SystemLog errors={[]} />
+      </div>
+    </>
   )
 }

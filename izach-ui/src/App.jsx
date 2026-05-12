@@ -24,6 +24,8 @@ export default function App() {
     faceState,
     whatsappQr,
     calendarEvents, setCalendarEvents,
+    shellConfirm, setShellConfirm,
+    shellOutput,  setShellOutput,
     chatBottomRef,
     send, stopSpeech,
   } = useIZACH()
@@ -100,6 +102,10 @@ export default function App() {
             androidDevices={androidDevices}
             calendarEvents={calendarEvents}
             onCalendarUpdate={setCalendarEvents}
+            shellConfirm={shellConfirm}
+            setShellConfirm={setShellConfirm}
+            shellOutput={shellOutput}
+            setShellOutput={setShellOutput}
           />
         </div>
       </div>
