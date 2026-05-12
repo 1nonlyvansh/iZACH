@@ -1,115 +1,390 @@
-iZACH — Intelligent Zenith Adaptive Cognitive Handler
+<div align="center">
 
-A full-stack AI assistant that can listen, think, and act — combining voice input, real-time AI processing, and system-level automation in a single modular architecture.
+```
+██╗███████╗ █████╗  ██████╗██╗  ██╗
+██║╚══███╔╝██╔══██╗██╔════╝██║  ██║
+██║  ███╔╝ ███████║██║     ███████║
+██║ ███╔╝  ██╔══██║██║     ██╔══██║
+██║███████╗██║  ██║╚██████╗██║  ██║
+╚═╝╚══════╝╚═╝  ╚═╝ ╚═════╝╚═╝  ╚═╝
+```
 
----
+**Intelligent Zenith Adaptive Cognitive Handler**
 
-🚀 What It Does
-
-iZACH is not just a chatbot. It acts as a personal operating layer that can:
-
-- Understand voice commands
-- Process them using AI (Groq / Gemini)
-- Execute real actions (Spotify, WhatsApp, system tasks)
-- Maintain context and memory
-
----
-
-⚡ Key Features
-
-- 🎤 Voice → AI → Action pipeline
-- 💬 Chat-based command interface
-- 📱 WhatsApp automation bridge
-- 🎵 Spotify playback control
-- 🧠 Context-aware memory system
-- ⚙️ Task orchestration engine
-- 🖥️ Desktop UI (React + Electron)
+*A JARVIS-grade AI assistant for Windows — voice-driven, context-aware, system-deep.*
 
 ---
 
-🧠 Architecture Overview
+[![Python](https://img.shields.io/badge/Python-3.10%2B-00e5ff?style=flat-square&logo=python&logoColor=00e5ff&labelColor=050d1a)](https://python.org)
+[![React](https://img.shields.io/badge/React-18-00e5ff?style=flat-square&logo=react&logoColor=00e5ff&labelColor=050d1a)](https://react.dev)
+[![Electron](https://img.shields.io/badge/Electron-Desktop-00e5ff?style=flat-square&logo=electron&logoColor=00e5ff&labelColor=050d1a)](https://electronjs.org)
+[![Flask](https://img.shields.io/badge/Flask-Backend-00e5ff?style=flat-square&logo=flask&logoColor=00e5ff&labelColor=050d1a)](https://flask.palletsprojects.com)
+[![Groq](https://img.shields.io/badge/Groq-LLM-00e5ff?style=flat-square&logoColor=00e5ff&labelColor=050d1a)](https://groq.com)
+[![Platform](https://img.shields.io/badge/Platform-Windows%20Only-0d2a3a?style=flat-square&logo=windows&logoColor=c8e8f0&labelColor=050d1a)](.)
+[![Status](https://img.shields.io/badge/Status-Active%20Dev-1db954?style=flat-square&labelColor=050d1a)](.)
 
-User (Voice / UI)
-        ↓
-Electron UI (React)
-        ↓
-Flask Backend (Port 5050)
-        ↓
-Command Engine
-        ↓
-Modules:
-  • AI Processing (Groq / Gemini)
-  • Spotify Controller
-  • WhatsApp Bridge
-  • Task Engine
+</div>
 
 ---
 
-🖼️ Demo
+## What is iZACH?
 
-«Screenshots and demo will be added after UI stabilization.»
+iZACH is a local-first, voice-controlled AI assistant that runs natively on Windows. It doesn't just answer questions — it **acts**. Control Spotify, automate WhatsApp, execute PowerShell, manage files, browse the web, read your calendar, watch your camera, and learn your behavioral patterns — all through natural speech or a neural-themed desktop UI.
 
----
-
-🛠️ Setup
-
-1. Clone the repo
-
-git clone https://github.com/1nonlyvansh/iZACH-V1.git
-cd iZACH-V1
+Think JARVIS. Minus the Iron Man suit.
 
 ---
 
-2. Install backend dependencies
+## Feature Matrix
 
+<table>
+<tr>
+<td width="50%" valign="top">
+
+**🎤 Voice & Language**
+- Continuous wake-word detection
+- Natural language command parsing
+- Groq LLM (`llama-3.3-70b`) for intent resolution
+- Gemini fallback (3 rotated keys)
+- Context memory across sessions
+- Disambiguation for ambiguous commands
+
+**🖥️ System Control**
+- Volume, brightness, Wi-Fi, dark/light mode
+- Battery health, CPU temp, RAM usage
+- Timer, alarm, reminder engine
+- Drive management + eject by name
+- Firewall & Windows Update status
+- Network device discovery
+
+**🤖 Automation**
+- Web automation via Playwright (14 functions)
+- PowerShell executor with safety block list
+- File manager: open, find, rename, move, copy, delete, sort, organize
+- Screenshot capture → phone transfer
+- Screen reader (Tesseract OCR)
+
+</td>
+<td width="50%" valign="top">
+
+**🧠 Intelligence**
+- Behavioral pattern learner (Phase 5)
+- Routine suggestions from usage history
+- Short + long-term context memory
+- MongoDB brain (falls back to local JSON)
+- Proactive task suggestions
+- Calendar event extraction from speech
+
+**📱 Connectivity**
+- WhatsApp bridge — read & reply hands-free
+- Spotify — play, pause, skip, playlists, device switch
+- Google Calendar sync
+- Android app (file transfer, MMA agent)
+- Ngrok tunnel for remote access
+
+**🔐 Security**
+- Face authentication (dlib, 0.50 tolerance)
+- Face-gated file deletion
+- Pre-commit hook blocks secrets & large files
+- PowerShell command safety block list
+- OAuth tokens never committed
+
+**📷 Vision**
+- Camera object identification (Gemini Vision)
+- Calorie estimation from food
+- Brand/item recognition
+- Screen element detection
+
+</td>
+</tr>
+</table>
+
+---
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                    USER INPUT                           │
+│         Voice Mic  ──  Chat UI  ──  PS> Terminal        │
+└────────────────────────┬────────────────────────────────┘
+                         │
+┌────────────────────────▼────────────────────────────────┐
+│              ELECTRON DESKTOP UI  :5173                 │
+│   React  •  WebSocket  •  Neural Orb  •  Right Panel   │
+└────────────────────────┬────────────────────────────────┘
+                         │  HTTP :5050  /  WS :5051
+┌────────────────────────▼────────────────────────────────┐
+│              FLASK BACKEND  :5050                       │
+│                                                         │
+│  ┌─────────────┐  ┌──────────────┐  ┌───────────────┐  │
+│  │ CommandChain│  │  IntentRouter│  │  TaskEngine   │  │
+│  └──────┬──────┘  └──────┬───────┘  └───────┬───────┘  │
+│         └────────────────┼──────────────────┘          │
+│                          │                              │
+│  ┌───────────┬───────────┼───────────┬──────────────┐   │
+│  │  AI Layer │  System   │   Vision  │  Automation  │   │
+│  │ Groq/Gem  │  Control  │  Camera   │  Web / Shell │   │
+│  └───────────┴───────────┴───────────┴──────────────┘   │
+└──────┬────────────────────────┬────────────────────────┘
+       │                        │
+┌──────▼──────┐        ┌────────▼────────┐
+│  WhatsApp   │        │   MMA Agent     │
+│  Bridge     │        │   :6060         │
+│  :3000      │        │   (Remote)      │
+└─────────────┘        └─────────────────┘
+```
+
+---
+
+## Voice Command Examples
+
+```
+// System
+"Set volume to 60"
+"Dim the screen"
+"Toggle dark mode"
+"What's my battery health?"
+"Who's on my network?"
+
+// Automation
+"Open Chrome and go to GitHub"
+"Search for Python tutorials"
+"Run PowerShell get top 10 processes by CPU"
+"Scroll down"
+"Summarize this page"
+
+// Media
+"Play my gym playlist on Spotify"
+"Skip this song"
+"Play lo-fi music on YouTube"
+
+// Files
+"Find my resume"
+"Organize my Downloads folder"
+"Delete project.zip"   ← triggers face auth
+
+// Communication
+"What did she say on WhatsApp?"
+"Reply: I'll be there in 10 minutes"
+
+// Vision
+"What am I holding?"
+"How many calories is this?"
+"Read the screen"
+
+// Intelligence
+"What's on my calendar tomorrow?"
+"Remember that the meeting is at 3"
+"What do you remember?"
+"Show my routines"
+
+// Security
+"Enroll my face"
+"Face auth status"
+```
+
+---
+
+## Installation
+
+> **Windows only.** iZACH uses `pywin32`, PowerShell APIs, and Windows system calls.
+
+### Prerequisites
+
+| Tool | Required | Notes |
+|---|---|---|
+| Python | 3.10 – 3.12 | python.org |
+| Node.js | 18+ | nodejs.org |
+| Git | any | git-scm.com |
+| ngrok | any | ngrok.com (free account) |
+| Tesseract OCR | optional | `winget install UB-Mannheim.TesseractOCR` |
+| MongoDB | optional | Falls back to local JSON |
+| n8n | optional | `npm install -g n8n` |
+
+---
+
+### 1 — Clone & virtual env
+
+```bash
+git clone https://github.com/1nonlyvansh/iZACH.git
+cd iZACH
+python -m venv .venv
+.venv\Scripts\activate
+```
+
+---
+
+### 2 — Python dependencies
+
+`dlib` (face recognition) requires prebuilt wheel to avoid cmake hell:
+
+```bash
+# Install dlib first — pick wheel matching your Python version
+# Python 3.12:
+pip install https://github.com/z-mahmud22/Dlib_Windows_Python3.x/raw/main/dlib-19.24.99-cp312-cp312-win_amd64.whl
+
+# Then everything else
 pip install -r requirements.txt
 
+# Install Playwright browser
+playwright install chromium
+```
+
 ---
 
-3. Install UI dependencies
+### 3 — Node dependencies
 
-cd izach-ui
+```bash
+# WhatsApp bridge (project root)
 npm install
-cd ..
+
+# Electron UI
+cd izach-ui && npm install && cd ..
+```
 
 ---
 
-4. Setup environment variables
+### 4 — API keys
 
-Create a ".env" file:
+```bash
+copy .env.example .env
+# Edit .env with your keys
+```
 
-GROQ_API_KEY=your_key_here
-GEMINI_API_KEY=your_key_here
-SPOTIPY_CLIENT_ID=your_id
-SPOTIPY_CLIENT_SECRET=your_secret
+| Variable | Source |
+|---|---|
+| `GROQ_API_KEY` | [console.groq.com](https://console.groq.com) — free tier |
+| `GEMINI_KEY_1/2/3` | [aistudio.google.com](https://aistudio.google.com) — free |
+| `SPOTIPY_CLIENT_ID` | [developer.spotify.com](https://developer.spotify.com) → create app |
+| `SPOTIPY_CLIENT_SECRET` | same app |
+| `SPOTIPY_REDIRECT_URI` | set `http://127.0.0.1:8888/callback` in Spotify dashboard |
+
+**Google Calendar** (optional):
+1. Google Cloud Console → enable Calendar API
+2. OAuth 2.0 credentials → download as `credentials.json` → place in project root
 
 ---
 
-5. Run the system
+### 5 — Fix launch paths
 
+`launch_izach.py` has hardcoded paths. Edit the top section:
+
+```python
+BASE      = r"C:\your\path\to\iZACH"
+IZACH_CMD = [r"C:\your\path\to\iZACH\.venv\Scripts\python.exe", os.path.join(BASE, "main.py")]
+# Comment out MMA_CMD if you don't have the MMA agent repo
+```
+
+---
+
+### 6 — Launch
+
+```bash
 python launch_izach.py
+```
+
+Services start in order with health checks:
+
+```
+● N8N            :5678   workflow engine
+● iZACH Backend  :5050   Flask + command engine
+● MMA Agent      :6060   remote agent
+● WhatsApp       :3000   Node.js bridge
+● Ngrok Tunnel   ——      exposes :5050 publicly
+● Electron UI    :5173   React desktop app
+```
+
+**First-run notes:**
+- **WhatsApp** — bridge window shows QR. Scan in WhatsApp → Linked Devices.
+- **Spotify** — first command opens browser OAuth. Approve it.
+- **Face auth** — say *"enroll my face"* to register biometrics.
 
 ---
 
-⚠️ Notes
+## Port Reference
 
-- Do NOT run "main.py" directly
-- Ensure all ports are free:
-  - 5050 → Backend
-  - 3000 → WhatsApp Bridge
-  - 6060 → MMA Agent
-
----
-
-🎯 Future Improvements
-
-- Smarter context memory
-- Better UI responsiveness
-- Real-time system monitoring
-- Multi-device sync
+| Port | Service |
+|---|---|
+| `5050` | iZACH Flask backend (REST) |
+| `5051` | WebSocket — real-time UI events |
+| `3000` | WhatsApp bridge |
+| `6060` | MMA remote agent |
+| `5678` | n8n workflow engine |
+| `4040` | ngrok local dashboard |
+| `5173` | Vite dev server (Electron) |
 
 ---
 
-📌 Project Status
+## Project Structure
 
-Actively under development — core system functional, UI being refined.
+```
+iZACH/
+├── main.py                  # Backend entry point
+├── launch_izach.py          # System launcher (all services)
+├── modules/
+│   ├── command_chain.py     # Central command router
+│   ├── ai_handler.py        # Groq / Gemini inference
+│   ├── system_control.py    # Volume, brightness, WiFi, drives
+│   ├── web_automation.py    # Playwright browser automation
+│   ├── shell_executor.py    # PowerShell executor + safety
+│   ├── face_auth.py         # Face enrollment & verification
+│   ├── file_manager.py      # File operations
+│   ├── calendar_agent.py    # Google Calendar sync
+│   ├── pattern_learner.py   # Behavioral pattern engine
+│   ├── spotify_controller.py
+│   ├── whatsapp_handler.py
+│   ├── camera_vision.py     # Gemini Vision integration
+│   ├── ws_bridge.py         # WebSocket broadcast hub
+│   └── ui_api.py            # Flask REST endpoints
+├── izach-ui/                # Electron + React desktop app
+│   └── src/
+│       ├── App.jsx
+│       ├── components/      # NeuralOrb, ChatPanel, RightPanel…
+│       └── hooks/useIZACH.js
+├── izach-android/           # Android companion app
+├── chrome_extension/        # Browser extension
+├── whatsapp_bridge.js       # WhatsApp Web.js bridge
+└── .env.example             # API key template
+```
+
+---
+
+## Tech Stack
+
+| Layer | Technology |
+|---|---|
+| LLM | Groq (`llama-3.3-70b-versatile`) + Google Gemini |
+| Speech | `SpeechRecognition` + `edge-tts` (Microsoft voices) |
+| Backend | Python 3.12 · Flask · WebSockets |
+| UI | React 18 · Electron · Vite · Tailwind |
+| Browser | Playwright (Chromium) |
+| Vision | OpenCV · face_recognition (dlib) · Gemini Vision |
+| Automation | PyAutoGUI · pywin32 · psutil |
+| Memory | MongoDB · JSON fallback |
+| Android | Kotlin + OkHttp (Wi-Fi file transfer to Flask :5050) |
+
+---
+
+## Common Issues
+
+| Problem | Fix |
+|---|---|
+| `dlib` install fails | Use prebuilt wheel (see step 2) |
+| Mic not detected | Windows Settings → Privacy → Microphone → allow |
+| Port 5050 in use | `netstat -ano \| findstr :5050` → kill that PID |
+| Electron blank screen | Backend not up — check `http://localhost:5050/health` |
+| `playwright install` fails | Activate `.venv` first |
+| WhatsApp QR not showing | Run `node whatsapp_bridge.js` manually in that window |
+
+---
+
+<div align="center">
+
+**iZACH** is actively developed. Core system is functional across all 5 phases.
+
+*Voice → AI → Action.*
+
+[![GitHub](https://img.shields.io/badge/github-1nonlyvansh%2FiZACH-00e5ff?style=flat-square&logo=github&logoColor=00e5ff&labelColor=050d1a)](https://github.com/1nonlyvansh/iZACH)
+
+</div>
