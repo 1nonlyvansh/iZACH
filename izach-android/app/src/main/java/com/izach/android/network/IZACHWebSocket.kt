@@ -1,0 +1,154 @@
+package com.izach.android.network
+
+import android.os.Build
+import android.os.Handler
+import android.os.Looper
+import android.util.Log
+import com.google.gson.Gson
+import com.google.gson.JsonObject
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.Response
+import okhttp3.WebSocket
+import okhttp3.WebSocketListener
+import java.util.concurrent.TimeUnit
+
+class IZACHWebSocket(private val api: IZACHApi) {
+
+    private val TAG = "iZACH-WS"
+    private val gson = Gson()
+    private val client = OkHttpClient.Builder()
+        .pingInterval(20, TimeUnit.SECONDS)
+        .build()
+    private var webSocket: WebSocket? = null
+    private val reconnectHandler = Handler(Looper.getMainLooper())
+    private var reconnectScheduled = false
+    private var shouldReconnect = true
+
+    var isConnected = false
+        private set
+
+    var onChat: ((sender: String, text: String, ts: String) -> Unit)? = null
+    var onNotification: ((text: String) -> Unit)? = null
+    var onConnected: (() -> Unit)? = null
+    var onDisconnected: (() -> Unit)? = null
+    var onScreenshot: ((filename: String) -> Unit)? = null
+    var onClipboard: ((text: String) -> Unit)? = null
+    var onTaskEvent: ((type: String, id: String, name: String, progress: Int, message: String) -> Unit)? = null
+    // New unified-event-bus callbacks
+    var onPcNotification: ((title: String, body: String, category: String) -> Unit)? = null
+    var onDownloadEvent: ((type: String, filename: String, size: Long, speedStr: String) -> Unit)? = null
+
+    private fun scheduleReconnect() {
+        if (reconnectScheduled || !shouldReconnect) return
+        reconnectScheduled = true
+        reconnectHandler.postDelayed({
+            reconnectScheduled = false
+            if (shouldReconnect && !isConnected) connect()
+        }, 3000L)
+    }
+
+    fun connect() {
+        shouldReconnect = true
+        val host = api.wsHost()
+        val url = "ws://$host:5051"
+        Log.d(TAG, "Connecting to $url")
+        val req = Request.Builder().url(url).build()
+        webSocket = client.newWebSocket(req, object : WebSocketListener() {
+            override fun onOpen(ws: WebSocket, response: Response) {
+                isConnected = true
+                Log.d(TAG, "Connected")
+                ws.send("""{"type":"client_hello","name":"android_device","device_name":"${Build.MODEL}"}""")
+                onConnected?.invoke()
+            }
+
+            override fun onMessage(ws: WebSocket, text: String) {
+                try {
+                    val json = gson.fromJson(text, JsonObject::class.java)
+
+                    // New unified event format: {"event":..., "source":..., "payload":{}}
+                    val eventKey = json.get("event")?.asString
+                    if (eventKey != null) {
+                        val payload = json.getAsJsonObject("payload") ?: JsonObject()
+                        handleUnifiedEvent(eventKey, payload)
+                        return
+                    }
+
+                    // Legacy type-based format
+                    when (json.get("type")?.asString) {
+                        "chat" -> {
+                            val sender = json.get("sender")?.asString ?: "iZACH"
+                            val msg = json.get("text")?.asString ?: return
+                            val ts = json.get("ts")?.asString ?: ""
+                            if (msg.isNotBlank()) onChat?.invoke(sender, msg, ts)
+                        }
+                        "notification" -> {
+                            val msg = json.get("text")?.asString ?: return
+                            if (msg.isNotBlank()) onNotification?.invoke(msg)
+                        }
+                        "screenshot_ready" -> {
+                            val filename = json.get("filename")?.asString ?: return
+                            onScreenshot?.invoke(filename)
+                        }
+                        "clipboard" -> {
+                            val clip = json.get("text")?.asString ?: return
+                            if (clip.isNotBlank()) onClipboard?.invoke(clip)
+                        }
+                        "task_started", "task_progress", "task_completed", "task_failed" -> {
+                            val type = json.get("type")?.asString ?: return
+                            val id = json.get("id")?.asString ?: return
+                            val name = json.get("name")?.asString ?: json.get("message")?.asString ?: ""
+                            val prog = json.get("progress")?.asInt ?: 0
+                            val msg = json.get("message")?.asString ?: json.get("error")?.asString ?: ""
+                            onTaskEvent?.invoke(type, id, name, prog, msg)
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Parse error: $e")
+                }
+            }
+
+            override fun onFailure(ws: WebSocket, t: Throwable, response: Response?) {
+                isConnected = false
+                Log.w(TAG, "Disconnected: $t")
+                onDisconnected?.invoke()
+                scheduleReconnect()
+            }
+
+            override fun onClosed(ws: WebSocket, code: Int, reason: String) {
+                isConnected = false
+                onDisconnected?.invoke()
+                if (code != 1000) scheduleReconnect()
+            }
+        })
+    }
+
+    private fun handleUnifiedEvent(event: String, payload: JsonObject) {
+        when (event) {
+            "clipboard_changed" -> {
+                val clipText = payload.get("text")?.asString ?: return
+                if (clipText.isNotBlank()) onClipboard?.invoke(clipText)
+            }
+            "notification" -> {
+                val title = payload.get("title")?.asString ?: return
+                val body = payload.get("body")?.asString ?: ""
+                val category = payload.get("category")?.asString ?: "system"
+                onPcNotification?.invoke(title, body, category)
+            }
+            "download_started", "download_progress", "download_completed", "download_failed" -> {
+                val filename = payload.get("filename")?.asString ?: return
+                val size = payload.get("size")?.asLong ?: 0L
+                val speedStr = payload.get("speed_str")?.asString ?: ""
+                onDownloadEvent?.invoke(event, filename, size, speedStr)
+            }
+        }
+    }
+
+    fun disconnect() {
+        shouldReconnect = false
+        reconnectHandler.removeCallbacksAndMessages(null)
+        webSocket?.close(1000, "App closed")
+        webSocket = null
+        isConnected = false
+    }
+}

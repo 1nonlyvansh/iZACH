@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- iZ monogram -->
+    <path
+        android:fillColor="#FF00e5ff"
+        android:pathData="M30,35 L55,35 L30,73 L60,73 M65,35 L78,35 L65,73" />
+</vector>

@@ -1,0 +1,430 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.drawerlayout.widget.DrawerLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/drawerLayout"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <!-- ── Main content ── -->
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@color/bg_deep">
+
+        <!-- Top bar: menu button + centered title + status below title -->
+        <LinearLayout
+            android:id="@+id/topBar"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:minHeight="64dp"
+            android:background="@color/bg_panel"
+            android:gravity="center_vertical"
+            android:paddingHorizontal="4dp"
+            android:orientation="horizontal"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent">
+
+            <ImageButton
+                android:id="@+id/btnMenu"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:src="@drawable/ic_menu"
+                android:contentDescription="Menu" />
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:gravity="center">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="iZACH"
+                    android:textColor="@color/cyan"
+                    android:textSize="18sp"
+                    android:letterSpacing="0.3"
+                    android:fontFamily="monospace"
+                    android:textStyle="bold" />
+
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginTop="2dp">
+
+                    <View
+                        android:id="@+id/statusDot"
+                        android:layout_width="6dp"
+                        android:layout_height="6dp"
+                        android:layout_marginEnd="4dp"
+                        android:background="@drawable/dot_disconnected" />
+
+                    <TextView
+                        android:id="@+id/tvStatus"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="OFFLINE"
+                        android:textColor="@color/red_neon"
+                        android:textSize="9sp"
+                        android:letterSpacing="0.2"
+                        android:fontFamily="monospace" />
+
+                </LinearLayout>
+            </LinearLayout>
+
+            <!-- Spacer balances menu button so title is truly centered -->
+            <View
+                android:layout_width="48dp"
+                android:layout_height="48dp" />
+
+        </LinearLayout>
+
+        <!-- Not connected banner -->
+        <LinearLayout
+            android:id="@+id/bannerConnect"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:background="#1a0d2a3a"
+            android:paddingHorizontal="16dp"
+            android:paddingVertical="10dp"
+            android:visibility="gone"
+            app:layout_constraintTop_toBottomOf="@id/topBar"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Not connected to iZACH system"
+                android:textColor="@color/text_sec"
+                android:textSize="11sp"
+                android:fontFamily="monospace" />
+
+            <Button
+                android:id="@+id/btnBannerSetup"
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                android:text="SCAN QR"
+                android:textColor="@color/bg_deep"
+                android:backgroundTint="@color/cyan"
+                android:fontFamily="monospace"
+                android:textSize="10sp"
+                android:letterSpacing="0.1"
+                android:paddingHorizontal="12dp" />
+
+        </LinearLayout>
+
+        <!-- Chat list -->
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/rvChat"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:clipToPadding="false"
+            android:paddingVertical="8dp"
+            app:layout_constraintTop_toBottomOf="@id/bannerConnect"
+            app:layout_constraintBottom_toTopOf="@id/bottomBar"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent" />
+
+        <!-- Typing indicator -->
+        <TextView
+            android:id="@+id/typingIndicator"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="16dp"
+            android:layout_marginBottom="4dp"
+            android:text="iZACH is thinking…"
+            android:textColor="@color/text_sec"
+            android:textSize="12sp"
+            android:fontFamily="monospace"
+            android:visibility="gone"
+            app:layout_constraintBottom_toTopOf="@id/bottomBar"
+            app:layout_constraintStart_toStartOf="parent" />
+
+        <!-- Bottom input bar -->
+        <LinearLayout
+            android:id="@+id/bottomBar"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:background="@color/bg_panel"
+            android:paddingHorizontal="8dp"
+            android:paddingVertical="8dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent">
+
+            <ImageButton
+                android:id="@+id/btnQuick"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:src="@drawable/ic_flash"
+                android:contentDescription="Quick commands" />
+
+            <ImageButton
+                android:id="@+id/btnVoice"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:src="@drawable/ic_mic"
+                android:contentDescription="Voice input" />
+
+            <EditText
+                android:id="@+id/etInput"
+                android:layout_width="0dp"
+                android:layout_height="44dp"
+                android:layout_weight="1"
+                android:layout_marginHorizontal="8dp"
+                android:background="@drawable/bg_input"
+                android:hint="@string/hint_command"
+                android:textColor="@color/text_pri"
+                android:textSize="14sp"
+                android:fontFamily="monospace"
+                android:paddingHorizontal="12dp"
+                android:inputType="textMultiLine"
+                android:maxLines="3"
+                android:imeOptions="actionSend" />
+
+            <ImageButton
+                android:id="@+id/btnSend"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:src="@drawable/ic_send"
+                android:contentDescription="Send" />
+        </LinearLayout>
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+    <!-- ── Slide-in sidebar ── -->
+    <LinearLayout
+        android:id="@+id/sidebarNav"
+        android:layout_width="240dp"
+        android:layout_height="match_parent"
+        android:layout_gravity="start"
+        android:background="@color/bg_panel"
+        android:orientation="vertical"
+        android:paddingTop="52dp">
+
+        <!-- Sidebar header -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingHorizontal="20dp"
+            android:paddingBottom="12dp"
+            android:text="iZACH"
+            android:textColor="@color/cyan"
+            android:textSize="20sp"
+            android:fontFamily="monospace"
+            android:textStyle="bold"
+            android:letterSpacing="0.3" />
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="#FF005060"
+            android:layout_marginBottom="4dp" />
+
+        <!-- Quick Commands -->
+        <LinearLayout android:id="@+id/sidebarQuick"
+            android:layout_width="match_parent" android:layout_height="52dp"
+            android:orientation="horizontal" android:gravity="center_vertical"
+            android:paddingHorizontal="20dp"
+            android:background="?attr/selectableItemBackground">
+            <ImageView android:layout_width="20dp" android:layout_height="20dp"
+                android:src="@drawable/ic_flash" android:layout_marginEnd="16dp"
+                android:contentDescription="Quick" />
+            <TextView android:layout_width="0dp" android:layout_height="wrap_content"
+                android:layout_weight="1" android:text="Quick Commands"
+                android:textColor="@color/text_pri" android:textSize="14sp"
+                android:fontFamily="monospace" />
+        </LinearLayout>
+
+        <!-- Screenshot -->
+        <LinearLayout android:id="@+id/sidebarScreenshot"
+            android:layout_width="match_parent" android:layout_height="52dp"
+            android:orientation="horizontal" android:gravity="center_vertical"
+            android:paddingHorizontal="20dp"
+            android:background="?attr/selectableItemBackground">
+            <ImageView android:layout_width="20dp" android:layout_height="20dp"
+                android:src="@drawable/ic_screenshot" android:layout_marginEnd="16dp"
+                android:contentDescription="Screenshot" />
+            <TextView android:layout_width="0dp" android:layout_height="wrap_content"
+                android:layout_weight="1" android:text="Screenshot"
+                android:textColor="@color/text_pri" android:textSize="14sp"
+                android:fontFamily="monospace" />
+        </LinearLayout>
+
+        <!-- Clipboard -->
+        <LinearLayout android:id="@+id/sidebarClipboard"
+            android:layout_width="match_parent" android:layout_height="52dp"
+            android:orientation="horizontal" android:gravity="center_vertical"
+            android:paddingHorizontal="20dp"
+            android:background="?attr/selectableItemBackground">
+            <ImageView android:layout_width="20dp" android:layout_height="20dp"
+                android:src="@drawable/ic_clipboard" android:layout_marginEnd="16dp"
+                android:contentDescription="Clipboard" />
+            <TextView android:layout_width="0dp" android:layout_height="wrap_content"
+                android:layout_weight="1" android:text="Clipboard"
+                android:textColor="@color/text_pri" android:textSize="14sp"
+                android:fontFamily="monospace" />
+        </LinearLayout>
+
+        <!-- Live Tasks -->
+        <LinearLayout android:id="@+id/sidebarTasks"
+            android:layout_width="match_parent" android:layout_height="52dp"
+            android:orientation="horizontal" android:gravity="center_vertical"
+            android:paddingHorizontal="20dp"
+            android:background="?attr/selectableItemBackground">
+            <ImageView android:layout_width="20dp" android:layout_height="20dp"
+                android:src="@drawable/ic_tasks" android:layout_marginEnd="16dp"
+                android:contentDescription="Tasks" />
+            <TextView android:layout_width="0dp" android:layout_height="wrap_content"
+                android:layout_weight="1" android:text="Live Tasks"
+                android:textColor="@color/text_pri" android:textSize="14sp"
+                android:fontFamily="monospace" />
+            <TextView android:id="@+id/sidebarTasksBadge"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:paddingHorizontal="6dp" android:paddingVertical="2dp"
+                android:background="#FF002030"
+                android:textColor="@color/cyan" android:textSize="10sp"
+                android:fontFamily="monospace" android:visibility="gone" />
+        </LinearLayout>
+
+        <!-- Notifications -->
+        <LinearLayout android:id="@+id/sidebarBell"
+            android:layout_width="match_parent" android:layout_height="52dp"
+            android:orientation="horizontal" android:gravity="center_vertical"
+            android:paddingHorizontal="20dp"
+            android:background="?attr/selectableItemBackground">
+            <ImageView android:layout_width="20dp" android:layout_height="20dp"
+                android:src="@drawable/ic_bell" android:layout_marginEnd="16dp"
+                android:contentDescription="Notifications" />
+            <TextView android:layout_width="0dp" android:layout_height="wrap_content"
+                android:layout_weight="1" android:text="Notifications"
+                android:textColor="@color/text_pri" android:textSize="14sp"
+                android:fontFamily="monospace" />
+            <TextView android:id="@+id/sidebarBellBadge"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:paddingHorizontal="6dp" android:paddingVertical="2dp"
+                android:background="#FF002030"
+                android:textColor="@color/cyan" android:textSize="10sp"
+                android:fontFamily="monospace" android:visibility="gone" />
+        </LinearLayout>
+
+        <!-- Downloads -->
+        <LinearLayout android:id="@+id/sidebarDownloads"
+            android:layout_width="match_parent" android:layout_height="52dp"
+            android:orientation="horizontal" android:gravity="center_vertical"
+            android:paddingHorizontal="20dp"
+            android:background="?attr/selectableItemBackground">
+            <ImageView android:layout_width="20dp" android:layout_height="20dp"
+                android:src="@drawable/ic_download" android:layout_marginEnd="16dp"
+                android:contentDescription="Downloads" />
+            <TextView android:layout_width="0dp" android:layout_height="wrap_content"
+                android:layout_weight="1" android:text="Downloads"
+                android:textColor="@color/text_pri" android:textSize="14sp"
+                android:fontFamily="monospace" />
+            <TextView android:id="@+id/sidebarDlBadge"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:paddingHorizontal="6dp" android:paddingVertical="2dp"
+                android:background="#401db954"
+                android:textColor="@color/green_neon" android:textSize="10sp"
+                android:fontFamily="monospace" android:visibility="gone" />
+        </LinearLayout>
+
+        <!-- Files -->
+        <LinearLayout android:id="@+id/sidebarFiles"
+            android:layout_width="match_parent" android:layout_height="52dp"
+            android:orientation="horizontal" android:gravity="center_vertical"
+            android:paddingHorizontal="20dp"
+            android:background="?attr/selectableItemBackground">
+            <ImageView android:layout_width="20dp" android:layout_height="20dp"
+                android:src="@drawable/ic_folder" android:layout_marginEnd="16dp"
+                android:contentDescription="Files" />
+            <TextView android:layout_width="0dp" android:layout_height="wrap_content"
+                android:layout_weight="1" android:text="File Transfer"
+                android:textColor="@color/text_pri" android:textSize="14sp"
+                android:fontFamily="monospace" />
+        </LinearLayout>
+
+        <!-- Media Remote -->
+        <LinearLayout android:id="@+id/sidebarMedia"
+            android:layout_width="match_parent" android:layout_height="52dp"
+            android:orientation="horizontal" android:gravity="center_vertical"
+            android:paddingHorizontal="20dp"
+            android:background="?attr/selectableItemBackground">
+            <ImageView android:layout_width="20dp" android:layout_height="20dp"
+                android:src="@drawable/ic_equalizer" android:layout_marginEnd="16dp"
+                android:contentDescription="Media Remote" />
+            <TextView android:layout_width="0dp" android:layout_height="wrap_content"
+                android:layout_weight="1" android:text="Media Remote"
+                android:textColor="@color/text_pri" android:textSize="14sp"
+                android:fontFamily="monospace" />
+        </LinearLayout>
+
+        <!-- System Dashboard -->
+        <LinearLayout android:id="@+id/sidebarDashboard"
+            android:layout_width="match_parent" android:layout_height="52dp"
+            android:orientation="horizontal" android:gravity="center_vertical"
+            android:paddingHorizontal="20dp"
+            android:background="?attr/selectableItemBackground">
+            <ImageView android:layout_width="20dp" android:layout_height="20dp"
+                android:src="@drawable/ic_chart_bar" android:layout_marginEnd="16dp"
+                android:contentDescription="System Dashboard" />
+            <TextView android:layout_width="0dp" android:layout_height="wrap_content"
+                android:layout_weight="1" android:text="System Dashboard"
+                android:textColor="@color/text_pri" android:textSize="14sp"
+                android:fontFamily="monospace" />
+        </LinearLayout>
+
+        <!-- My Shortcuts -->
+        <LinearLayout android:id="@+id/sidebarMyShortcuts"
+            android:layout_width="match_parent" android:layout_height="52dp"
+            android:orientation="horizontal" android:gravity="center_vertical"
+            android:paddingHorizontal="20dp"
+            android:background="?attr/selectableItemBackground">
+            <ImageView android:layout_width="20dp" android:layout_height="20dp"
+                android:src="@drawable/ic_grid" android:layout_marginEnd="16dp"
+                android:contentDescription="My Shortcuts" />
+            <TextView android:layout_width="0dp" android:layout_height="wrap_content"
+                android:layout_weight="1" android:text="My Shortcuts"
+                android:textColor="@color/text_pri" android:textSize="14sp"
+                android:fontFamily="monospace" />
+        </LinearLayout>
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="#FF005060"
+            android:layout_marginVertical="4dp" />
+
+        <!-- Settings -->
+        <LinearLayout android:id="@+id/sidebarSettings"
+            android:layout_width="match_parent" android:layout_height="52dp"
+            android:orientation="horizontal" android:gravity="center_vertical"
+            android:paddingHorizontal="20dp"
+            android:background="?attr/selectableItemBackground">
+            <ImageView android:layout_width="20dp" android:layout_height="20dp"
+                android:src="@drawable/ic_settings" android:layout_marginEnd="16dp"
+                android:contentDescription="Settings" />
+            <TextView android:layout_width="0dp" android:layout_height="wrap_content"
+                android:layout_weight="1" android:text="Settings"
+                android:textColor="@color/text_pri" android:textSize="14sp"
+                android:fontFamily="monospace" />
+        </LinearLayout>
+
+    </LinearLayout>
+
+</androidx.drawerlayout.widget.DrawerLayout>

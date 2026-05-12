@@ -1,0 +1,281 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/bg_deep">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="20dp">
+
+        <!-- Header -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:layout_marginBottom="24dp">
+
+            <ImageButton
+                android:id="@+id/btnBack"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:src="@android:drawable/ic_media_previous"
+                android:contentDescription="Back" />
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="SETTINGS"
+                android:textColor="@color/cyan"
+                android:textSize="16sp"
+                android:letterSpacing="0.3"
+                android:fontFamily="monospace"
+                android:textStyle="bold"
+                android:gravity="center" />
+
+            <View android:layout_width="40dp" android:layout_height="40dp" />
+        </LinearLayout>
+
+        <!-- QR scan section -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="CONNECTION"
+            android:textColor="@color/cyan"
+            android:textSize="11sp"
+            android:fontFamily="monospace"
+            android:letterSpacing="0.2"
+            android:layout_marginBottom="12dp" />
+
+        <Button
+            android:id="@+id/btnScanQr"
+            android:layout_width="match_parent"
+            android:layout_height="52dp"
+            android:text="SCAN QR CODE"
+            android:textColor="@color/bg_deep"
+            android:backgroundTint="@color/cyan"
+            android:fontFamily="monospace"
+            android:letterSpacing="0.2"
+            android:textStyle="bold"
+            android:layout_marginBottom="8dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Point camera at the QR code shown in the iZACH desktop panel"
+            android:textColor="@color/text_sec"
+            android:textSize="11sp"
+            android:fontFamily="monospace"
+            android:gravity="center"
+            android:layout_marginBottom="20dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="— or enter manually —"
+            android:textColor="@color/text_sec"
+            android:textSize="10sp"
+            android:fontFamily="monospace"
+            android:letterSpacing="0.1"
+            android:gravity="center"
+            android:layout_marginBottom="16dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/label_backend_url"
+            android:textColor="@color/text_sec"
+            android:textSize="11sp"
+            android:fontFamily="monospace"
+            android:letterSpacing="0.1"
+            android:layout_marginBottom="6dp" />
+
+        <EditText
+            android:id="@+id/etBackendUrl"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:background="@drawable/bg_input"
+            android:hint="@string/hint_backend_url"
+            android:textColor="@color/text_pri"
+            android:textSize="13sp"
+            android:fontFamily="monospace"
+            android:paddingHorizontal="12dp"
+            android:inputType="textUri"
+            android:layout_marginBottom="20dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/label_ws_host"
+            android:textColor="@color/text_sec"
+            android:textSize="11sp"
+            android:fontFamily="monospace"
+            android:letterSpacing="0.1"
+            android:layout_marginBottom="6dp" />
+
+        <EditText
+            android:id="@+id/etWsHost"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:background="@drawable/bg_input"
+            android:hint="@string/hint_ws_host"
+            android:textColor="@color/text_pri"
+            android:textSize="13sp"
+            android:fontFamily="monospace"
+            android:paddingHorizontal="12dp"
+            android:layout_marginBottom="32dp" />
+
+        <Button
+            android:id="@+id/btnTest"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:text="TEST CONNECTION"
+            android:textColor="@color/cyan"
+            android:backgroundTint="@color/bg_card"
+            android:fontFamily="monospace"
+            android:letterSpacing="0.15"
+            android:layout_marginBottom="12dp" />
+
+        <TextView
+            android:id="@+id/tvTestResult"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text=""
+            android:textColor="@color/text_sec"
+            android:textSize="13sp"
+            android:fontFamily="monospace"
+            android:gravity="center"
+            android:layout_marginBottom="24dp" />
+
+        <!-- Notification Categories -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="NOTIFICATIONS"
+            android:textColor="@color/cyan"
+            android:textSize="11sp"
+            android:fontFamily="monospace"
+            android:letterSpacing="0.2"
+            android:layout_marginTop="24dp"
+            android:layout_marginBottom="12dp" />
+
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:orientation="horizontal" android:gravity="center_vertical"
+            android:layout_marginBottom="8dp">
+            <TextView android:layout_width="0dp" android:layout_height="wrap_content"
+                android:layout_weight="1" android:text="System alerts"
+                android:textColor="@color/text_pri" android:textSize="13sp" android:fontFamily="monospace" />
+            <androidx.appcompat.widget.SwitchCompat android:id="@+id/swNotifSystem"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:checked="true" />
+        </LinearLayout>
+
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:orientation="horizontal" android:gravity="center_vertical"
+            android:layout_marginBottom="8dp">
+            <TextView android:layout_width="0dp" android:layout_height="wrap_content"
+                android:layout_weight="1" android:text="Downloads"
+                android:textColor="@color/text_pri" android:textSize="13sp" android:fontFamily="monospace" />
+            <androidx.appcompat.widget.SwitchCompat android:id="@+id/swNotifDownloads"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:checked="true" />
+        </LinearLayout>
+
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:orientation="horizontal" android:gravity="center_vertical"
+            android:layout_marginBottom="8dp">
+            <TextView android:layout_width="0dp" android:layout_height="wrap_content"
+                android:layout_weight="1" android:text="Transfers"
+                android:textColor="@color/text_pri" android:textSize="13sp" android:fontFamily="monospace" />
+            <androidx.appcompat.widget.SwitchCompat android:id="@+id/swNotifTransfers"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:checked="true" />
+        </LinearLayout>
+
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:orientation="horizontal" android:gravity="center_vertical"
+            android:layout_marginBottom="8dp">
+            <TextView android:layout_width="0dp" android:layout_height="wrap_content"
+                android:layout_weight="1" android:text="Automation"
+                android:textColor="@color/text_pri" android:textSize="13sp" android:fontFamily="monospace" />
+            <androidx.appcompat.widget.SwitchCompat android:id="@+id/swNotifAutomation"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:checked="true" />
+        </LinearLayout>
+
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:orientation="horizontal" android:gravity="center_vertical"
+            android:layout_marginBottom="24dp">
+            <TextView android:layout_width="0dp" android:layout_height="wrap_content"
+                android:layout_weight="1" android:text="Alerts"
+                android:textColor="@color/text_pri" android:textSize="13sp" android:fontFamily="monospace" />
+            <androidx.appcompat.widget.SwitchCompat android:id="@+id/swNotifAlerts"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:checked="true" />
+        </LinearLayout>
+
+        <!-- Security Section -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="SECURITY"
+            android:textColor="@color/cyan"
+            android:textSize="11sp"
+            android:fontFamily="monospace"
+            android:letterSpacing="0.2"
+            android:layout_marginTop="24dp"
+            android:layout_marginBottom="12dp" />
+
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:orientation="horizontal" android:gravity="center_vertical"
+            android:layout_marginBottom="8dp">
+            <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content"
+                android:layout_weight="1" android:orientation="vertical">
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                    android:text="Biometric lock"
+                    android:textColor="@color/text_pri" android:textSize="13sp" android:fontFamily="monospace" />
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                    android:text="Require fingerprint/face on open"
+                    android:textColor="@color/text_sec" android:textSize="11sp" android:fontFamily="monospace" />
+            </LinearLayout>
+            <androidx.appcompat.widget.SwitchCompat android:id="@+id/swBiometric"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:checked="false" />
+        </LinearLayout>
+
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:orientation="horizontal" android:gravity="center_vertical"
+            android:layout_marginBottom="24dp">
+            <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content"
+                android:layout_weight="1" android:orientation="vertical">
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                    android:text="Floating mic button"
+                    android:textColor="@color/text_pri" android:textSize="13sp" android:fontFamily="monospace" />
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                    android:text="Show always-on mic overlay"
+                    android:textColor="@color/text_sec" android:textSize="11sp" android:fontFamily="monospace" />
+            </LinearLayout>
+            <androidx.appcompat.widget.SwitchCompat android:id="@+id/swFloatMic"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:checked="false" />
+        </LinearLayout>
+
+        <Button
+            android:id="@+id/btnSave"
+            android:layout_width="match_parent"
+            android:layout_height="52dp"
+            android:text="SAVE"
+            android:textColor="@color/bg_deep"
+            android:backgroundTint="@color/cyan"
+            android:fontFamily="monospace"
+            android:letterSpacing="0.2"
+            android:textStyle="bold" />
+
+    </LinearLayout>
+</ScrollView>

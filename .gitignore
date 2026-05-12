@@ -117,6 +117,65 @@ device_memory.json
 contacts.json
 
 # ========================
+# OAuth / Secrets (CRITICAL — never commit)
+# ========================
+credentials.json
+token.json
+service_account.json
+
+# ========================
+# Biometric / user data (CRITICAL)
+# ========================
+users.json
+owner_face.pkl
+*.pkl
+
+# ========================
+# Runtime state files
+# ========================
+config.json
+calendar_alarm_jobs.json
+calendar_event_map.json
+pattern_last_run.json
+patterns.json
+routines.json
+wa_processed_msgs.json
+
+# ========================
+# User files (personal photos, transferred files)
+# ========================
+shared/
+screenshots/
+
+# ========================
+# Android build
+# ========================
+izach-android/.gradle/
+izach-android/local.properties
+izach-android/.idea/
+izach-android/app/build/
+izach-android/build/
+*.apk
+*.aab
+
+# ========================
+# IDE / editor state
+# ========================
+.claude/settings.local.json
+.claude/
+iZACH-Brain/.obsidian/workspace.json
+
+# ========================
+# Security-sensitive notes
+# ========================
+iZACH-Brain/System Weaknesses.md
+
+# ========================
+# Temp Office files
+# ========================
+~$*
+
+# ========================
 # Suspicious files
 # ========================
 keys and ids*
@@ -125,3 +184,4 @@ keys and ids*
 *.txt
 !README.md
 desktop.ini
+!qhlogs.doc

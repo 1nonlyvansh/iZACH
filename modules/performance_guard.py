@@ -2,12 +2,21 @@ import psutil
 import threading
 import time
 
+def _perf_notif_enabled() -> bool:
+    try:
+        import json as _j
+        with open("api_keys.json") as _f:
+            return bool(_j.load(_f).get("notif_performance", True))
+    except Exception:
+        return True
+
+
 class PerformanceGuard:
     def __init__(self, speak_callback):
         self.speak = speak_callback
         self.running = True
         self.cooldowns = {"cpu": False, "ram": False, "battery": False}
-        self.cpu_high_count = 0 # Track consecutive high CPU hits
+        self.cpu_high_count = 0
 
     def get_system_vitals(self):
         """Returns a formatted string of current hardware stats."""
@@ -31,13 +40,15 @@ class PerformanceGuard:
                     self.cooldowns["cpu"] = False
 
                 if self.cpu_high_count >= 10 and not self.cooldowns["cpu"]:
-                    self.speak("Warning: CPU load is critical. System performance may degrade.")
+                    if _perf_notif_enabled():
+                        self.speak("Warning: CPU load is critical. System performance may degrade.")
                     self.cooldowns["cpu"] = True
 
                 # 2. RAM Check
                 ram = psutil.virtual_memory().percent
                 if ram > 90 and not self.cooldowns["ram"]:
-                    self.speak("Memory usage is exceeding 90 percent. Consider closing some applications.")
+                    if _perf_notif_enabled():
+                        self.speak("Memory usage is exceeding 90 percent. Consider closing some applications.")
                     self.cooldowns["ram"] = True
                 elif ram < 85:
                     self.cooldowns["ram"] = False
@@ -46,7 +57,8 @@ class PerformanceGuard:
                 battery = psutil.sensors_battery()
                 if battery:
                     if battery.percent < 20 and not battery.power_plugged and not self.cooldowns["battery"]:
-                        self.speak("System alert: Battery is below 20 percent. Please connect a power source.")
+                        if _perf_notif_enabled():
+                            self.speak("System alert: Battery is below 20 percent. Please connect a power source.")
                         self.cooldowns["battery"] = True
                     elif battery.percent > 25:
                         self.cooldowns["battery"] = False

@@ -461,3 +461,147 @@
 
 
 ---
+
+## 2026-05-10 15:11
+
+- Intent: open_app
+- Command: open calculator
+- Response: Brought calculator to the front.
+
+
+---
+
+## 2026-05-10 15:12
+
+- Intent: open_app
+- Command: open command prompt
+- Response: Brought command prompt to the front.
+
+
+---
+
+## 2026-05-10 16:16
+
+- Intent: open_app
+- Command: open chrome
+- Response: Brought chrome to the front.
+
+
+---
+
+## 2026-05-10 19:48
+
+- Intent: play_music
+- Command: playpause
+- Response: What should I play?
+
+
+---
+
+## 2026-05-11 14:23
+
+- Intent: open_app
+- Command: open chat gpt
+- Response: Brought chat gpt to the front.
+
+
+---
+
+## 2026-05-11 14:26
+
+- Intent: open_app
+- Command: open chrome
+- Response: Brought chrome to the front.
+
+
+---
+
+## 2026-05-11 14:27
+
+- Intent: open_app
+- Command: open spotify
+- Response: Brought spotify to the front.
+
+
+---
+
+## 2026-05-11 18:03
+
+- Intent: play_music
+- Command: give me a song
+- Response: What should I play?
+
+
+---
+
+## 2026-05-11 18:56
+
+- Intent: open_app
+- Command: open chrome
+- Response: Brought chrome to the front.
+
+
+---
+
+## 2026-05-11 18:56
+
+- Intent: open_app
+- Command: open chrome
+- Response: Brought chrome to the front.
+
+
+---
+
+## 2026-05-12 00:00
+
+- Intent: open_app
+- Command: open cloud
+- Response: I tried launching cloud, but it's not showing up.
+
+
+---
+
+## 2026-05-12 00:32
+
+- Intent: open_app
+- Command: open camera
+- Response: Brought camera to the front.
+
+
+---
+
+## 2026-05-12 15:45
+
+- Intent: open_app
+- Command: open whiteboard
+- Response: I tried launching whiteboard, but it's not showing up.
+
+
+---
+
+## 2026-05-12 15:49
+
+- Intent: open_app
+- Command: openofidian
+- Response: Brought ofidian to the front.
+
+
+---
+
+## 2026-05-12 15:51
+
+- Intent: open_app
+- Command: open brave
+- Response: Brought brave to the front.
+
+
+---
+
+## 2026-05-12 15:53
+
+- Intent: open_app
+- Command: open brave
+- Response: Brought brave to the front.
+
+
+---

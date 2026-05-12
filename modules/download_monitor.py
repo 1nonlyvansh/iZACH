@@ -1,0 +1,144 @@
+"""
+Download monitor — watches ~/Downloads, broadcasts progress via WebSocket.
+Polls every 2s. Tracks file size deltas; marks stable files as completed.
+"""
+import os
+import time
+import threading
+import pathlib
+
+_downloads_dir = str(pathlib.Path.home() / "Downloads")
+_tracked: dict[str, dict] = {}
+_running = False
+_thread: threading.Thread | None = None
+_STABLE_POLLS = 3
+
+
+def _notif_downloads_enabled() -> bool:
+    try:
+        import json as _j
+        with open("api_keys.json") as _f:
+            return bool(_j.load(_f).get("notif_downloads", True))
+    except Exception:
+        return True
+
+
+def _fmt_speed(bps: float) -> str:
+    if bps >= 1_000_000:
+        return f"{bps / 1_000_000:.1f} MB/s"
+    if bps >= 1_000:
+        return f"{bps / 1_000:.1f} KB/s"
+    return f"{bps:.0f} B/s"
+
+
+def _seed_existing():
+    """Populate _tracked with files already present at startup — no events emitted."""
+    try:
+        for entry in os.scandir(_downloads_dir):
+            if entry.is_file() and not entry.name.startswith("."):
+                try:
+                    st = entry.stat()
+                    _tracked[entry.name] = {
+                        "size": st.st_size,
+                        "stable_count": _STABLE_POLLS,
+                        "started_at": time.time(),
+                        "seeded": True,
+                    }
+                except OSError:
+                    pass
+    except Exception:
+        pass
+
+
+def _scan():
+    try:
+        current: dict[str, dict] = {}
+        for entry in os.scandir(_downloads_dir):
+            if entry.is_file() and not entry.name.startswith("."):
+                try:
+                    st = entry.stat()
+                    current[entry.name] = {"size": st.st_size, "mtime": st.st_mtime}
+                except OSError:
+                    pass
+    except Exception:
+        return
+
+    from modules.ws_bridge import emit
+
+    for name, info in current.items():
+        if name not in _tracked:
+            # Truly new file appeared after monitor started
+            _tracked[name] = {
+                "size": info["size"],
+                "stable_count": 0,
+                "started_at": time.time(),
+                "seeded": False,
+            }
+            emit("download_started", "download_monitor", {
+                "filename": name,
+                "size": info["size"],
+                "ts": int(time.time()),
+            })
+        else:
+            state = _tracked[name]
+            if info["size"] > state["size"]:
+                speed = (info["size"] - state["size"]) / 2.0
+                state.update({"size": info["size"], "stable_count": 0, "seeded": False})
+                emit("download_progress", "download_monitor", {
+                    "filename": name,
+                    "size": info["size"],
+                    "speed_bps": speed,
+                    "speed_str": _fmt_speed(speed),
+                    "ts": int(time.time()),
+                })
+            else:
+                state["stable_count"] += 1
+                if state["stable_count"] >= _STABLE_POLLS and state["size"] > 0:
+                    if not state.get("seeded") and _notif_downloads_enabled():
+                        emit("download_completed", "download_monitor", {
+                            "filename": name,
+                            "size": state["size"],
+                            "ts": int(time.time()),
+                        })
+                    del _tracked[name]
+
+    for name in list(_tracked.keys()):
+        if name not in current:
+            if not _tracked[name].get("seeded"):
+                emit("download_failed", "download_monitor", {
+                    "filename": name,
+                    "ts": int(time.time()),
+                })
+            del _tracked[name]
+
+
+def _monitor():
+    while _running:
+        try:
+            _scan()
+        except Exception:
+            pass
+        time.sleep(2)
+
+
+def start():
+    global _running, _thread
+    if _running:
+        return
+    _running = True
+    _seed_existing()
+    _thread = threading.Thread(target=_monitor, daemon=True, name="download-monitor")
+    _thread.start()
+    print("[DOWNLOAD MONITOR] Watching:", _downloads_dir)
+
+
+def stop():
+    global _running
+    _running = False
+
+
+def active() -> list[dict]:
+    return [
+        {"filename": n, "size": s["size"], "started_at": s["started_at"]}
+        for n, s in _tracked.items()
+    ]

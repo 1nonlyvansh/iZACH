@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- iZACH palette — matches izach-ui/src/index.css -->
+    <color name="bg_deep">#FF050d1a</color>
+    <color name="bg_panel">#FF071020</color>
+    <color name="bg_card">#FF0a1628</color>
+    <color name="cyan">#FF00e5ff</color>
+    <color name="cyan_dim">#FF005060</color>
+    <color name="cyan_dark">#FF002030</color>
+    <color name="green_neon">#FF1db954</color>
+    <color name="amber">#FFffb300</color>
+    <color name="red_neon">#FFff3d3d</color>
+    <color name="text_pri">#FFc8e8f0</color>
+    <color name="text_sec">#FF3a6070</color>
+</resources>

@@ -1,0 +1,179 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@color/bg_deep">
+
+    <LinearLayout android:id="@+id/topBar"
+        android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:minHeight="56dp" android:background="@color/bg_panel"
+        android:orientation="horizontal" android:gravity="center_vertical"
+        android:paddingHorizontal="8dp">
+        <ImageButton android:id="@+id/btnBack"
+            android:layout_width="48dp" android:layout_height="48dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@drawable/ic_back" android:contentDescription="Back" />
+        <TextView android:layout_width="0dp" android:layout_height="wrap_content"
+            android:layout_weight="1" android:text="SYSTEM DASHBOARD"
+            android:textColor="@color/cyan" android:textSize="14sp"
+            android:fontFamily="monospace" android:letterSpacing="0.2"
+            android:textStyle="bold" android:gravity="center" />
+        <View android:layout_width="48dp" android:layout_height="48dp" />
+    </LinearLayout>
+
+    <ScrollView android:layout_width="match_parent" android:layout_height="0dp"
+        android:layout_weight="1" android:padding="16dp">
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <!-- PERFORMANCE section -->
+            <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:text="PERFORMANCE"
+                android:textColor="@color/cyan" android:textSize="11sp"
+                android:fontFamily="monospace" android:letterSpacing="0.2"
+                android:layout_marginBottom="12dp" android:layout_marginTop="8dp" />
+
+            <!-- CPU -->
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:orientation="horizontal" android:gravity="center_vertical"
+                android:layout_marginBottom="14dp">
+                <TextView android:layout_width="56dp" android:layout_height="wrap_content"
+                    android:text="CPU" android:textColor="@color/text_sec"
+                    android:textSize="11sp" android:fontFamily="monospace" android:letterSpacing="0.1" />
+                <ProgressBar android:id="@+id/pbCpu"
+                    style="?android:attr/progressBarStyleHorizontal"
+                    android:layout_width="0dp" android:layout_height="8dp"
+                    android:layout_weight="1" android:max="100"
+                    android:progressTint="@color/cyan" android:progressBackgroundTint="@color/bg_card" />
+                <TextView android:id="@+id/tvCpu"
+                    android:layout_width="52dp" android:layout_height="wrap_content"
+                    android:text="—" android:textColor="@color/text_pri"
+                    android:textSize="11sp" android:fontFamily="monospace"
+                    android:gravity="end" android:layout_marginStart="8dp" />
+            </LinearLayout>
+
+            <!-- RAM -->
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:orientation="horizontal" android:gravity="center_vertical"
+                android:layout_marginBottom="14dp">
+                <TextView android:layout_width="56dp" android:layout_height="wrap_content"
+                    android:text="RAM" android:textColor="@color/text_sec"
+                    android:textSize="11sp" android:fontFamily="monospace" android:letterSpacing="0.1" />
+                <ProgressBar android:id="@+id/pbRam"
+                    style="?android:attr/progressBarStyleHorizontal"
+                    android:layout_width="0dp" android:layout_height="8dp"
+                    android:layout_weight="1" android:max="100"
+                    android:progressTint="@color/amber" android:progressBackgroundTint="@color/bg_card" />
+                <TextView android:id="@+id/tvRam"
+                    android:layout_width="52dp" android:layout_height="wrap_content"
+                    android:text="—" android:textColor="@color/text_pri"
+                    android:textSize="11sp" android:fontFamily="monospace"
+                    android:gravity="end" android:layout_marginStart="8dp" />
+            </LinearLayout>
+
+            <!-- GPU -->
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:orientation="horizontal" android:gravity="center_vertical"
+                android:layout_marginBottom="24dp">
+                <TextView android:layout_width="56dp" android:layout_height="wrap_content"
+                    android:text="GPU" android:textColor="@color/text_sec"
+                    android:textSize="11sp" android:fontFamily="monospace" android:letterSpacing="0.1" />
+                <ProgressBar android:id="@+id/pbGpu"
+                    style="?android:attr/progressBarStyleHorizontal"
+                    android:layout_width="0dp" android:layout_height="8dp"
+                    android:layout_weight="1" android:max="100"
+                    android:progressTint="@color/green_neon" android:progressBackgroundTint="@color/bg_card" />
+                <TextView android:id="@+id/tvGpu"
+                    android:layout_width="52dp" android:layout_height="wrap_content"
+                    android:text="—" android:textColor="@color/text_pri"
+                    android:textSize="11sp" android:fontFamily="monospace"
+                    android:gravity="end" android:layout_marginStart="8dp" />
+            </LinearLayout>
+
+            <!-- iZACH PROCESS section -->
+            <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:text="iZACH PROCESS"
+                android:textColor="@color/cyan" android:textSize="11sp"
+                android:fontFamily="monospace" android:letterSpacing="0.2"
+                android:layout_marginBottom="12dp" />
+
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:orientation="horizontal" android:gravity="center_vertical"
+                android:layout_marginBottom="14dp">
+                <TextView android:layout_width="56dp" android:layout_height="wrap_content"
+                    android:text="CPU" android:textColor="@color/text_sec"
+                    android:textSize="11sp" android:fontFamily="monospace" android:letterSpacing="0.1" />
+                <ProgressBar android:id="@+id/pbProcCpu"
+                    style="?android:attr/progressBarStyleHorizontal"
+                    android:layout_width="0dp" android:layout_height="8dp"
+                    android:layout_weight="1" android:max="100"
+                    android:progressTint="@color/cyan_dim" android:progressBackgroundTint="@color/bg_card" />
+                <TextView android:id="@+id/tvProcCpu"
+                    android:layout_width="52dp" android:layout_height="wrap_content"
+                    android:text="—" android:textColor="@color/text_pri"
+                    android:textSize="11sp" android:fontFamily="monospace"
+                    android:gravity="end" android:layout_marginStart="8dp" />
+            </LinearLayout>
+
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:orientation="horizontal" android:gravity="center_vertical"
+                android:layout_marginBottom="24dp">
+                <TextView android:layout_width="56dp" android:layout_height="wrap_content"
+                    android:text="MEM" android:textColor="@color/text_sec"
+                    android:textSize="11sp" android:fontFamily="monospace" android:letterSpacing="0.1" />
+                <ProgressBar android:id="@+id/pbProcMem"
+                    style="?android:attr/progressBarStyleHorizontal"
+                    android:layout_width="0dp" android:layout_height="8dp"
+                    android:layout_weight="1" android:max="100"
+                    android:progressTint="@color/cyan_dim" android:progressBackgroundTint="@color/bg_card" />
+                <TextView android:id="@+id/tvProcMem"
+                    android:layout_width="52dp" android:layout_height="wrap_content"
+                    android:text="—" android:textColor="@color/text_pri"
+                    android:textSize="11sp" android:fontFamily="monospace"
+                    android:gravity="end" android:layout_marginStart="8dp" />
+            </LinearLayout>
+
+            <!-- SERVICES section -->
+            <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:text="SERVICES"
+                android:textColor="@color/cyan" android:textSize="11sp"
+                android:fontFamily="monospace" android:letterSpacing="0.2"
+                android:layout_marginBottom="12dp" />
+
+            <LinearLayout android:layout_width="match_parent" android:layout_height="44dp"
+                android:orientation="horizontal" android:gravity="center_vertical"
+                android:layout_marginBottom="8dp">
+                <View android:id="@+id/dotWhatsapp"
+                    android:layout_width="8dp" android:layout_height="8dp"
+                    android:layout_marginEnd="10dp"
+                    android:background="@drawable/dot_disconnected" />
+                <TextView android:layout_width="0dp" android:layout_height="wrap_content"
+                    android:layout_weight="1" android:text="WhatsApp"
+                    android:textColor="@color/text_pri" android:textSize="13sp"
+                    android:fontFamily="monospace" />
+                <TextView android:id="@+id/tvWhatsapp"
+                    android:layout_width="wrap_content" android:layout_height="wrap_content"
+                    android:text="OFFLINE" android:textColor="@color/red_neon"
+                    android:textSize="11sp" android:fontFamily="monospace" android:letterSpacing="0.1" />
+            </LinearLayout>
+
+            <LinearLayout android:layout_width="match_parent" android:layout_height="44dp"
+                android:orientation="horizontal" android:gravity="center_vertical">
+                <View android:id="@+id/dotMma"
+                    android:layout_width="8dp" android:layout_height="8dp"
+                    android:layout_marginEnd="10dp"
+                    android:background="@drawable/dot_disconnected" />
+                <TextView android:layout_width="0dp" android:layout_height="wrap_content"
+                    android:layout_weight="1" android:text="MMA Agent"
+                    android:textColor="@color/text_pri" android:textSize="13sp"
+                    android:fontFamily="monospace" />
+                <TextView android:id="@+id/tvMma"
+                    android:layout_width="wrap_content" android:layout_height="wrap_content"
+                    android:text="OFFLINE" android:textColor="@color/red_neon"
+                    android:textSize="11sp" android:fontFamily="monospace" android:letterSpacing="0.1" />
+            </LinearLayout>
+
+        </LinearLayout>
+    </ScrollView>
+</LinearLayout>

@@ -103,8 +103,18 @@ def retrieve_context(key: str, default=None):
 
 # ── COMMAND HISTORY ───────────────────────────────────────────
 
+def _history_enabled() -> bool:
+    try:
+        import json as _j
+        with open("api_keys.json") as _f:
+            return bool(_j.load(_f).get("command_history_enabled", True))
+    except Exception:
+        return True
+
+
 def log_important_command(command: str, response: str, intent: str = ""):
-    """Store only meaningful commands — skip small talk."""
+    if not _history_enabled():
+        return
     skip = ["hello", "hi", "okay", "thanks", "stop", "pause", "resume"]
     if len(command.strip()) < 5:
         return
@@ -117,6 +127,25 @@ def log_important_command(command: str, response: str, intent: str = ""):
         "intent":     intent,
         "timestamp":  datetime.now()
     })
+
+
+def cleanup_old_logs():
+    try:
+        import json as _j
+        with open("api_keys.json") as _f:
+            days = int(_j.load(_f).get("log_retention_days", 30))
+    except Exception:
+        days = 30
+    if days == 0:
+        return
+    db = init_db()
+    if db is None:
+        return
+    from datetime import timedelta
+    cutoff = datetime.now() - timedelta(days=days)
+    result = db.history.delete_many({"timestamp": {"$lt": cutoff}})
+    if result.deleted_count:
+        print(f"[MONGO] Pruned {result.deleted_count} commands older than {days} days.")
 
 
 def get_recent_history(limit: int = 10) -> list:

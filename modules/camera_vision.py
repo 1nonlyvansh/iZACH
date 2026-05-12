@@ -1,14 +1,12 @@
 """
 modules/camera_vision.py
 Camera-to-Gemini vision pipe for iZACH.
-Grabs latest frame from VisionEngine → Gemini 1.5 Flash → returns description.
+Opens camera on demand, captures one frame, sends to Gemini, releases.
+No persistent camera thread — zero idle RAM usage.
 """
 
 import cv2
 import time
-from google import genai
-
-
 import os as _os
 from dotenv import load_dotenv as _ldenv
 _ldenv()
@@ -24,49 +22,46 @@ _last_call_time = 0
 _vision_in_progress = False
 MIN_CALL_INTERVAL = 10
 
+
 def _get_gemini_client():
-    global _current_key_idx
+    from google import genai
     return genai.Client(api_key=GEMINI_KEYS[_current_key_idx])
 
 
+def _capture_frame():
+    """Open camera, grab one frame, release immediately."""
+    cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+    cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+    try:
+        for _ in range(3):
+            cap.read()
+        ret, frame = cap.read()
+        if ret:
+            return cv2.flip(frame, 1)
+        return None
+    finally:
+        cap.release()
+
+
 def capture_and_ask(question: str = "What do you see?") -> str:
-    """
-    Grab latest camera frame → send to Gemini with question → return answer.
-    Returns error string if camera offline or Gemini fails.
-    """
+    """Capture one camera frame → send to Gemini with question → return answer."""
     global _last_call_time, _vision_in_progress
 
     now = time.time()
     if _vision_in_progress:
-        print("[VISION] Already in progress, skipping.")
         return "Vision is already processing a request."
     if now - _last_call_time < MIN_CALL_INTERVAL:
-        print("[VISION] Called too soon, skipping.")
         return "Vision is cooling down, try again in a moment."
 
     _vision_in_progress = True
     _last_call_time = now
-    print("VISION CALLED ONCE")
 
     try:
-        from modules.vision_engine import get_vision_engine
-        ve = get_vision_engine()
-        if ve is None:
-            return "Camera system not initialized."
-
-        frame = None
-        cap = ve._cap
-        if cap and cap.isOpened():
-            for _ in range(3):
-                cap.read()
-            ret, frame = cap.read()
-            if not ret:
-                frame = None
+        frame = _capture_frame()
         if frame is None:
-            frame = ve.get_latest_frame()
-        if frame is None:
-            return "Camera is offline or no frame available."
-        frame = cv2.flip(frame, 1)
+            return "Camera unavailable or no frame captured."
 
         ret, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
         if not ret:
@@ -99,7 +94,6 @@ Your job:
             err = str(e)
             if "404" in err or "not found" in err.lower():
                 return "Vision model unavailable. Check Gemini API access."
-            print(f"[VISION] API error: {err}")
             return "Camera vision unavailable right now. Try again in a minute."
 
     except Exception as e:
@@ -109,47 +103,79 @@ Your job:
 
 
 def capture_image() -> str:
-    """
-    Capture one frame from camera, save to temp file, return file path.
-    Returns empty string on failure.
-    """
+    """Capture one frame, save to temp file, return path. Empty string on failure."""
     try:
-        from modules.vision_engine import get_vision_engine
-        ve = get_vision_engine()
-        if ve is None:
-            print("[VISION] Camera system not initialized.")
-            return ""
-
-        frame = None
-        cap = ve._cap
-        if cap and cap.isOpened():
-            for _ in range(3):
-                cap.read()
-            ret, frame = cap.read()
-            if not ret:
-                frame = None
+        frame = _capture_frame()
         if frame is None:
-            frame = ve.get_latest_frame()
-        if frame is None:
-            print("[VISION] No frame available.")
             return ""
-
-        frame = cv2.flip(frame, 1)
-
         import tempfile
         tmp = tempfile.NamedTemporaryFile(suffix=".jpg", delete=False)
         path = tmp.name
         tmp.close()
-
         cv2.imwrite(path, frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
-        print("IMAGE SAVED:", path)
         return path
-
     except Exception as e:
         print(f"[VISION] capture_image failed: {e}")
         return ""
 
 
 def get_camera_description() -> str:
-    """Quick scene description — no specific question."""
     return capture_and_ask("Describe what you see in this camera frame in 2-3 sentences.")
+
+
+_screen_last_call_time = 0
+_SCREEN_COOLDOWN = 8
+
+
+def smart_locate_and_click(target: str, vision_client=None):
+    """Screenshot → Gemini locates target → pyautogui clicks it.
+    Returns True on success, 'COOLDOWN_N' string on cooldown, False on failure."""
+    global _screen_last_call_time
+    import re
+    import pyautogui
+
+    now = time.time()
+    elapsed = now - _screen_last_call_time
+    if elapsed < _SCREEN_COOLDOWN:
+        return f"COOLDOWN_{int(_SCREEN_COOLDOWN - elapsed)}"
+
+    _screen_last_call_time = now
+
+    try:
+        screenshot = pyautogui.screenshot()
+        width, height = pyautogui.size()
+
+        prompt = (
+            f'Find "{target}" in this screenshot. '
+            f'Screen is {width}x{height} pixels. '
+            'Reply ONLY: x=<number> y=<number> — center pixel of that element. '
+            'If not found reply: NOT_FOUND'
+        )
+
+        try:
+            client = _get_gemini_client()
+            response = client.models.generate_content(
+                model="gemini-2.0-flash",
+                contents=[screenshot, prompt]
+            )
+            text = response.text.strip() if response and response.text else ""
+        except Exception:
+            return False
+
+        if not text or "NOT_FOUND" in text:
+            return False
+
+        x_match = re.search(r'x=(\d+)', text)
+        y_match = re.search(r'y=(\d+)', text)
+        if not x_match or not y_match:
+            return False
+
+        x, y = int(x_match.group(1)), int(y_match.group(1))
+        if not (0 <= x <= width and 0 <= y <= height):
+            return False
+
+        pyautogui.click(x, y)
+        return True
+
+    except Exception:
+        return False

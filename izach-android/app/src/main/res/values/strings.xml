@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">iZACH</string>
+    <string name="hint_command">Command or message…</string>
+    <string name="label_backend_url">Backend URL (REST)</string>
+    <string name="label_ws_host">WebSocket Host (LAN IP)</string>
+    <string name="hint_backend_url">http://192.168.1.100:5050</string>
+    <string name="hint_ws_host">192.168.1.100  (leave blank to auto-detect)</string>
+    <string name="widget_pc_status_desc">Shows PC CPU, RAM, GPU usage and WhatsApp status</string>
+    <string name="widget_quick_mic_desc">One-tap mic button to issue voice commands to iZACH</string>
+</resources>

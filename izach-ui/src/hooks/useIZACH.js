@@ -34,6 +34,7 @@ export function useIZACH() {
   const [backendStatus, setBackendStatus] = useState('unknown')
   const [waStatus, setWaStatus]           = useState('offline')
   const [mmaStatus, setMmaStatus]         = useState('offline')
+  const [androidDevices, setAndroidDevices] = useState([])
 
   // system stats
   const [cpuUsage, setCpuUsage]   = useState(0)
@@ -58,6 +59,9 @@ export function useIZACH() {
 
   // whatsapp QR code — raw string, cleared when connected
   const [whatsappQr, setWhatsappQr] = useState(null)
+
+  // calendar events — next 3 days
+  const [calendarEvents, setCalendarEvents] = useState([])
 
   const chatBottomRef = useRef(null)
   const wsRef         = useRef(null)
@@ -114,6 +118,12 @@ export function useIZACH() {
             }
             else if (data.type === 'whatsapp_qr') {
               setWhatsappQr(data.qr || null)
+            }
+            else if (data.type === 'device_connected') {
+              setAndroidDevices(prev => [...prev.filter(d => d !== data.device_name), data.device_name])
+            }
+            else if (data.type === 'device_disconnected') {
+              setAndroidDevices(prev => prev.filter(d => d !== data.device_name))
             }
           } catch {}
         }
@@ -209,12 +219,29 @@ export function useIZACH() {
         setGpuUsage(d.gpu      ?? 0)
         setProcCpu(d.proc_cpu  ?? 0)
         setProcMem(d.proc_mem  ?? 0)
+        if (d.android_devices) setAndroidDevices(d.android_devices)
       } catch {}
     }
 
     const first = setTimeout(pollStats, 1000)
     const t = setInterval(pollStats, 4000)
     return () => { mounted = false; clearTimeout(first); clearInterval(t) }
+  }, [])
+
+  // ── poll Calendar (every 5 min) ───────────────────────────
+  useEffect(() => {
+    let mounted = true
+    async function pollCalendar() {
+      try {
+        const r = await safeFetch(`${BASE}/calendar/events`, {}, 8000)
+        if (!r.ok) return
+        const d = await r.json()
+        if (mounted && d.ok) setCalendarEvents(d.events || [])
+      } catch {}
+    }
+    pollCalendar()
+    const t = setInterval(pollCalendar, 5 * 60 * 1000)
+    return () => { mounted = false; clearInterval(t) }
   }, [])
 
   // ── poll Spotify ──────────────────────────────────────────
@@ -411,7 +438,7 @@ export function useIZACH() {
     inputText, setInputText,
     isLoading, isSpeaking, liveText,
     micActive, toggleMic,
-    backendStatus, waStatus, mmaStatus,
+    backendStatus, waStatus, mmaStatus, androidDevices,
     cpuUsage, ramUsage, gpuUsage, procCpu, procMem,
     spotifyTrack,
     memoryEntries, settings,
@@ -419,6 +446,7 @@ export function useIZACH() {
     notifications,
     faceState,
     whatsappQr,
+    calendarEvents, setCalendarEvents,
     chatBottomRef,
     send, stopSpeech,
   }
