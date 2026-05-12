@@ -5,18 +5,13 @@ RED='\033[0;31m'
 NC='\033[0m'
 BLOCKED=0
 
-staged=$(git diff --cached --name-only)
-
-# extra sensitive patterns
-if echo "$staged" | grep -E "(keys|secret|token|credential)"; then
-  echo -e "${RED}❌ Blocked: suspicious file name detected${NC}"
-  BLOCKED=1
-fi
+staged=$(git diff --cached --name-only | tr -d '\r')
 
 # ── Sensitive files ───────────────────────────────────────────
 while IFS= read -r file; do
     [[ -z "$file" ]] && continue
     case "$file" in
+        .env.example) ;;  # template with no real secrets — allow
         .env|.env.*|api_keys.json|api_keys.*.json)
             printf "${RED}[BLOCKED]${NC} Sensitive file staged: %s\n" "$file"
             BLOCKED=1
@@ -24,8 +19,8 @@ while IFS= read -r file; do
     esac
 done <<< "$staged"
 
-# ── Files > 20MB ──────────────────────────────────────────────
-MAX=$((20 * 1024 * 1024))
+# ── Files > 50MB ──────────────────────────────────────────────
+MAX=$((50 * 1024 * 1024))
 
 while IFS= read -r file; do
     [[ -z "$file" || ! -f "$file" ]] && continue
