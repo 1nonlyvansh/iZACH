@@ -11,7 +11,7 @@
 
 **Intent Zenith Adaptive Cognitive Handler**
 
-*A JARVIS-grade AI assistant for Windows — voice-driven, context-aware, system-deep.*
+*A voice-driven AI assistant for Windows — context-aware, system-deep, always on.*
 
 ---
 
@@ -20,6 +20,7 @@
 [![Electron](https://img.shields.io/badge/Electron-Desktop-00e5ff?style=flat-square&logo=electron&logoColor=00e5ff&labelColor=050d1a)](https://electronjs.org)
 [![Flask](https://img.shields.io/badge/Flask-Backend-00e5ff?style=flat-square&logo=flask&logoColor=00e5ff&labelColor=050d1a)](https://flask.palletsprojects.com)
 [![Groq](https://img.shields.io/badge/Groq-LLM-00e5ff?style=flat-square&logoColor=00e5ff&labelColor=050d1a)](https://groq.com)
+[![Android](https://img.shields.io/badge/Android-Companion%20App-00e5ff?style=flat-square&logo=android&logoColor=00e5ff&labelColor=050d1a)](https://github.com/1nonlyvansh/iZACH/releases/latest)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20Only-0d2a3a?style=flat-square&logo=windows&logoColor=c8e8f0&labelColor=050d1a)](.)
 [![Status](https://img.shields.io/badge/Status-Active%20Dev-1db954?style=flat-square&labelColor=050d1a)](.)
 
@@ -31,7 +32,7 @@
 
 iZACH is a local-first, voice-controlled AI assistant that runs natively on Windows. It doesn't just answer questions — it **acts**. Control Spotify, automate WhatsApp, execute PowerShell, manage files, browse the web, read your calendar, watch your camera, and learn your behavioral patterns — all through natural speech or a neural-themed desktop UI.
 
-Think JARVIS. Minus the Iron Man suit.
+Pair it with the Android companion app and your phone becomes a remote interface — send voice commands, transfer files, monitor your system, and control Spotify from anywhere on your network.
 
 ---
 
@@ -79,7 +80,7 @@ Think JARVIS. Minus the Iron Man suit.
 - WhatsApp bridge — read & reply hands-free
 - Spotify — play, pause, skip, playlists, device switch
 - Google Calendar sync
-- Android app (file transfer, MMA agent)
+- Android companion app (Wi-Fi)
 - Ngrok tunnel for remote access
 
 **🔐 Security**
@@ -104,36 +105,118 @@ Think JARVIS. Minus the Iron Man suit.
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                    USER INPUT                           │
-│         Voice Mic  ──  Chat UI  ──  PS> Terminal        │
-└────────────────────────┬────────────────────────────────┘
-                         │
-┌────────────────────────▼────────────────────────────────┐
-│              ELECTRON DESKTOP UI  :5173                 │
-│   React  •  WebSocket  •  Neural Orb  •  Right Panel   │
-└────────────────────────┬────────────────────────────────┘
-                         │  HTTP :5050  /  WS :5051
-┌────────────────────────▼────────────────────────────────┐
-│              FLASK BACKEND  :5050                       │
-│                                                         │
-│  ┌─────────────┐  ┌──────────────┐  ┌───────────────┐  │
-│  │ CommandChain│  │  IntentRouter│  │  TaskEngine   │  │
-│  └──────┬──────┘  └──────┬───────┘  └───────┬───────┘  │
-│         └────────────────┼──────────────────┘          │
-│                          │                              │
-│  ┌───────────┬───────────┼───────────┬──────────────┐   │
-│  │  AI Layer │  System   │   Vision  │  Automation  │   │
-│  │ Groq/Gem  │  Control  │  Camera   │  Web / Shell │   │
-│  └───────────┴───────────┴───────────┴──────────────┘   │
-└──────┬────────────────────────┬────────────────────────┘
-       │                        │
-┌──────▼──────┐        ┌────────▼────────┐
-│  WhatsApp   │        │   MMA Agent     │
-│  Bridge     │        │   :6060         │
-│  :3000      │        │   (Remote)      │
-└─────────────┘        └─────────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│                       USER INPUT                            │
+│    Voice Mic  ──  Chat UI  ──  PS> Terminal  ──  Android    │
+└─────────────────────────┬───────────────────────────────────┘
+                          │
+┌─────────────────────────▼───────────────────────────────────┐
+│              ELECTRON DESKTOP UI  :5173                     │
+│   React  •  WebSocket  •  Neural Orb  •  Right Panel        │
+└─────────────────────────┬───────────────────────────────────┘
+                          │  HTTP :5050  /  WS :5051
+┌─────────────────────────▼───────────────────────────────────┐
+│                  FLASK BACKEND  :5050                       │
+│                                                             │
+│  ┌─────────────┐  ┌──────────────┐  ┌───────────────────┐  │
+│  │ CommandChain│  │  IntentRouter│  │    TaskEngine     │  │
+│  └──────┬──────┘  └──────┬───────┘  └─────────┬─────────┘  │
+│         └───────────────┬┘──────────────────────┘          │
+│                         │                                   │
+│  ┌──────────┬───────────┼────────────┬──────────────────┐   │
+│  │ AI Layer │  System   │   Vision   │   Automation     │   │
+│  │Groq/Gem  │  Control  │   Camera   │  Web / Shell     │   │
+│  └──────────┴───────────┴────────────┴──────────────────┘   │
+└───────┬──────────────────────┬──────────────────────────────┘
+        │                      │
+┌───────▼──────┐      ┌────────▼────────┐      ┌─────────────┐
+│  WhatsApp    │      │   MMA Agent     │      │   Android   │
+│  Bridge      │      │   :6060         │      │   App       │
+│  :3000       │      │   (Remote)      │      │  (Wi-Fi)    │
+└──────────────┘      └─────────────────┘      └─────────────┘
 ```
+
+---
+
+## Android Companion App
+
+<table>
+<tr>
+<td width="50%" valign="top">
+
+**Features**
+- Chat interface — send voice or text commands
+- Floating mic overlay — trigger iZACH from any app
+- File transfer — send files from phone → PC
+- Spotify remote control
+- System dashboard (CPU, RAM, battery)
+- Screenshot viewer
+- Quick command shortcuts
+- Download monitor
+- Clipboard sync
+- Notification history
+
+</td>
+<td width="50%" valign="top">
+
+**Requirements**
+- Android 7.0+
+- Same Wi-Fi network as PC
+- iZACH backend running on PC (port 5050)
+
+**Download**
+
+[![Download APK](https://img.shields.io/badge/Download-iZACH.apk-00e5ff?style=for-the-badge&logo=android&logoColor=00e5ff&labelColor=050d1a)](https://github.com/1nonlyvansh/iZACH/releases/latest)
+
+> **Note:** Enable *Install from unknown sources* in Android Settings → Security before installing.
+
+</td>
+</tr>
+</table>
+
+### Connecting the App to iZACH
+
+**Both devices must be on the same Wi-Fi network.**
+
+1. Find your PC's local IP address:
+   ```
+   ipconfig
+   ```
+   Look for `IPv4 Address` under your Wi-Fi adapter — e.g. `192.168.1.105`
+
+2. Make sure iZACH backend is running (`python launch_izach.py`)
+
+3. Open iZACH app → **Settings** (gear icon)
+
+4. Enter your PC's IP and port:
+   ```
+   http://192.168.1.105:5050
+   ```
+   Or tap the QR scan button — iZACH desktop can display a QR code with the backend URL.
+
+5. Tap **Save** — the app will test the connection and confirm online status.
+
+> If connection fails: check Windows Firewall allows port 5050, and that both devices are on the same subnet (not guest Wi-Fi vs main Wi-Fi).
+
+---
+
+### Adding APK to a GitHub Release
+
+To distribute your own build:
+
+1. Build the APK in Android Studio:
+   `Build → Generate Signed Bundle / APK → APK`
+
+2. Create a GitHub Release:
+   ```
+   GitHub repo → Releases → Draft a new release
+   Tag: v1.0.0
+   Title: iZACH v1.0.0
+   ```
+
+3. Drag and drop the `.apk` file into the release assets
+
+4. Publish release — the download badge above will auto-link to `releases/latest`
 
 ---
 
@@ -342,7 +425,7 @@ iZACH/
 │       ├── App.jsx
 │       ├── components/      # NeuralOrb, ChatPanel, RightPanel…
 │       └── hooks/useIZACH.js
-├── izach-android/           # Android companion app
+├── izach-android/           # Android companion app (Kotlin)
 ├── chrome_extension/        # Browser extension
 ├── whatsapp_bridge.js       # WhatsApp Web.js bridge
 └── .env.example             # API key template
@@ -362,7 +445,7 @@ iZACH/
 | Vision | OpenCV · face_recognition (dlib) · Gemini Vision |
 | Automation | PyAutoGUI · pywin32 · psutil |
 | Memory | MongoDB · JSON fallback |
-| Android | Kotlin + OkHttp (Wi-Fi file transfer to Flask :5050) |
+| Android | Kotlin · OkHttp · Wi-Fi (HTTP to Flask :5050) |
 
 ---
 
@@ -376,15 +459,22 @@ iZACH/
 | Electron blank screen | Backend not up — check `http://localhost:5050/health` |
 | `playwright install` fails | Activate `.venv` first |
 | WhatsApp QR not showing | Run `node whatsapp_bridge.js` manually in that window |
+| Android app can't connect | Check firewall allows port 5050; both devices on same Wi-Fi subnet |
 
 ---
 
 <div align="center">
 
-**iZACH** is actively developed. Core system is functional across all 5 phases.
+**iZACH** is actively developed. Core system functional across all 5 phases.
 
 *Voice → AI → Action.*
 
-[![GitHub](https://img.shields.io/badge/github-1nonlyvansh%2FiZACH-00e5ff?style=flat-square&logo=github&logoColor=00e5ff&labelColor=050d1a)](https://github.com/1nonlyvansh/iZACH)
+<br>
+
+[![GitHub](https://img.shields.io/badge/GitHub-1nonlyvansh%2FiZACH-00e5ff?style=flat-square&logo=github&logoColor=00e5ff&labelColor=050d1a)](https://github.com/1nonlyvansh/iZACH)
+&nbsp;
+[![Instagram](https://img.shields.io/badge/Instagram-%401nonlyvansh-00e5ff?style=flat-square&logo=instagram&logoColor=00e5ff&labelColor=050d1a)](https://instagram.com/1nonlyvansh)
+&nbsp;
+[![iZACH Instagram](https://img.shields.io/badge/Instagram-%40intent__zach-00e5ff?style=flat-square&logo=instagram&logoColor=00e5ff&labelColor=050d1a)](https://instagram.com/intent_zach)
 
 </div>
