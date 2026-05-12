@@ -36,11 +36,23 @@ def set_ui_callbacks(notify_fn, log_fn):
     _notify_func = notify_fn
     _log_func = log_fn
 
+def _notif_whatsapp_enabled() -> bool:
+    try:
+        import json as _j
+        with open("api_keys.json") as _f:
+            return bool(_j.load(_f).get("notif_whatsapp", True))
+    except Exception:
+        return True
+
+
 def init_whatsapp(speak, chain, ai_func=None):
     global _speak_func, _chain_func, _ai_func
     _speak_func = speak
     _chain_func = chain
     _ai_func = ai_func
+
+    from modules.event_extractor import init as _init_extractor
+    _init_extractor(speak_fn=speak)
     
     try:
         import main as _main
@@ -57,7 +69,7 @@ def init_whatsapp(speak, chain, ai_func=None):
     )
 
     _load_contacts()
-    threading.Thread(target=lambda: app.run(port=5050, debug=False, use_reloader=False), daemon=True).start()
+    threading.Thread(target=lambda: app.run(host='0.0.0.0', port=5050, debug=False, use_reloader=False), daemon=True).start()
     threading.Thread(target=_monitor_connection, daemon=True).start()
     threading.Thread(target=_start_bridge, daemon=True).start()
     print("[WHATSAPP] Handler Online on port 5050")
@@ -187,7 +199,7 @@ def incoming_message():
     from modules.context_memory import get_context_memory
     get_context_memory().record_whatsapp_received(sender, text, number)
 
-    if _notify_func:
+    if _notify_func and _notif_whatsapp_enabled():
         _notify_func(f"WhatsApp — {sender}", text[:120])
     try:
         from modules.ws_bridge import broadcast
@@ -201,7 +213,15 @@ def incoming_message():
     except Exception:
         pass
 
-    if _speak_func and _ai_func:
+    # extract calendar events from message (non-blocking)
+    try:
+        import time as _t
+        from modules.event_extractor import process_message as _extract_event
+        _extract_event(text=text, sender=sender, msg_id=data.get("id"), timestamp=str(_t.time()))
+    except Exception:
+        pass
+
+    if _speak_func and _ai_func and _notif_whatsapp_enabled():
         threading.Thread(
             target=_announce_message,
             args=(sender, text, number),

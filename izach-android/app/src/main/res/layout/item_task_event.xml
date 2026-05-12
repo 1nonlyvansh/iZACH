@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:paddingHorizontal="16dp"
+    android:paddingVertical="10dp"
+    android:background="@color/bg_card"
+    android:layout_marginHorizontal="12dp"
+    android:layout_marginVertical="3dp">
+
+    <ImageView
+        android:id="@+id/ivTaskStatus"
+        android:layout_width="20dp"
+        android:layout_height="20dp"
+        android:src="@drawable/ic_tasks"
+        android:contentDescription="Task status"
+        android:layout_marginEnd="12dp" />
+
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/tvTaskName"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textColor="@color/text_pri"
+            android:textSize="13sp"
+            android:fontFamily="monospace" />
+
+        <ProgressBar
+            android:id="@+id/taskProgressBar"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="match_parent"
+            android:layout_height="4dp"
+            android:max="100"
+            android:progressTint="#FF00e5ff"
+            android:progressBackgroundTint="#FF005060"
+            android:layout_marginTop="4dp" />
+
+        <TextView
+            android:id="@+id/tvTaskStatus"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textSize="11sp"
+            android:fontFamily="monospace"
+            android:layout_marginTop="2dp" />
+    </LinearLayout>
+
+</LinearLayout>

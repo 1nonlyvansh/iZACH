@@ -59,8 +59,9 @@ for _key_name, _key_val in [("GROQ_API_KEY", GROQ_KEY), ("GEMINI_KEY_1", GEMINI_
         print(f"[WARNING] Missing API key: {_key_name} — AI features will be disabled.")
         _AI_ENABLED = False
 import uuid
-VOICE      = "en-US-ChristopherNeural"
-TEMP_AUDIO = "speech.wav"  # fallback, overridden per call
+VOICE       = "en-US-ChristopherNeural"
+HINDI_VOICE = "hi-IN-MadhurNeural"
+TEMP_AUDIO  = "speech.wav"  # fallback, overridden per call
 
 # --- 3. GLOBAL OBJECTS ---
 SPEECH_QUEUE = queue.Queue()
@@ -79,9 +80,31 @@ except Exception as e:
     print(f"[CRITICAL] Mixer Init Failed: {e}")
 
 # --- 4. NEURAL TTS WORKER ---
+
+def _split_by_language(text, eng_voice=None):
+    v = eng_voice or VOICE
+    segments = []
+    for chunk in re.split(r'([ऀ-ॿ]+)', text):
+        chunk = chunk.strip()
+        if not chunk:
+            continue
+        if re.search(r'[ऀ-ॿ]', chunk):
+            segments.append((chunk, HINDI_VOICE))
+        else:
+            segments.append((chunk, v))
+    return segments
+
+
+def _combined_rate(tone_rate: str, speed_offset: int) -> str:
+    """Merge tone rate string ('+5%') with user speed offset (int) → final rate string."""
+    m = re.match(r'([+-]?\d+)%', tone_rate.replace(' ', ''))
+    base = int(m.group(1)) if m else 5
+    total = base + speed_offset
+    return f"+{total}%" if total >= 0 else f"{total}%"
+
+
 async def generate_and_play(text):
     global _speaking
-    audio_file = f"speech_{uuid.uuid4().hex[:8]}.mp3"
     try:
         from modules.interrupt_engine import get_interrupt_engine
         from modules.personality import extract_tone_rate
@@ -89,56 +112,86 @@ async def generate_and_play(text):
         ie.reset()
 
         clean_text, rate = extract_tone_rate(text)
-        communicate = edge_tts.Communicate(clean_text, VOICE, rate=rate)
 
-        # Stop previous audio BEFORE generating new — runs in parallel with TTS synthesis
+        try:
+            import json as _j
+            with open("api_keys.json") as _f:
+                _spd = int(_j.load(_f).get("tts_speed", 0))
+            rate = _combined_rate(rate, _spd)
+        except Exception:
+            pass
+
         try:
             pygame.mixer.music.stop()
             pygame.mixer.music.unload()
         except Exception:
             pass
 
-        await communicate.save(audio_file)
-        pygame.mixer.music.load(audio_file)
-        pygame.mixer.music.play()
+        _active_voice = VOICE
+        try:
+            import json as _jv
+            with open("api_keys.json") as _fv:
+                _active_voice = _jv.load(_fv).get("voice", VOICE) or VOICE
+        except Exception:
+            pass
+
+        segments = _split_by_language(clean_text, _active_voice)
 
         _speaking = True
         ie.set_speaking(True)
 
-        # Word-by-word live text — synced to audio duration
-        words = clean_text.split()
-        if words:
-            chars_total = max(len(clean_text), 1)
-            try:
-                duration = pygame.mixer.Sound(audio_file).get_length()
-            except Exception:
-                duration = max(len(clean_text) * 0.065, 1.5)
+        for seg_text, seg_voice in segments:
+            if not seg_text.strip() or ie.is_interrupted():
+                break
 
-            displayed = []
-            for word in words:
-                displayed.append(word)
-                partial = " ".join(displayed)
-                word_ratio = (len(word) + 1) / chars_total
-                word_time  = duration * word_ratio
-                if app and hasattr(app, 'root'):
+            audio_file = f"speech_{uuid.uuid4().hex[:8]}.mp3"
+            try:
+                communicate = edge_tts.Communicate(seg_text, seg_voice, rate=rate)
+                await communicate.save(audio_file)
+                pygame.mixer.music.load(audio_file)
+                pygame.mixer.music.play()
+
+                # Word-by-word live text — synced to audio duration
+                words = seg_text.split()
+                if words:
+                    chars_total = max(len(seg_text), 1)
                     try:
-                        app.root.after(0, lambda t=partial: app.update_live_text(t))
-                    except RuntimeError:
-                        pass
+                        duration = pygame.mixer.Sound(audio_file).get_length()
+                    except Exception:
+                        duration = max(len(seg_text) * 0.065, 1.5)
+
+                    displayed = []
+                    for word in words:
+                        displayed.append(word)
+                        partial = " ".join(displayed)
+                        word_ratio = (len(word) + 1) / chars_total
+                        word_time  = duration * word_ratio
+                        if app and hasattr(app, 'root'):
+                            try:
+                                app.root.after(0, lambda t=partial: app.update_live_text(t))
+                            except RuntimeError:
+                                pass
+                        try:
+                            from modules.ws_bridge import broadcast
+                            broadcast({"type": "live_text", "text": partial})
+                        except Exception:
+                            pass
+                        await asyncio.sleep(word_time)
+
+                while pygame.mixer.music.get_busy():
+                    if ie.is_interrupted():
+                        pygame.mixer.music.stop()
+                        print("[INTERRUPT] Speech stopped.")
+                        break
+                    await asyncio.sleep(0.05)
+                pygame.mixer.music.unload()
+                await asyncio.sleep(0.1)
+            finally:
                 try:
-                    from modules.ws_bridge import broadcast
-                    broadcast({"type": "live_text", "text": partial})
+                    if os.path.exists(audio_file):
+                        os.remove(audio_file)
                 except Exception:
                     pass
-                await asyncio.sleep(word_time)
-
-        while pygame.mixer.music.get_busy():
-            if ie.is_interrupted():
-                pygame.mixer.music.stop()
-                print("[INTERRUPT] Speech stopped.")
-                break
-            await asyncio.sleep(0.05)
-        pygame.mixer.music.unload()
 
         if app and hasattr(app, 'root'):
             try:
@@ -154,11 +207,6 @@ async def generate_and_play(text):
     except Exception as e:
         print(f"[TTS ERROR] {e}")
     finally:
-        try:
-            if os.path.exists(audio_file):
-                os.remove(audio_file)
-        except Exception:
-            pass
         _speaking = False
         try:
             from modules.interrupt_engine import get_interrupt_engine
@@ -330,7 +378,23 @@ def listen():
                 return "none"
         except Exception:
             pass
-        return _recognizer.recognize_google(audio, language='en-in').lower()
+        text = _recognizer.recognize_google(audio, language='en-in').lower()
+
+        # Inline wake word check — single pyaudio stream, no conflict
+        try:
+            from modules.wake_word import get_wake_detector
+            det = get_wake_detector()
+            if det is not None:
+                if det.check_text(text):
+                    print(f"[WAKE WORD] Heard: {text}")
+                    det.activate()
+                    return "none"
+                if not det.is_active():
+                    return "none"
+        except Exception:
+            pass
+
+        return text
     except sr.WaitTimeoutError:
         return "none"
     except Exception:
@@ -417,49 +481,6 @@ def start_brain(ui=None):
 
     init_whatsapp(speak, chain_engine.process, get_ai_response)
 
-    # 5. AURA vision — start camera always (for vision queries), gestures only if enabled
-    try:
-        from modules.vision_engine import init_vision_engine, is_aura_enabled
-        from modules.vision_engine import set_aura_enabled
-        import json as _j
-        _aura_boot = False
-        try:
-            with open("api_keys.json") as _f:
-                _aura_boot = _j.load(_f).get("aura_enabled", False)
-        except Exception:
-            pass
-
-        def _handle_gesture(gesture_name: str, action: str, metadata: dict):
-            print(f"[GESTURE] {gesture_name} → {action}")
-            GESTURE_SPEECH = {
-                "play_pause":   "Toggled playback.",
-                "mute_unmute":  "Toggled mute.",
-                "next_track":   "Next track.",
-                "prev_track":   "Previous track.",
-                "show_desktop": "Showing desktop.",
-            }
-            msg = GESTURE_SPEECH.get(action)
-            if msg is None:
-                val = metadata.get("value", "")
-                if action == "volume_control":
-                    msg = f"Volume at {val} percent." if val != "" else "Volume adjusted."
-                elif action == "brightness_control":
-                    msg = f"Brightness at {val} percent." if val != "" else "Brightness adjusted."
-                elif action == "switch_desktops":
-                    msg = "Switching desktop."
-            if msg:
-                speak(msg)
-
-        _ve = init_vision_engine(
-            on_gesture=_handle_gesture if _aura_boot else None,
-            camera_idx=0
-        )
-        _ve.start()
-        set_aura_enabled(_aura_boot)
-        print(f"[VISION] Camera started. AURA gestures: {_aura_boot}")
-    except Exception as _ve_err:
-        print(f"[VISION] Could not start camera: {_ve_err}")
-
     # 6. Interrupt engine
     from modules.interrupt_engine import get_interrupt_engine
     ie = get_interrupt_engine()
@@ -531,6 +552,52 @@ def start_brain(ui=None):
 
     speak("Assistant System Online.")
 
+    # Phase 3: SmartAlarm + WhatsApp 24h context engine
+    try:
+        from modules.smart_alarm import init as _init_alarm
+        _init_alarm(speak_fn=speak)
+        print("[SMART ALARM] Initialized — persistent alarm engine active.")
+    except Exception as _ae:
+        print(f"[SMART ALARM] Init failed: {_ae}")
+
+    try:
+        from modules.whatsapp_context import startup_sync
+        startup_sync(speak_fn=speak, hours=24)
+        print("[WA CONTEXT] 24h history sync started in background.")
+    except Exception as _wce:
+        print(f"[WA CONTEXT] Startup sync failed: {_wce}")
+
+    try:
+        from modules.proactive_agent import init as _init_proactive, start as _start_proactive
+        _init_proactive(speak_fn=speak)
+        _start_proactive()
+        print("[PROACTIVE] Agent started.")
+    except Exception as _pe:
+        print(f"[PROACTIVE] Init failed: {_pe}")
+
+    try:
+        from modules.pattern_learner import init as _init_patterns, start as _start_patterns
+        _init_patterns(speak_fn=speak, chain_fn=chain_engine.process)
+        _start_patterns()
+        print("[PATTERNS] Learner started.")
+    except Exception as _ple:
+        print(f"[PATTERNS] Init failed: {_ple}")
+
+    try:
+        from modules import face_auth as _face_auth
+        _face_auth.init(speak_fn=speak)
+        _enrolled = _face_auth.is_enrolled()
+        print(f"[FACE AUTH] {'Owner face enrolled.' if _enrolled else 'No face enrolled — say enroll my face to set up.'}")
+    except Exception as _fae:
+        print(f"[FACE AUTH] Init failed: {_fae}")
+
+    # Prune old command history per retention setting
+    try:
+        from modules.mongo_brain import cleanup_old_logs
+        cleanup_old_logs()
+    except Exception:
+        pass
+
     # 10. Wake word
     import json as _json
     _ww_enabled = False
@@ -540,7 +607,51 @@ def start_brain(ui=None):
     except Exception:
         pass
 
-    print("[WAKE WORD] Disabled — always listening mode")
+    # Read clap_enabled from settings (default True)
+    _clap_enabled = True
+    try:
+        with open("api_keys.json") as _f:
+            _clap_enabled = _json.load(_f).get("clap_enabled", True)
+    except Exception:
+        pass
+
+    def _on_single_clap():
+        speak("Listening.")
+        if _ww_enabled and _wake_detector is not None:
+            _wake_detector.extend_active()
+
+    def _on_double_clap():
+        try:
+            pygame.mixer.music.stop()
+        except Exception:
+            pass
+
+    _clap_det = None
+    if _clap_enabled:
+        try:
+            from modules.clap_detector import init_clap_detector
+            _clap_det = init_clap_detector(on_single=_on_single_clap, on_double=_on_double_clap)
+            _clap_det.start()
+        except Exception as _ce:
+            print(f"[CLAP] Failed to start: {_ce}")
+    else:
+        print("[CLAP] Disabled in settings.")
+
+    # Start wake word detector if enabled
+    _wake_detector = None
+    if _ww_enabled:
+        try:
+            from modules.wake_word import init_wake_word
+            def _ww_activated():
+                speak("Yes?")
+            _wake_detector = init_wake_word(_ww_activated)
+            _wake_detector.start()
+            print("[WAKE WORD] Active — say 'Hey iZACH' to activate.")
+        except Exception as _we:
+            print(f"[WAKE WORD] Failed to start: {_we}")
+            _ww_enabled = False
+    else:
+        print("[WAKE WORD] Disabled — always listening mode")
 
     # Kill any leftover process on port 5051
     import subprocess
@@ -578,6 +689,8 @@ def start_brain(ui=None):
             try:
                 query = listen()
                 if query == "none":
+                    if _wake_detector and _wake_detector.is_active():
+                        _wake_detector.extend_active()
                     continue
                 print(f"[USER]: {query}")
                 if app and hasattr(app, 'root'):
@@ -599,6 +712,13 @@ def start_brain(ui=None):
                     speak("Systems offline.")
                     safe_shutdown()
                     break
+                try:
+                    from modules.proactive_agent import record_interaction
+                    record_interaction()
+                except Exception:
+                    pass
+                if _wake_detector:
+                    _wake_detector.extend_active()
                 _t0 = time.time()
                 try:
                     chain_engine.process(query)

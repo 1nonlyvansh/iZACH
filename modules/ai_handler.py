@@ -43,19 +43,48 @@ class AIProvider:
                 return self._handle_429(query, "gemini")
             return "Neural link instability. Both providers offline."
 
+    @staticmethod
+    def _style_instruction() -> str:
+        try:
+            import json as _j
+            with open("api_keys.json") as _f:
+                cfg = _j.load(_f)
+        except Exception:
+            return ""
+        parts = []
+        style = cfg.get("response_style", "casual")
+        verbosity = cfg.get("response_verbosity", "balanced")
+        if style == "professional":
+            parts.append("Be formal and professional. Avoid humor and sarcasm. Use proper sentence structure.")
+        elif style == "concise":
+            parts.append("Be extremely concise and direct. Strip all filler.")
+        if verbosity == "brief":
+            parts.append("Keep every response to 1-2 sentences maximum, no exceptions.")
+        elif verbosity == "detailed":
+            parts.append("Provide thorough explanations with examples and context where relevant.")
+        return " ".join(parts)
+
     def _call_groq(self, query):
+        style = self._style_instruction()
+        messages = []
+        if style:
+            messages.append({"role": "system", "content": style})
+        messages.append({"role": "user", "content": query})
         completion = self.groq_client.chat.completions.create(
             model="llama-3.3-70b-versatile",
-            messages=[{"role": "user", "content": query}]
+            messages=messages,
         )
         return completion.choices[0].message.content
 
     def _call_gemini(self, query):
+        base_instruction = "You are iZACH, a concise AI assistant."
+        style = self._style_instruction()
+        system_instr = f"{base_instruction} {style}".strip()
         response = self.gemini_client.models.generate_content(
             model="gemini-1.5-flash",
             contents=query,
             config=types.GenerateContentConfig(
-                system_instruction="iZACH: Concise AI."
+                system_instruction=system_instr
             )
         )
         return response.text

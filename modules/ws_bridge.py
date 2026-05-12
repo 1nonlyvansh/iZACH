@@ -5,11 +5,13 @@ import time as _time
 
 _clients = set()           # all connected WS clients
 _extension_clients = set() # only chrome extension clients
+_android_clients: dict = {}  # ws -> device_name
 _loop = None
 
 async def _handler(ws):
     _clients.add(ws)
     identified = False
+    android_device_name = None
 
     try:
         async for msg in ws:
@@ -21,6 +23,12 @@ async def _handler(ws):
                         _extension_clients.add(ws)
                         identified = True
                         print("[WS] Chrome extension connected.")
+                    elif data.get("name") == "android_device":
+                        android_device_name = data.get("device_name", "Android")
+                        _android_clients[ws] = android_device_name
+                        identified = True
+                        print(f"[WS] Android device connected: {android_device_name}")
+                        _broadcast_nowait({"type": "device_connected", "device_name": android_device_name})
 
                 elif data.get("type") == "fill_result":
                     filled = data.get("filled", 0)
@@ -49,14 +57,18 @@ async def _handler(ws):
     finally:
         _clients.discard(ws)
         _extension_clients.discard(ws)
-        if identified:
+        if android_device_name:
+            _android_clients.pop(ws, None)
+            print(f"[WS] Android device disconnected: {android_device_name}")
+            _broadcast_nowait({"type": "device_disconnected", "device_name": android_device_name})
+        elif identified:
             print("[WS] Chrome extension disconnected.")
 
 
 async def _server():
     try:
         from websockets.asyncio.server import serve
-        async with serve(_handler, "127.0.0.1", 5051):
+        async with serve(_handler, "0.0.0.0", 5051):
             print("[WS] Bridge running on port 5051")
             await asyncio.Future()
     except OSError as e:
@@ -79,6 +91,18 @@ def start_ws_bridge():
 def has_clients() -> bool:
     return bool(_clients)
 
+def get_android_devices() -> list:
+    return list(_android_clients.values())
+
+def _broadcast_nowait(event: dict):
+    if not _loop or not _clients:
+        return
+    try:
+        msg = json.dumps(event)
+        asyncio.run_coroutine_threadsafe(_broadcast_all(msg), _loop)
+    except Exception:
+        pass
+
 def has_extension_client() -> bool:
     return bool(_extension_clients)
 
@@ -93,6 +117,16 @@ def broadcast(event: dict):
         asyncio.run_coroutine_threadsafe(_broadcast_all(msg), _loop)
     except Exception:
         pass
+
+
+def emit(event: str, source: str, payload: dict):
+    """Broadcast standardized event envelope used by all new features."""
+    broadcast({
+        "event": event,
+        "source": source,
+        "timestamp": int(_time.time()),
+        "payload": payload,
+    })
 
 async def _broadcast_all(msg: str):
     global _clients, _extension_clients

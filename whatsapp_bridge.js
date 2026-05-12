@@ -121,6 +121,40 @@ function createClient() {
         res.json({ status: isReady ? 'connected' : 'connecting' });
     });
 
+    // Fetch message history for past N hours (used by Phase 3 context engine)
+    app.get('/messages/history', async (req, res) => {
+        const hours = parseInt(req.query.hours) || 24;
+        const since = Date.now() - (hours * 60 * 60 * 1000);
+        try {
+            const chats = await client.getChats();
+            const messages = [];
+            for (const chat of chats.slice(0, 30)) { // limit to 30 chats
+                try {
+                    const chatMsgs = await chat.fetchMessages({ limit: 50 });
+                    for (const msg of chatMsgs) {
+                        if (msg.fromMe) continue;
+                        if (msg.isStatus) continue;
+                        if ((msg.timestamp * 1000) < since) continue;
+                        const contact = await msg.getContact();
+                        const name = contact.pushname || contact.name || contact.number || msg.from;
+                        messages.push({
+                            id: msg.id._serialized,
+                            sender: name,
+                            number: msg.from,
+                            text: msg.body,
+                            timestamp: msg.timestamp,
+                            chat: chat.name || name,
+                        });
+                    }
+                } catch (e) { /* skip unreadable chat */ }
+            }
+            messages.sort((a, b) => a.timestamp - b.timestamp);
+            res.json({ messages, count: messages.length });
+        } catch (e) {
+            res.status(500).json({ error: e.message });
+        }
+    });
+
     app.post('/logout', async (req, res) => {
         try {
             await client.logout();

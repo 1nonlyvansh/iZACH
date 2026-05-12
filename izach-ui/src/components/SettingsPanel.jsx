@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 
 function SectionHeader({ label }) {
   return (
@@ -162,60 +162,185 @@ function MemorySection({ entries, onAdd, onDelete }) {
   )
 }
 
+const BASE = 'http://localhost:5050'
+
+function SelectField({ label, value, onChange, options }) {
+  return (
+    <div style={{ padding: '4px 20px 10px' }}>
+      <p style={{ color: '#3a6070', fontFamily: "'Share Tech Mono'", fontSize: '9px', letterSpacing: '0.1em', marginBottom: 6 }}>
+        {label}
+      </p>
+      <select
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        style={{
+          width: '100%', padding: '7px 10px',
+          background: '#071020', border: '1px solid #0d2a3a',
+          borderRadius: 4, color: '#c8e8f0',
+          fontFamily: "'JetBrains Mono'", fontSize: '11px',
+          outline: 'none', cursor: 'pointer',
+        }}
+      >
+        {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+      </select>
+    </div>
+  )
+}
+
 // ── Settings Section ──────────────────────────────────────────
 function GeneralSection({ settings, onSave }) {
-  const [wakeWord, setWakeWord] = useState(settings.wake_word_enabled ?? false)
-  const [voice,    setVoice]    = useState(settings.voice ?? 'en-US-ChristopherNeural')
-  const [dirty,    setDirty]    = useState(false)
+  const [form, setForm] = useState({
+    wake_word_enabled:       settings.wake_word_enabled       ?? false,
+    clap_enabled:            settings.clap_enabled            ?? true,
+    voice:                   settings.voice                   ?? 'en-US-ChristopherNeural',
+    tts_speed:               settings.tts_speed               ?? 0,
+    response_style:          settings.response_style          ?? 'casual',
+    response_verbosity:      settings.response_verbosity      ?? 'balanced',
+    safe_mode_enabled:       settings.safe_mode_enabled       ?? true,
+    notif_performance:       settings.notif_performance       ?? true,
+    notif_whatsapp:          settings.notif_whatsapp          ?? true,
+    notif_downloads:         settings.notif_downloads         ?? true,
+    command_history_enabled: settings.command_history_enabled ?? true,
+    log_retention_days:      settings.log_retention_days      ?? 30,
+  })
+  const [dirty,      setDirty]      = useState(false)
+  const [micDevices, setMicDevices] = useState([])
+  const [activeMic,  setActiveMic]  = useState(null)
+  const [micSaved,   setMicSaved]   = useState(false)
 
-  function handleToggleWW(v) { setWakeWord(v); setDirty(true) }
-  function handleVoice(v)    { setVoice(v);    setDirty(true) }
+  useEffect(() => {
+    fetch(`${BASE}/mic/devices`)
+      .then(r => r.json())
+      .then(d => { if (d.ok) { setMicDevices(d.devices || []); setActiveMic(d.active) } })
+      .catch(() => {})
+  }, [])
 
-  function handleSave() {
-    onSave({ wake_word_enabled: wakeWord, voice })
-    setDirty(false)
+  function set(key, val) { setForm(f => ({ ...f, [key]: val })); setDirty(true) }
+
+  function selectMic(index) {
+    const idx = index === '' ? null : Number(index)
+    setActiveMic(idx)
+    fetch(`${BASE}/mic/select`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ index: idx }),
+    }).then(() => { setMicSaved(true); setTimeout(() => setMicSaved(false), 2000) }).catch(() => {})
   }
 
+  function handleSave() { onSave(form); setDirty(false) }
+
   const VOICES = [
-    'en-US-ChristopherNeural',
-    'en-US-GuyNeural',
-    'en-IN-PrabhatNeural',
-    'en-GB-RyanNeural',
-    'en-AU-WilliamNeural',
+    'en-US-ChristopherNeural', 'en-US-GuyNeural',
+    'en-IN-PrabhatNeural', 'en-GB-RyanNeural', 'en-AU-WilliamNeural',
   ]
 
   return (
     <div>
-      <SectionHeader label="GENERAL SETTINGS" />
-      <Toggle label="Wake Word Detection ('iZACH')" checked={wakeWord} onChange={handleToggleWW} />
 
-      <div style={{ padding: '6px 20px' }}>
+      {/* ── VOICE & AUDIO ─────────────────────────── */}
+      <SectionHeader label="VOICE & AUDIO" />
+      <Toggle label="Wake Word Detection ('Hey iZACH')"              checked={form.wake_word_enabled}  onChange={v => set('wake_word_enabled', v)} />
+      <Toggle label="Clap Detection (single = listen, double = stop)" checked={form.clap_enabled}       onChange={v => set('clap_enabled', v)} />
+
+      <SelectField
+        label="TTS VOICE"
+        value={form.voice}
+        onChange={v => set('voice', v)}
+        options={VOICES.map(v => ({ value: v, label: v }))}
+      />
+
+      <SelectField
+        label="TTS SPEED"
+        value={form.tts_speed}
+        onChange={v => set('tts_speed', Number(v))}
+        options={[
+          { value: -25, label: 'Slow (-25%)' },
+          { value: 0,   label: 'Normal' },
+          { value: 25,  label: 'Fast (+25%)' },
+          { value: 50,  label: 'Very Fast (+50%)' },
+        ]}
+      />
+
+      {/* Mic device — direct API call, separate from Save */}
+      <div style={{ padding: '4px 20px 10px' }}>
         <p style={{ color: '#3a6070', fontFamily: "'Share Tech Mono'", fontSize: '9px', letterSpacing: '0.1em', marginBottom: 6 }}>
-          TTS VOICE
+          MIC DEVICE {micSaved && <span style={{ color: '#1db954', marginLeft: 8 }}>✓ Applied</span>}
         </p>
         <select
-          value={voice}
-          onChange={e => handleVoice(e.target.value)}
+          value={activeMic ?? ''}
+          onChange={e => selectMic(e.target.value)}
           style={{
-            width: '100%',
-            padding: '7px 10px',
-            background: '#071020',
-            border: '1px solid #0d2a3a',
-            borderRadius: 4,
-            color: '#c8e8f0',
-            fontFamily: "'JetBrains Mono'",
-            fontSize: '11px',
-            outline: 'none',
-            cursor: 'pointer',
+            width: '100%', padding: '7px 10px',
+            background: '#071020', border: '1px solid #0d2a3a',
+            borderRadius: 4, color: '#c8e8f0',
+            fontFamily: "'JetBrains Mono'", fontSize: '11px',
+            outline: 'none', cursor: 'pointer',
           }}
         >
-          {VOICES.map(v => <option key={v} value={v}>{v}</option>)}
+          <option value="">Default</option>
+          {micDevices.map(d => (
+            <option key={d.index} value={d.index}>{d.name}</option>
+          ))}
         </select>
+        <p style={{ color: '#1a4a5a', fontFamily: "'JetBrains Mono'", fontSize: '9px', marginTop: 4 }}>
+          Applied immediately — no restart needed
+        </p>
       </div>
 
+      {/* ── AI BEHAVIOUR ──────────────────────────── */}
+      <SectionHeader label="AI BEHAVIOUR" />
+      <Toggle label="Safe Mode (confirm dangerous commands)" checked={form.safe_mode_enabled} onChange={v => set('safe_mode_enabled', v)} />
+
+      <SelectField
+        label="RESPONSE STYLE"
+        value={form.response_style}
+        onChange={v => set('response_style', v)}
+        options={[
+          { value: 'casual',       label: 'Casual (default — JARVIS-style)' },
+          { value: 'professional', label: 'Professional (formal, no humor)' },
+          { value: 'concise',      label: 'Concise (ultra-short answers)' },
+        ]}
+      />
+
+      <SelectField
+        label="RESPONSE VERBOSITY"
+        value={form.response_verbosity}
+        onChange={v => set('response_verbosity', v)}
+        options={[
+          { value: 'balanced', label: 'Balanced (default)' },
+          { value: 'brief',    label: 'Brief (1-2 sentences max)' },
+          { value: 'detailed', label: 'Detailed (thorough explanations)' },
+        ]}
+      />
+
+      {/* ── NOTIFICATIONS ─────────────────────────── */}
+      <SectionHeader label="NOTIFICATIONS" />
+      <Toggle label="Performance Alerts (CPU / RAM / Battery warnings)" checked={form.notif_performance} onChange={v => set('notif_performance', v)} />
+      <Toggle label="WhatsApp notifications"                             checked={form.notif_whatsapp}    onChange={v => set('notif_whatsapp', v)} />
+      <Toggle label="Download completion alerts"                         checked={form.notif_downloads}   onChange={v => set('notif_downloads', v)} />
+
+      {/* ── PRIVACY ───────────────────────────────── */}
+      <SectionHeader label="PRIVACY" />
+      <Toggle label="Save command history to MongoDB" checked={form.command_history_enabled} onChange={v => set('command_history_enabled', v)} />
+
+      <SelectField
+        label="LOG RETENTION"
+        value={form.log_retention_days}
+        onChange={v => set('log_retention_days', Number(v))}
+        options={[
+          { value: 7,  label: '7 days' },
+          { value: 30, label: '30 days' },
+          { value: 90, label: '90 days' },
+          { value: 0,  label: 'Forever' },
+        ]}
+      />
+
       {dirty && (
-        <div style={{ padding: '8px 20px' }}>
+        <div style={{ padding: '8px 20px 16px' }}>
           <Btn label="SAVE SETTINGS" onClick={handleSave} />
+          <p style={{ color: '#1a4a5a', fontFamily: "'JetBrains Mono'", fontSize: '9px', marginTop: 6 }}>
+            Voice, AI, notifications &amp; privacy apply instantly. Wake word / clap toggles need restart.
+          </p>
         </div>
       )}
     </div>

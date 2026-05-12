@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widgetRoot"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="#FF071020"
+    android:padding="8dp">
+
+    <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:text="iZACH · PC STATUS"
+        android:textColor="#FF00e5ff" android:textSize="9sp"
+        android:fontFamily="monospace" android:letterSpacing="0.15"
+        android:layout_marginBottom="4dp" />
+
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:orientation="horizontal" android:gravity="center_vertical"
+        android:layout_marginBottom="2dp">
+        <TextView android:layout_width="36dp" android:layout_height="wrap_content"
+            android:text="CPU" android:textColor="#FF3a6070"
+            android:textSize="9sp" android:fontFamily="monospace" />
+        <ProgressBar android:id="@+id/widgetCpuBar"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="0dp" android:layout_height="6dp"
+            android:layout_weight="1" android:max="100"
+            android:progressTint="#FF00e5ff" android:progressBackgroundTint="#FF0a1628" />
+        <TextView android:id="@+id/widgetCpu"
+            android:layout_width="36dp" android:layout_height="wrap_content"
+            android:text="—" android:textColor="#FFc8e8f0"
+            android:textSize="9sp" android:fontFamily="monospace"
+            android:gravity="end" android:layout_marginStart="4dp" />
+    </LinearLayout>
+
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:orientation="horizontal" android:gravity="center_vertical"
+        android:layout_marginBottom="2dp">
+        <TextView android:layout_width="36dp" android:layout_height="wrap_content"
+            android:text="RAM" android:textColor="#FF3a6070"
+            android:textSize="9sp" android:fontFamily="monospace" />
+        <ProgressBar android:id="@+id/widgetRamBar"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="0dp" android:layout_height="6dp"
+            android:layout_weight="1" android:max="100"
+            android:progressTint="#FFffb300" android:progressBackgroundTint="#FF0a1628" />
+        <TextView android:id="@+id/widgetRam"
+            android:layout_width="36dp" android:layout_height="wrap_content"
+            android:text="—" android:textColor="#FFc8e8f0"
+            android:textSize="9sp" android:fontFamily="monospace"
+            android:gravity="end" android:layout_marginStart="4dp" />
+    </LinearLayout>
+
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:orientation="horizontal" android:gravity="center_vertical"
+        android:layout_marginBottom="8dp">
+        <TextView android:layout_width="36dp" android:layout_height="wrap_content"
+            android:text="GPU" android:textColor="#FF3a6070"
+            android:textSize="9sp" android:fontFamily="monospace" />
+        <ProgressBar android:id="@+id/widgetGpuBar"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="0dp" android:layout_height="6dp"
+            android:layout_weight="1" android:max="100"
+            android:progressTint="#FF1db954" android:progressBackgroundTint="#FF0a1628" />
+        <TextView android:id="@+id/widgetGpu"
+            android:layout_width="36dp" android:layout_height="wrap_content"
+            android:text="—" android:textColor="#FFc8e8f0"
+            android:textSize="9sp" android:fontFamily="monospace"
+            android:gravity="end" android:layout_marginStart="4dp" />
+    </LinearLayout>
+
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:orientation="horizontal" android:gravity="center_vertical"
+        android:layout_marginTop="2dp">
+        <TextView android:id="@+id/widgetWa"
+            android:layout_width="0dp" android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="WA ○" android:textColor="#FF3a6070"
+            android:textSize="9sp" android:fontFamily="monospace" />
+        <TextView android:id="@+id/widgetRefresh"
+            android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:text="↻ REFRESH"
+            android:textColor="#FF005060" android:textSize="9sp"
+            android:fontFamily="monospace" android:letterSpacing="0.05" />
+    </LinearLayout>
+
+</LinearLayout>

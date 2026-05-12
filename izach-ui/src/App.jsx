@@ -15,7 +15,7 @@ export default function App() {
     inputText, setInputText,
     isLoading, isSpeaking, liveText,
     micActive, toggleMic,
-    backendStatus, waStatus, mmaStatus,
+    backendStatus, waStatus, mmaStatus, androidDevices,
     spotifyTrack,
     cpuUsage, ramUsage, gpuUsage, procCpu, procMem,
     memoryEntries, settings,
@@ -23,6 +23,7 @@ export default function App() {
     notifications,
     faceState,
     whatsappQr,
+    calendarEvents, setCalendarEvents,
     chatBottomRef,
     send, stopSpeech,
   } = useIZACH()
@@ -96,6 +97,9 @@ export default function App() {
             spotifyTrack={spotifyTrack}
             notifications={notifications}
             whatsappQr={whatsappQr}
+            androidDevices={androidDevices}
+            calendarEvents={calendarEvents}
+            onCalendarUpdate={setCalendarEvents}
           />
         </div>
       </div>

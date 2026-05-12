@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="96dp"
+    android:orientation="vertical"
+    android:gravity="center"
+    android:padding="8dp"
+    android:layout_margin="6dp"
+    android:background="@drawable/bg_shortcut_tile">
+
+    <TextView android:id="@+id/tvLabel"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Label"
+        android:textColor="@color/cyan"
+        android:textSize="12sp"
+        android:fontFamily="monospace"
+        android:textStyle="bold"
+        android:gravity="center"
+        android:maxLines="2"
+        android:ellipsize="end" />
+
+    <TextView android:id="@+id/tvCommand"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:text="command"
+        android:textColor="@color/text_sec"
+        android:textSize="9sp"
+        android:fontFamily="monospace"
+        android:gravity="center"
+        android:maxLines="1"
+        android:ellipsize="end" />
+
+</LinearLayout>

@@ -4,11 +4,42 @@ REST API for the iZACH React/Electron UI.
 Registered onto the same Flask app as whatsapp_handler (port 5050).
 """
 
+import os
 import time
 import threading
+import uuid as _uuid
+import hashlib as _hashlib
 import psutil
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, send_from_directory
 from flask_cors import CORS
+from werkzeug.utils import secure_filename
+
+# ── Safe mode — commands requiring explicit confirmation ──────
+_DANGEROUS_CMDS = [
+    "shutdown pc", "shut down pc", "shutdown computer", "shut down computer",
+    "turn off pc", "turn off my pc", "turn off computer", "turn off my computer",
+    "restart pc", "restart my pc", "restart computer", "restart my computer",
+    "force restart", "force shutdown", "reboot",
+    "log off", "logoff", "sign out of windows",
+    "kill process", "force quit", "end task",
+]
+_pending_confirmations: dict[str, dict] = {}
+
+
+def _is_dangerous(text: str) -> bool:
+    lc = text.lower().strip()
+    return any(cmd in lc for cmd in _DANGEROUS_CMDS)
+
+def _safe_mode_on() -> bool:
+    try:
+        import json as _j
+        with open("api_keys.json") as _f:
+            return bool(_j.load(_f).get("safe_mode_enabled", True))
+    except Exception:
+        return True
+
+SHARED_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "shared")
+os.makedirs(SHARED_DIR, exist_ok=True)
 
 ui_bp = Blueprint("ui_api", __name__)
 
@@ -36,6 +67,20 @@ def register_ui_api(app, chain_fn, speak_fn, get_response_fn, spotify_handler=No
     _speak_fn    = speak_fn
     _get_resp    = get_response_fn
     _spotify_api = spotify_handler
+
+    # Start clipboard monitor once at startup
+    try:
+        from modules.clipboard_sync import start as _start_clipboard
+        _start_clipboard()
+    except Exception as _e:
+        print(f"[UI API] Clipboard monitor failed: {_e}")
+
+    # Start download monitor
+    try:
+        from modules.download_monitor import start as _start_downloads
+        _start_downloads()
+    except Exception as _e:
+        print(f"[UI API] Download monitor failed: {_e}")
 
     CORS(app, resources={r"/*": {"origins": [
         "http://localhost:5173",
@@ -83,6 +128,94 @@ def ui_command():
     except Exception:
         pass
 
+    # File-related voice command shortcuts — handled before chain
+    _lc = text.lower()
+    # Screenshot voice commands
+    if any(k in _lc for k in ("screenshot", "capture screen", "show my desktop",
+                               "capture current", "take a screenshot", "screen capture")):
+        try:
+            from modules.screenshot_engine import capture_sync
+            from modules.task_events import start as _ts, complete as _tc
+            tid = _ts("Screenshot capture")
+            filename = capture_sync()
+            if filename:
+                _tc(tid, f"Screenshot ready: {filename}")
+                reply = f"Screenshot captured. Check your phone — file: {filename}"
+                try:
+                    from modules.ws_bridge import broadcast
+                    broadcast({"type": "screenshot_ready", "filename": filename, "ts": time.strftime("%H:%M")})
+                except Exception:
+                    pass
+            else:
+                reply = "Screenshot failed. Check pyautogui is installed."
+        except Exception as _e:
+            reply = f"Screenshot error: {_e}"
+        _log_message("iZACH", reply)
+        return jsonify({"ok": True, "response": reply, "ts": time.strftime("%H:%M")})
+
+    # PC context voice commands
+    if any(k in _lc for k in ("ram", "memory usage", "cpu", "battery", "disk space",
+                               "storage left", "internet status", "wifi status",
+                               "what's running", "running apps", "where is my",
+                               "find my", "recent files", "how much storage")):
+        try:
+            from modules.pc_context import answer as _pc_answer
+            result = _pc_answer(text)
+            reply = result.get("text") or "Could not determine answer."
+        except Exception as _e:
+            reply = f"PC context error: {_e}"
+        _log_message("iZACH", reply)
+        try:
+            from modules.ws_bridge import broadcast
+            broadcast({"type": "chat", "sender": "iZACH", "text": reply, "ts": time.strftime("%H:%M")})
+        except Exception:
+            pass
+        return jsonify({"ok": True, "response": reply, "ts": time.strftime("%H:%M")})
+
+    if any(k in _lc for k in ("send file", "transfer file", "send to phone", "send me file",
+                                "send report", "send pdf", "send document")):
+        reply = "Which file? Type / in chat to browse your PC files."
+        _log_message("iZACH", reply)
+        try:
+            from modules.ws_bridge import broadcast
+            broadcast({"type": "chat", "sender": "iZACH", "text": reply,
+                       "ts": time.strftime("%H:%M"), "action": "open_file_picker"})
+        except Exception:
+            pass
+        return jsonify({"ok": True, "response": reply, "action": "open_file_picker",
+                        "ts": time.strftime("%H:%M")})
+
+    if any(k in _lc for k in ("shared files", "files on phone", "what files", "list files", "send to phone")):
+        try:
+            fnames = [f for f in sorted(os.listdir(SHARED_DIR)) if os.path.isfile(os.path.join(SHARED_DIR, f))]
+            reply = f"Shared folder: {len(fnames)} file(s) — {', '.join(fnames[-5:])}" if fnames else "Shared folder is empty. Upload files from your phone."
+        except Exception:
+            reply = "Cannot read shared folder."
+        _log_message("iZACH", reply)
+        try:
+            from modules.ws_bridge import broadcast
+            broadcast({"type": "chat", "sender": "iZACH", "text": reply, "ts": time.strftime("%H:%M")})
+        except Exception:
+            pass
+        return jsonify({"ok": True, "response": reply, "ts": time.strftime("%H:%M")})
+
+    # Safe mode — dangerous commands require confirmation
+    if _safe_mode_on() and _is_dangerous(text):
+        token = _uuid.uuid4().hex[:8]
+        _pending_confirmations[token] = {"text": text, "expires": time.time() + 30}
+        # Expire old tokens
+        now = time.time()
+        for k in list(_pending_confirmations.keys()):
+            if _pending_confirmations[k]["expires"] < now:
+                del _pending_confirmations[k]
+        return jsonify({
+            "ok": True,
+            "requires_confirmation": True,
+            "confirmation_token": token,
+            "message": f"Confirm: {text}?",
+            "ts": time.strftime("%H:%M"),
+        })
+
     try:
         if _chain_fn is None:
             return jsonify({"ok": False, "error": "Backend not initialized"}), 503
@@ -118,6 +251,10 @@ def ui_command():
 
         response_text = " ".join(captured).strip() or "Done."
         _log_message("iZACH", response_text)
+        try:
+            broadcast({"type": "chat", "sender": "iZACH", "text": response_text, "ts": time.strftime("%H:%M")})
+        except Exception:
+            pass
 
         return jsonify({
             "ok":       True,
@@ -183,19 +320,74 @@ def ui_status():
         except Exception:
             pass
 
+        android_devices = []
+        try:
+            from modules.ws_bridge import get_android_devices
+            android_devices = get_android_devices()
+        except Exception:
+            pass
+
         return jsonify({
-            "ok":           True,
-            "cpu":          round(cpu, 1),
-            "ram":          round(ram.percent, 1),
-            "ram_used_gb":  round(ram.used  / 1e9, 2),
-            "ram_total_gb": round(ram.total / 1e9, 2),
-            "proc_cpu":     proc_cpu,
-            "proc_mem":     proc_mem,
-            "gpu":          gpu,
-            "ts":           time.strftime("%H:%M:%S"),
-            "whatsapp":     wa_online,
-            "mma":          mma_online,
+            "ok":              True,
+            "cpu":             round(cpu, 1),
+            "ram":             round(ram.percent, 1),
+            "ram_used_gb":     round(ram.used  / 1e9, 2),
+            "ram_total_gb":    round(ram.total / 1e9, 2),
+            "proc_cpu":        proc_cpu,
+            "proc_mem":        proc_mem,
+            "gpu":             gpu,
+            "ts":              time.strftime("%H:%M:%S"),
+            "whatsapp":        wa_online,
+            "mma":             mma_online,
+            "android_devices": android_devices,
         })
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+# ─────────────────────────────────────────────────────────────
+# POST /spotify/control  — direct playback control (no chat pipeline)
+# body: { "action": "playpause" | "next" | "prev" }
+# ─────────────────────────────────────────────────────────────
+
+@ui_bp.route("/spotify/control", methods=["POST"])
+def spotify_control():
+    try:
+        if _spotify_api is None:
+            return jsonify({"ok": False, "error": "Spotify not initialised"}), 503
+        data   = request.get_json(silent=True) or {}
+        action = data.get("action", "")
+        if action == "playpause":
+            pb = _spotify_api.sp.current_playback() if _spotify_api.sp else None
+            if pb and pb.get("is_playing"):
+                msg = _spotify_api.pause_music()
+            else:
+                msg = _spotify_api.resume_music()
+        elif action == "next":
+            msg = _spotify_api.next_track()
+        elif action == "prev":
+            msg = _spotify_api.previous_track()
+        else:
+            return jsonify({"ok": False, "error": f"Unknown action: {action}"}), 400
+        return jsonify({"ok": True, "msg": msg})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+# ─────────────────────────────────────────────────────────────
+# POST /spotify/volume  — set playback volume (0–100)
+# body: { "volume": 75 }
+# ─────────────────────────────────────────────────────────────
+
+@ui_bp.route("/spotify/volume", methods=["POST"])
+def spotify_volume():
+    try:
+        if _spotify_api is None:
+            return jsonify({"ok": False, "error": "Spotify not initialised"}), 503
+        data = request.get_json(silent=True) or {}
+        vol  = max(0, min(100, int(data.get("volume", 50))))
+        _spotify_api.sp.volume(vol)
+        return jsonify({"ok": True})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
 
@@ -334,7 +526,13 @@ def settings_post():
             existing = {}
 
         # Only update non-key fields (never accept raw key overwrites from UI)
-        allowed = {"wake_word_enabled", "voice", "theme", "language"}
+        allowed = {
+            "wake_word_enabled", "clap_enabled", "voice", "tts_speed",
+            "response_style", "response_verbosity", "safe_mode_enabled",
+            "notif_performance", "notif_whatsapp", "notif_downloads",
+            "command_history_enabled", "log_retention_days",
+            "theme", "language",
+        }
         for k, v in incoming.items():
             if k in allowed:
                 existing[k] = v
@@ -410,6 +608,147 @@ def mongo_history():
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
 
+@ui_bp.route("/cache/sizes", methods=["GET"])
+def cache_sizes():
+    from pathlib import Path as _Path
+
+    root = _Path(__file__).parent.parent
+
+    def _dir_bytes(p):
+        total, count = 0, 0
+        try:
+            for f in (p.rglob("*") if p.is_dir() else []):
+                if f.is_file():
+                    total += f.stat().st_size
+                    count += 1
+        except Exception:
+            pass
+        return total, count
+
+    def _fmt(b):
+        if b >= 1_000_000:
+            return f"{b / 1_000_000:.1f} MB"
+        if b >= 1_000:
+            return f"{b / 1_000:.1f} KB"
+        return f"{b} B"
+
+    sizes = {}
+
+    sz, cnt = _dir_bytes(root / "temp")
+    sizes["temp"] = f"{_fmt(sz)}  ·  {cnt} files" if cnt else "empty"
+
+    sc_dir = root / "screenshots"
+    sc_files = list(sc_dir.glob("*.jpg")) if sc_dir.exists() else []
+    sc_sz = sum(f.stat().st_size for f in sc_files)
+    sizes["screenshots"] = f"{_fmt(sc_sz)}  ·  {len(sc_files)} files" if sc_files else "empty"
+
+    try:
+        from modules import realtime_data as _rd
+        sizes["realtime"] = f"{len(_rd._cache)} entries cached"
+    except Exception:
+        sizes["realtime"] = "unknown"
+
+    sizes["msglog"] = f"{len(_message_log)} messages"
+
+    try:
+        from modules.context_memory import get_context_memory
+        cm = get_context_memory()
+        sizes["context"] = f"{len(cm._history) + len(cm._entities)} entries"
+    except Exception:
+        sizes["context"] = "unknown"
+
+    sz, cnt = _dir_bytes(root / ".wwebjs_cache")
+    sizes["wwebjs_cache"] = f"{_fmt(sz)}  ·  {cnt} files" if cnt else "empty"
+
+    sp_dir = root / ".cache"
+    sp_files = [f for f in sp_dir.iterdir() if f.is_file()] if sp_dir.exists() else []
+    sp_sz = sum(f.stat().st_size for f in sp_files)
+    sizes["spotify_cache"] = f"{_fmt(sp_sz)}" if sp_files else "empty"
+
+    return jsonify({"ok": True, "sizes": sizes})
+
+
+@ui_bp.route("/cache/clear", methods=["POST"])
+def cache_clear():
+    from pathlib import Path as _Path
+
+    data = request.get_json(silent=True) or {}
+    targets = set(data.get("targets", []))
+    if not targets:
+        return jsonify({"ok": False, "error": "No targets selected"}), 400
+
+    root = _Path(__file__).parent.parent
+    cleared = []
+    errors = []
+
+    if "temp" in targets:
+        try:
+            count = sum(
+                1 for f in (root / "temp").iterdir()
+                if f.is_file() and not f.unlink(missing_ok=True)
+            )
+            cleared.append(f"temp ({count} files)")
+        except Exception as e:
+            errors.append(f"temp: {e}")
+
+    if "screenshots" in targets:
+        try:
+            count = sum(
+                1 for f in (root / "screenshots").glob("*")
+                if f.is_file() and not f.unlink(missing_ok=True)
+            )
+            cleared.append(f"screenshots ({count} files)")
+        except Exception as e:
+            errors.append(f"screenshots: {e}")
+
+    if "realtime" in targets:
+        try:
+            from modules import realtime_data as _rd
+            _rd._cache.clear()
+            cleared.append("realtime data cache")
+        except Exception as e:
+            errors.append(f"realtime: {e}")
+
+    if "msglog" in targets:
+        global _message_log
+        _message_log.clear()
+        cleared.append("message log")
+
+    if "context" in targets:
+        try:
+            from modules.context_memory import get_context_memory
+            cm = get_context_memory()
+            cm._history.clear()
+            cm._entities.clear()
+            cleared.append("context history")
+        except Exception as e:
+            errors.append(f"context: {e}")
+
+    if "wwebjs_cache" in targets:
+        try:
+            import shutil as _shutil
+            ww = root / ".wwebjs_cache"
+            if ww.exists():
+                _shutil.rmtree(ww)
+                ww.mkdir()
+            cleared.append("WhatsApp browser cache")
+        except Exception as e:
+            errors.append(f"wwebjs_cache: {e}")
+
+    if "spotify_cache" in targets:
+        try:
+            sc = root / ".cache"
+            if sc.exists():
+                for f in sc.iterdir():
+                    if f.is_file():
+                        f.unlink(missing_ok=True)
+            cleared.append("Spotify OAuth token")
+        except Exception as e:
+            errors.append(f"spotify_cache: {e}")
+
+    return jsonify({"ok": True, "cleared": cleared, "errors": errors})
+
+
 @ui_bp.route("/obsidian/sync", methods=["POST"])
 def obsidian_sync():
     try:
@@ -457,70 +796,6 @@ def vision_ask():
     
 
 # ─────────────────────────────────────────────────────────────
-# GET /vision/stream  — MJPEG stream from Python camera
-# ─────────────────────────────────────────────────────────────
-
-from flask import Response
-
-@ui_bp.route("/vision/stream")
-def vision_stream():
-    def generate():
-        import cv2
-        while True:
-            try:
-                from modules.vision_engine import get_vision_engine
-                ve = get_vision_engine()
-                if ve is None:
-                    time.sleep(0.1)
-                    continue
-                frame = ve.get_latest_frame()
-                if frame is None:
-                    time.sleep(0.1)
-                    continue
-                ret, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 70])
-                if not ret:
-                    continue
-                yield (b"--frame\r\n"
-                       b"Content-Type: image/jpeg\r\n\r\n" +
-                       buf.tobytes() + b"\r\n")
-                time.sleep(0.066)  # ~15fps
-            except Exception:
-                time.sleep(0.1)
-    return Response(generate(),
-                    mimetype="multipart/x-mixed-replace; boundary=frame")
-
-
-# ─────────────────────────────────────────────────────────────
-# GET /vision/cameras   — list available cameras + active index
-# POST /vision/camera   — { "index": N } switch active camera
-# ─────────────────────────────────────────────────────────────
-
-@ui_bp.route("/vision/cameras")
-def vision_cameras():
-    try:
-        from modules.vision_engine import get_vision_engine, list_cameras
-        ve = get_vision_engine()
-        available = (ve._available_cameras or list_cameras()) if ve else list_cameras()
-        active = ve._cam_idx if ve else 0
-        return jsonify({"ok": True, "cameras": available, "active": active})
-    except Exception as e:
-        return jsonify({"ok": False, "error": str(e)}), 500
-
-@ui_bp.route("/vision/camera", methods=["POST"])
-def vision_camera_switch():
-    try:
-        data = request.get_json(silent=True) or {}
-        idx = int(data.get("index", 0))
-        from modules.vision_engine import get_vision_engine
-        ve = get_vision_engine()
-        if ve:
-            ve.switch_camera(idx)
-        return jsonify({"ok": True, "active": idx})
-    except Exception as e:
-        return jsonify({"ok": False, "error": str(e)}), 500
-
-
-# ─────────────────────────────────────────────────────────────
 # GET /mic/devices   — list audio input devices
 # POST /mic/select   — { "index": N } switch active mic
 # ─────────────────────────────────────────────────────────────
@@ -557,35 +832,569 @@ def mic_select():
 
 
 # ─────────────────────────────────────────────────────────────
-# GET /aura          — get AURA enabled state
-# POST /aura         — { "enabled": true/false }
+# File transfer — shared folder at /shared/
+# POST /upload           — multipart file upload
+# GET  /files            — list shared files
+# GET  /download/<name>  — download file
 # ─────────────────────────────────────────────────────────────
 
-@ui_bp.route("/aura", methods=["GET"])
-def aura_get():
+@ui_bp.route("/upload", methods=["POST", "OPTIONS"])
+def ui_upload():
+    if request.method == "OPTIONS":
+        return jsonify({}), 200
+    if "file" not in request.files:
+        return jsonify({"ok": False, "error": "No file in request"}), 400
+    f = request.files["file"]
+    if not f.filename:
+        return jsonify({"ok": False, "error": "Empty filename"}), 400
+    filename = secure_filename(f.filename)
+    dest = os.path.join(SHARED_DIR, filename)
+    f.save(dest)
+    size = os.path.getsize(dest)
+    return jsonify({"ok": True, "filename": filename, "size": size})
+
+
+@ui_bp.route("/files", methods=["GET"])
+def ui_files():
     try:
-        from modules.vision_engine import is_aura_enabled
-        return jsonify({"ok": True, "enabled": is_aura_enabled()})
+        files = []
+        for name in sorted(os.listdir(SHARED_DIR)):
+            p = os.path.join(SHARED_DIR, name)
+            if os.path.isfile(p):
+                files.append({
+                    "name": name,
+                    "size": os.path.getsize(p),
+                    "modified": os.path.getmtime(p),
+                })
+        return jsonify({"ok": True, "files": files})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
 
-@ui_bp.route("/aura", methods=["POST"])
-def aura_set():
+
+@ui_bp.route("/download/<path:filename>", methods=["GET"])
+def ui_download(filename):
     try:
-        data = request.get_json(silent=True) or {}
-        enabled = bool(data.get("enabled", False))
-        from modules.vision_engine import set_aura_enabled
-        set_aura_enabled(enabled)
-        # Persist to settings
+        return send_from_directory(SHARED_DIR, filename, as_attachment=True)
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 404
+
+
+# ─────────────────────────────────────────────────────────────
+# Smart File Selector — browser for PC filesystem
+# GET /list_dirs              — predefined roots; ?path= for subdirs
+# GET /list_files?path=       — files in given directory
+# GET /fetch_file?path=       — stream file by validated absolute path
+# ─────────────────────────────────────────────────────────────
+
+_ALLOWED_ROOTS: dict | None = None
+
+def _build_roots() -> dict:
+    home = os.path.expanduser("~")
+    roots = {}
+    for label, rel in [
+        ("Desktop", "Desktop"),
+        ("Downloads", "Downloads"),
+        ("Documents", "Documents"),
+        ("Pictures", "Pictures"),
+        ("Videos", "Videos"),
+        ("Music", "Music"),
+    ]:
+        p = os.path.join(home, rel)
+        if os.path.isdir(p):
+            roots[label] = p
+    # OneDrive Desktop / Documents (common on Windows 11)
+    for od in ["OneDrive", "OneDrive - Personal"]:
+        od_path = os.path.join(home, od)
+        if os.path.isdir(od_path):
+            for label, rel in [("OneDrive Desktop", "Desktop"), ("OneDrive Documents", "Documents")]:
+                p = os.path.join(od_path, rel)
+                if os.path.isdir(p):
+                    roots[label] = p
+    roots["Shared (iZACH)"] = SHARED_DIR
+    return roots
+
+def _get_roots() -> dict:
+    global _ALLOWED_ROOTS
+    if _ALLOWED_ROOTS is None:
+        _ALLOWED_ROOTS = _build_roots()
+    return _ALLOWED_ROOTS
+
+def _validate_path(path: str) -> str | None:
+    """Return realpath if within allowed roots, else None."""
+    try:
+        real = os.path.realpath(path)
+        for root in _get_roots().values():
+            if real.startswith(os.path.realpath(root)):
+                return real
+    except Exception:
+        pass
+    return None
+
+
+@ui_bp.route("/list_dirs", methods=["GET"])
+def ui_list_dirs():
+    path = request.args.get("path", "").strip()
+    if not path:
+        roots = _get_roots()
+        return jsonify({"ok": True, "entries": [
+            {"name": k, "path": v, "is_dir": True}
+            for k, v in roots.items() if os.path.isdir(v)
+        ]})
+    safe = _validate_path(path)
+    if not safe:
+        return jsonify({"ok": False, "error": "Access denied"}), 403
+    try:
+        entries = []
+        for name in sorted(os.listdir(safe)):
+            if name.startswith("."):
+                continue
+            full = os.path.join(safe, name)
+            if os.path.isdir(full):
+                entries.append({"name": name, "path": full, "is_dir": True})
+        return jsonify({"ok": True, "entries": entries})
+    except PermissionError:
+        return jsonify({"ok": False, "error": "Permission denied"}), 403
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@ui_bp.route("/list_files", methods=["GET"])
+def ui_list_files():
+    path = request.args.get("path", "").strip()
+    if not path:
+        return jsonify({"ok": False, "error": "path required"}), 400
+    safe = _validate_path(path)
+    if not safe:
+        return jsonify({"ok": False, "error": "Access denied"}), 403
+    try:
+        entries = []
+        for name in sorted(os.listdir(safe)):
+            if name.startswith("."):
+                continue
+            full = os.path.join(safe, name)
+            if os.path.isfile(full):
+                entries.append({
+                    "name": name,
+                    "path": full,
+                    "is_dir": False,
+                    "size": os.path.getsize(full),
+                })
+        return jsonify({"ok": True, "entries": entries})
+    except PermissionError:
+        return jsonify({"ok": False, "error": "Permission denied"}), 403
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@ui_bp.route("/fetch_file", methods=["GET"])
+def ui_fetch_file():
+    path = request.args.get("path", "").strip()
+    if not path:
+        return jsonify({"ok": False, "error": "path required"}), 400
+    safe = _validate_path(path)
+    if not safe or not os.path.isfile(safe):
+        return jsonify({"ok": False, "error": "Access denied or not found"}), 403
+    return send_from_directory(os.path.dirname(safe), os.path.basename(safe), as_attachment=True)
+
+
+# ─────────────────────────────────────────────────────────────
+# Screenshot
+# POST /screenshot/capture   — take screenshot now
+# GET  /screenshot/latest    — latest screenshot metadata
+# GET  /screenshot/image/<f> — serve screenshot JPEG
+# ─────────────────────────────────────────────────────────────
+
+@ui_bp.route("/screenshot/capture", methods=["POST", "OPTIONS"])
+def screenshot_capture():
+    if request.method == "OPTIONS":
+        return jsonify({}), 200
+    try:
+        from modules.screenshot_engine import capture_sync
+        filename = capture_sync()
+        if not filename:
+            return jsonify({"ok": False, "error": "Capture failed"}), 500
         try:
-            import json as _j
-            with open(SETTINGS_FILE) as f:
-                cfg = _j.load(f)
-            cfg["aura_enabled"] = enabled
-            with open(SETTINGS_FILE, "w") as f:
-                _j.dump(cfg, f, indent=2)
+            from modules.ws_bridge import broadcast
+            broadcast({"type": "screenshot_ready", "filename": filename, "ts": time.strftime("%H:%M")})
         except Exception:
             pass
-        return jsonify({"ok": True, "enabled": enabled})
+        return jsonify({"ok": True, "filename": filename})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@ui_bp.route("/screenshot/latest", methods=["GET"])
+def screenshot_latest():
+    try:
+        from modules.screenshot_engine import latest
+        f = latest()
+        if not f:
+            return jsonify({"ok": False, "error": "No screenshots"}), 404
+        return jsonify({"ok": True, "filename": f})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@ui_bp.route("/screenshot/image/<path:filename>", methods=["GET"])
+def screenshot_image(filename):
+    try:
+        from modules.screenshot_engine import get_dir
+        return send_from_directory(str(get_dir()), filename)
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 404
+
+
+# ─────────────────────────────────────────────────────────────
+# PC Context
+# GET /pc/info?q=<query>  — answer natural language PC questions
+# ─────────────────────────────────────────────────────────────
+
+@ui_bp.route("/pc/info", methods=["GET"])
+def pc_info():
+    q = request.args.get("q", "").strip()
+    if not q:
+        return jsonify({"ok": False, "error": "q required"}), 400
+    try:
+        from modules.pc_context import answer
+        result = answer(q)
+        return jsonify({"ok": True, **result})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+# ─────────────────────────────────────────────────────────────
+# Clipboard
+# GET  /clipboard         — get current PC clipboard
+# POST /clipboard         — set PC clipboard from phone
+# GET  /clipboard/history — last 10 entries
+# ─────────────────────────────────────────────────────────────
+
+@ui_bp.route("/clipboard", methods=["GET"])
+def clipboard_get():
+    try:
+        from modules.clipboard_sync import get
+        return jsonify({"ok": True, "text": get()})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@ui_bp.route("/clipboard", methods=["POST"])
+def clipboard_set():
+    data = request.get_json(silent=True) or {}
+    text = data.get("text", "")
+    if not text:
+        return jsonify({"ok": False, "error": "text required"}), 400
+    try:
+        from modules.clipboard_sync import set_from_phone
+        set_from_phone(text)
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@ui_bp.route("/clipboard/history", methods=["GET"])
+def clipboard_history():
+    try:
+        from modules.clipboard_sync import history
+        return jsonify({"ok": True, "entries": history()})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+# ─────────────────────────────────────────────────────────────
+# Task Events
+# GET /tasks  — current task list
+# ─────────────────────────────────────────────────────────────
+
+@ui_bp.route("/tasks", methods=["GET"])
+def get_tasks():
+    try:
+        from modules.task_events import all_tasks
+        return jsonify({"ok": True, "tasks": all_tasks()})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+# ─────────────────────────────────────────────────────────────
+# POST /quick_action  — instant PC control, no AI parsing
+# body: { "action": "lock_pc|screenshot|volume_up|volume_down|
+#                    mute|play_pause|next_track|prev_track" }
+# ─────────────────────────────────────────────────────────────
+
+@ui_bp.route("/quick_action", methods=["POST"])
+def quick_action():
+    data = request.get_json(silent=True) or {}
+    action = data.get("action", "").strip()
+    if not action:
+        return jsonify({"ok": False, "error": "action required"}), 400
+    try:
+        if action == "lock_pc":
+            import ctypes
+            ctypes.windll.user32.LockWorkStation()
+            return jsonify({"ok": True, "msg": "PC locked"})
+
+        if action == "screenshot":
+            from modules.screenshot_engine import capture_sync
+            from modules.ws_bridge import broadcast
+            filename = capture_sync()
+            if filename:
+                broadcast({"type": "screenshot_ready", "filename": filename, "ts": time.strftime("%H:%M")})
+                return jsonify({"ok": True, "msg": f"Screenshot: {filename}", "filename": filename})
+            return jsonify({"ok": False, "error": "Capture failed"}), 500
+
+        # Media / volume keys via pynput
+        from pynput.keyboard import Key, Controller as _KC
+        _kb = _KC()
+        _KEY_MAP = {
+            "volume_up":    Key.media_volume_up,
+            "volume_down":  Key.media_volume_down,
+            "mute":         Key.media_volume_mute,
+            "play_pause":   Key.media_play_pause,
+            "next_track":   Key.media_next,
+            "prev_track":   Key.media_previous,
+        }
+        if action in _KEY_MAP:
+            k = _KEY_MAP[action]
+            _kb.press(k)
+            _kb.release(k)
+            return jsonify({"ok": True, "msg": action.replace("_", " ").title()})
+
+        return jsonify({"ok": False, "error": f"Unknown action: {action}"}), 400
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+# ─────────────────────────────────────────────────────────────
+# GET /file_preview?path=  — lightweight file metadata + thumbnail
+# ─────────────────────────────────────────────────────────────
+
+@ui_bp.route("/file_preview", methods=["GET"])
+def file_preview():
+    path = request.args.get("path", "").strip()
+    if not path:
+        return jsonify({"ok": False, "error": "path required"}), 400
+    safe = _validate_path(path)
+    if not safe or not os.path.isfile(safe):
+        return jsonify({"ok": False, "error": "Access denied or not found"}), 403
+    try:
+        st = os.stat(safe)
+        name = os.path.basename(safe)
+        ext = os.path.splitext(name)[1].lower().lstrip(".")
+        size = st.st_size
+        modified = time.strftime("%Y-%m-%d %H:%M", time.localtime(st.st_mtime))
+
+        if size >= 1_000_000_000:
+            size_str = f"{size / 1_000_000_000:.1f} GB"
+        elif size >= 1_000_000:
+            size_str = f"{size / 1_000_000:.1f} MB"
+        elif size >= 1_000:
+            size_str = f"{size / 1_000:.1f} KB"
+        else:
+            size_str = f"{size} B"
+
+        IMAGE_EXTS = {"jpg", "jpeg", "png", "gif", "bmp", "webp"}
+        is_image = ext in IMAGE_EXTS
+        thumbnail = None
+
+        if is_image and size < 50_000_000:
+            try:
+                from PIL import Image
+                import io, base64 as _b64
+                with Image.open(safe) as img:
+                    img.thumbnail((200, 200), Image.LANCZOS)
+                    if img.mode in ("RGBA", "P"):
+                        img = img.convert("RGB")
+                    buf = io.BytesIO()
+                    img.save(buf, format="JPEG", quality=60)
+                    thumbnail = _b64.b64encode(buf.getvalue()).decode()
+            except Exception:
+                pass
+
+        return jsonify({
+            "ok": True,
+            "name": name,
+            "ext": ext,
+            "size": size,
+            "size_str": size_str,
+            "modified": modified,
+            "is_image": is_image,
+            "thumbnail": thumbnail,
+        })
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+# ─────────────────────────────────────────────────────────────
+# GET /downloads/active  — currently tracked downloads
+# ─────────────────────────────────────────────────────────────
+
+@ui_bp.route("/downloads/active", methods=["GET"])
+def downloads_active():
+    try:
+        from modules.download_monitor import active
+        return jsonify({"ok": True, "downloads": active()})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+# ─────────────────────────────────────────────────────────────
+# POST /confirm_command  — execute a safe-mode pending command
+# body: { "token": "abc12345" }
+# ─────────────────────────────────────────────────────────────
+
+@ui_bp.route("/confirm_command", methods=["POST"])
+def confirm_command():
+    data = request.get_json(silent=True) or {}
+    token = data.get("token", "").strip()
+    pending = _pending_confirmations.pop(token, None)
+    if not pending:
+        return jsonify({"ok": False, "error": "Invalid or expired token"}), 400
+    if time.time() > pending["expires"]:
+        return jsonify({"ok": False, "error": "Token expired"}), 400
+
+    text = pending["text"]
+    _log_message("YOU", f"[CONFIRMED] {text}")
+
+    try:
+        captured = []
+
+        def _capture_speak(msg, **kwargs):
+            if msg and msg.strip():
+                import re as _re
+                clean = _re.sub(r'<[^>]+>', '', msg).strip()
+                clean = _re.sub(r'^\[TONE:[^\]]+\]', '', clean).strip()
+                if clean:
+                    captured.append(clean)
+
+        chain_obj = getattr(_chain_fn, '__self__', None)
+        original_speak = None
+        if chain_obj and hasattr(chain_obj, 'speak'):
+            original_speak = chain_obj.speak
+            chain_obj.speak = _capture_speak
+
+        if _chain_fn:
+            _chain_fn(text)
+
+        if chain_obj and original_speak is not None:
+            chain_obj.speak = original_speak
+
+        response_text = " ".join(captured).strip() or "Done."
+        _log_message("iZACH", response_text)
+
+        from modules.ws_bridge import broadcast
+        broadcast({"type": "chat", "sender": "iZACH", "text": response_text, "ts": time.strftime("%H:%M")})
+
+        return jsonify({"ok": True, "response": response_text, "ts": time.strftime("%H:%M")})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+# ─────────────────────────────────────────────────────────────
+# GET /connect/qr  — QR code encoding backend URL + WS host for Android app
+# ─────────────────────────────────────────────────────────────
+
+@ui_bp.route("/connect/qr", methods=["GET"])
+def connect_qr():
+    import socket as _socket, json as _json2, io as _io, base64 as _b64
+    import qrcode as _qr
+    try:
+        _s = _socket.socket(_socket.AF_INET, _socket.SOCK_DGRAM)
+        _s.connect(("8.8.8.8", 80))
+        ip = _s.getsockname()[0]
+        _s.close()
+    except Exception:
+        ip = "127.0.0.1"
+    payload = _json2.dumps({"backend_url": f"http://{ip}:5050", "ws_host": ip})
+    _qr_img = _qr.QRCode(version=1, box_size=8, border=3)
+    _qr_img.add_data(payload)
+    _qr_img.make(fit=True)
+    img = _qr_img.make_image(fill_color="black", back_color="white")
+    buf = _io.BytesIO()
+    img.save(buf, format="PNG")
+    b64 = _b64.b64encode(buf.getvalue()).decode()
+    return jsonify({"ok": True, "qr_base64": b64, "backend_url": f"http://{ip}:5050", "ws_host": ip})
+
+
+# ─────────────────────────────────────────────────────────────
+# GET /notifications/history  — recent push notifications
+# ─────────────────────────────────────────────────────────────
+
+@ui_bp.route("/notifications/history", methods=["GET"])
+def notifications_history():
+    try:
+        from modules.notification_system import history
+        return jsonify({"ok": True, "notifications": history()})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+# ── Calendar API ──────────────────────────────────────────────
+
+@ui_bp.route("/calendar/events", methods=["GET"])
+def calendar_events():
+    try:
+        from modules.calendar_agent import get_3day_events
+        events = get_3day_events()
+        return jsonify({"ok": True, "events": events})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@ui_bp.route("/calendar/events/<event_id>", methods=["PUT"])
+def calendar_update_event(event_id):
+    data = request.json or {}
+    try:
+        from modules.calendar_agent import update_event
+        ok = update_event(
+            calendar_event_id=event_id,
+            title=data.get("title"),
+            date_str=data.get("date"),
+            time_str=data.get("time"),
+            link=data.get("link"),
+        )
+        return jsonify({"ok": ok})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@ui_bp.route("/calendar/events/<event_id>", methods=["DELETE"])
+def calendar_delete_event(event_id):
+    try:
+        from modules.calendar_agent import cancel_event
+        ok = cancel_event(event_id)
+        return jsonify({"ok": ok})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+# ── Face Auth ─────────────────────────────────────────────────
+
+@ui_bp.route("/face/status", methods=["GET"])
+def face_status():
+    try:
+        from modules.face_auth import is_enrolled
+        return jsonify({"enrolled": is_enrolled()})
+    except Exception as e:
+        return jsonify({"enrolled": False, "error": str(e)}), 500
+
+
+@ui_bp.route("/face/enroll", methods=["POST"])
+def face_enroll():
+    try:
+        from modules import face_auth
+        if not face_auth._speak_func:
+            return jsonify({"ok": False, "error": "face_auth not initialized"}), 500
+        face_auth.enroll_owner()
+        return jsonify({"ok": True, "message": "Enrollment started. Look at the camera."})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@ui_bp.route("/face/delete", methods=["DELETE"])
+def face_delete():
+    try:
+        from modules.face_auth import delete_face_data
+        ok = delete_face_data()
+        return jsonify({"ok": ok})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500

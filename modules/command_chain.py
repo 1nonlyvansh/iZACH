@@ -32,7 +32,7 @@ from rapidfuzz import process, fuzz
 from modules.automation import open_app, play_specific_youtube
 from modules.intent_router import IntentRouter
 from modules.state_engine import state
-import modules.vision as vision
+import modules.camera_vision as vision
 from modules import system_control
 
 
@@ -193,11 +193,43 @@ Output format:
 
             # Web automation (before system control to intercept "open X")
             _WEB_AUTOMATION_TRIGGERS = [
+                # navigate
                 "open youtube", "open google", "open github", "open gmail", "open reddit",
-                "open website", "go to",
+                "open instagram", "open linkedin", "open twitter", "open netflix",
+                "open amazon", "open flipkart", "open website", "go to",
+                # search
                 "search on google", "google search", "look up on google",
-                "fill form", "autofill", "fill the form", "fill this form", "fill these details", "fill my details", "fill this for me", "fill details",
-                "feel this form", "feel these details", "feel this details", "feel the form", "feel my details",
+                # summarize
+                "summarize this page", "summarize page", "what does this page say",
+                "what's on this page", "read this page", "explain this page",
+                "summarize this website", "what does this website say",
+                # click
+                "click on", "click the", "press the button", "press button",
+                # scroll
+                "scroll down", "scroll up", "scroll to top", "scroll to bottom",
+                "scroll back up", "scroll back down",
+                # tabs
+                "open new tab", "new tab", "close tab", "close this tab",
+                "switch tab", "next tab", "previous tab", "switch to tab",
+                "list tabs", "show tabs", "what tabs",
+                # youtube
+                "play on youtube", "youtube play", "search youtube for",
+                "find on youtube", "open youtube and play",
+                # news
+                "what's in the news", "latest news", "read news",
+                "today's news", "news headlines", "what's happening",
+                "tell me the news", "any news",
+                # price
+                "check price of", "price of", "how much is", "how much does",
+                "find price", "what's the price", "price check",
+                # login
+                "log in to", "login to", "sign in to", "log into",
+                "auto login", "login automatically",
+                # form / email (existing)
+                "fill form", "autofill", "fill the form", "fill this form",
+                "fill these details", "fill my details", "fill this for me", "fill details",
+                "feel this form", "feel these details", "feel this details",
+                "feel the form", "feel my details",
                 "extract emails", "find emails", "scrape emails",
             ]
             if any(t in resolved_cmd for t in _WEB_AUTOMATION_TRIGGERS):
@@ -242,7 +274,28 @@ Output format:
                 "copy file", "copy the file", "copy my file",
                 "how many files", "folder stats", "folder size", "how much space",
             ]
-            if "playlist" in resolved_cmd or resolved_cmd.startswith("open ") or any(t in resolved_cmd for t in _SYSTEM_CONTROL_TRIGGERS) or any(m in resolved_cmd for m in _FILE_FAST_PATH + ["what am i holding", "what's in my hand", "what do you see", "look at this", "what is this", "identify this", "what's this", "how many calories", "what food is this", "scan this", "describe what you see", "what can you see", "look at camera", "work mode", "focus mode", "gym mode", "idle mode", "switch to work", "switch to focus", "switch to gym", "switch to idle", "click on", "click the", "read the screen", "what's on screen", "read screen", "remember that", "remember this", "what do you remember", "forget that", "reply to", "reply her", "reply him", "what did he say", "what did she say", "bitcoin", "ethereum", "crypto", "btc price", "eth price", "dogecoin", "solana", "crypto rate", "enroll my face", "register my face", "add my face", "save my face"]):
+            _ROUTINE_TRIGGERS = [
+                "yes automate", "automate it", "yes automate it", "yeah automate",
+                "no skip", "no don't automate", "skip it", "don't automate", "no automate",
+                "show my routines", "list routines", "what routines", "my routines",
+                "delete routine", "remove routine",
+            ]
+            if any(t in resolved_cmd for t in _ROUTINE_TRIGGERS):
+                self._handle_routine_command(resolved_cmd)
+                continue
+
+            _CALENDAR_TRIGGERS = [
+                "cancel my", "cancelled", "cancel the", "remove from calendar", "delete from calendar",
+                "reschedule", "rescheduled", "instead of", "moved to", "change the time",
+                "change time", "now at", "meeting at", "class at", "gym at", "session at",
+                "what's on my calendar", "what's in my calendar", "my schedule", "show my events",
+                "what events", "upcoming events", "add to calendar", "add event",
+            ]
+            if any(t in resolved_cmd for t in _CALENDAR_TRIGGERS):
+                self._handle_calendar_voice_command(resolved_cmd)
+                continue
+
+            if "playlist" in resolved_cmd or resolved_cmd.startswith("open ") or any(t in resolved_cmd for t in _SYSTEM_CONTROL_TRIGGERS) or any(m in resolved_cmd for m in _FILE_FAST_PATH + ["screenshot", "capture screen", "take a screenshot", "screen capture", "what am i holding", "what's in my hand", "what do you see", "look at this", "what is this", "identify this", "what's this", "how many calories", "what food is this", "scan this", "describe what you see", "what can you see", "look at camera", "work mode", "focus mode", "gym mode", "idle mode", "switch to work", "switch to focus", "switch to gym", "switch to idle", "click on", "click the", "read the screen", "what's on screen", "read screen", "remember that", "remember this", "what do you remember", "forget that", "reply to", "reply her", "reply him", "what did he say", "what did she say", "bitcoin", "ethereum", "crypto", "btc price", "eth price", "dogecoin", "solana", "crypto rate"]):
                 self._classify_and_execute(resolved_cmd)
                 continue
 
@@ -298,6 +351,131 @@ Output format:
         import threading
         from modules import web_automation
 
+        def _bg(fn, *args, announce=None):
+            if announce:
+                self.speak(announce)
+            def _run():
+                ok, msg = fn(*args)
+                if not ok or announce is None:
+                    self.speak(msg)
+            threading.Thread(target=_run, daemon=True).start()
+
+        # ── Summarize page ─────────────────────────────────────
+        if any(t in cmd for t in [
+            "summarize this page", "summarize page", "what does this page say",
+            "what's on this page", "read this page", "explain this page",
+            "summarize this website", "what does this website say",
+        ]):
+            _bg(web_automation.summarize_page, announce="Reading the page.")
+            return
+
+        # ── Click element ──────────────────────────────────────
+        if any(t in cmd for t in ["click on", "click the", "press the button", "press button"]):
+            target = cmd
+            for phrase in ["click on", "click the", "click", "press the button", "press button", "press"]:
+                target = target.replace(phrase, "").strip()
+            if not target:
+                self.speak("What should I click?")
+                return
+            _bg(web_automation.click_element, target, announce=f"Clicking {target}.")
+            return
+
+        # ── Scroll ─────────────────────────────────────────────
+        if any(t in cmd for t in ["scroll down", "scroll up", "scroll to top",
+                                   "scroll to bottom", "scroll back"]):
+            if "bottom" in cmd:
+                direction = "bottom"
+            elif "top" in cmd:
+                direction = "top"
+            elif "up" in cmd or "back up" in cmd:
+                direction = "up"
+            else:
+                direction = "down"
+            _bg(web_automation.scroll, direction)
+            return
+
+        # ── Tab management ─────────────────────────────────────
+        if any(t in cmd for t in ["list tabs", "show tabs", "what tabs"]):
+            _, msg = web_automation.list_tabs()
+            self.speak(msg)
+            return
+
+        if any(t in cmd for t in ["open new tab", "new tab"]):
+            url = cmd
+            for phrase in ["open new tab", "new tab", "open"]:
+                url = url.replace(phrase, "").strip()
+            _bg(web_automation.new_tab, url or None, announce="Opening new tab.")
+            return
+
+        if any(t in cmd for t in ["close tab", "close this tab"]):
+            _bg(web_automation.close_tab)
+            return
+
+        if any(t in cmd for t in ["switch tab", "next tab", "previous tab", "switch to tab"]):
+            if "next" in cmd:
+                hint = "next"
+            elif "previous" in cmd or "prev" in cmd or "back" in cmd:
+                hint = "prev"
+            else:
+                hint = cmd
+                for phrase in ["switch to tab", "switch to", "switch tab", "switch"]:
+                    hint = hint.replace(phrase, "").strip()
+                hint = hint or "next"
+            _bg(web_automation.switch_tab, hint)
+            return
+
+        # ── YouTube autoplay ───────────────────────────────────
+        if any(t in cmd for t in [
+            "play on youtube", "youtube play", "search youtube for",
+            "find on youtube", "open youtube and play",
+        ]):
+            query = cmd
+            for phrase in ["open youtube and play", "play on youtube", "youtube play",
+                           "search youtube for", "find on youtube", "youtube"]:
+                query = query.replace(phrase, "").strip()
+            if not query:
+                self.speak("What should I play on YouTube?")
+                return
+            _bg(web_automation.youtube_play, query, announce=f"Finding {query} on YouTube.")
+            return
+
+        # ── News ───────────────────────────────────────────────
+        if any(t in cmd for t in [
+            "what's in the news", "latest news", "read news",
+            "today's news", "news headlines", "what's happening",
+            "tell me the news", "any news",
+        ]):
+            topic = cmd
+            for phrase in ["what's in the news", "latest news", "read news", "today's news",
+                           "news headlines", "what's happening", "tell me the news",
+                           "any news", "about", "on"]:
+                topic = topic.replace(phrase, "").strip()
+            _bg(web_automation.get_news, topic, announce="Fetching the latest news.")
+            return
+
+        # ── Price lookup ───────────────────────────────────────
+        if any(t in cmd for t in [
+            "check price of", "price of", "how much is", "how much does",
+            "find price", "what's the price", "price check",
+        ]):
+            product = cmd
+            for phrase in ["check price of", "price of", "how much is", "how much does",
+                           "find price of", "find price", "what's the price of",
+                           "what's the price", "price check for", "price check"]:
+                product = product.replace(phrase, "").strip()
+            if not product:
+                self.speak("What product should I check the price of?")
+                return
+            _bg(web_automation.lookup_price, product, announce=f"Checking price of {product}.")
+            return
+
+        # ── Login ──────────────────────────────────────────────
+        if any(t in cmd for t in ["log in to", "login to", "sign in to",
+                                   "log into", "auto login", "login automatically"]):
+            _bg(web_automation.login_to_site, announce="Attempting auto login.")
+            return
+
+        # ── Google search ──────────────────────────────────────
         if any(t in cmd for t in ["search on google", "google search", "look up on google"]):
             query = cmd
             for t in ["search on google", "look up on google", "google search"]:
@@ -305,18 +483,21 @@ Output format:
             if not query:
                 self.speak("What should I search for?")
                 return
-            self.speak(f"Searching for {query}.")
-            def _do_search(q=query):
-                ok, msg = web_automation.search_google(q)
-                if not ok:
-                    self.speak(msg)
-            threading.Thread(target=_do_search, daemon=True).start()
+            _bg(web_automation.search_google, query, announce=f"Searching for {query}.")
             return
 
-        if any(t in cmd for t in ["open youtube", "open google", "open github", "open gmail", "open reddit", "open website", "go to"]):
+        # ── Open website ───────────────────────────────────────
+        if any(t in cmd for t in ["open youtube", "open google", "open github", "open gmail",
+                                   "open reddit", "open instagram", "open linkedin", "open twitter",
+                                   "open netflix", "open amazon", "open flipkart",
+                                   "open website", "go to"]):
             target = cmd
-            for phrase in sorted(["go to", "open website", "open youtube", "open google",
-                                   "open github", "open gmail", "open reddit", "open"], key=len, reverse=True):
+            for phrase in sorted(
+                ["go to", "open website", "open youtube", "open google", "open github",
+                 "open gmail", "open reddit", "open instagram", "open linkedin",
+                 "open twitter", "open netflix", "open amazon", "open flipkart", "open"],
+                key=len, reverse=True,
+            ):
                 target = target.replace(phrase, "").strip()
             if not target:
                 for name in web_automation._SHORTNAMES:
@@ -326,16 +507,16 @@ Output format:
             if not target:
                 self.speak("Which website?")
                 return
-            self.speak(f"Opening {target}.")
-            def _do_open(t=target):
-                ok, msg = web_automation.open_website(t)
-                if not ok:
-                    self.speak(msg)
-            threading.Thread(target=_do_open, daemon=True).start()
+            _bg(web_automation.open_website, target, announce=f"Opening {target}.")
             return
 
-        if any(t in cmd for t in ["fill form", "autofill", "fill the form", "fill this form", "fill these details", "fill my details", "fill this for me", "fill details",
-                                  "feel this form", "feel these details", "feel this details", "feel the form", "feel my details"]):
+        # ── Form fill ──────────────────────────────────────────
+        if any(t in cmd for t in [
+            "fill form", "autofill", "fill the form", "fill this form",
+            "fill these details", "fill my details", "fill this for me", "fill details",
+            "feel this form", "feel these details", "feel this details",
+            "feel the form", "feel my details",
+        ]):
             from modules.ws_bridge import broadcast, has_extension_client
             from modules.memory import load_memory
             try:
@@ -348,17 +529,14 @@ Output format:
                     return
                 profile = {k: (v["value"] if isinstance(v, dict) else str(v)) for k, v in raw.items()}
                 broadcast({"type": "fill_form", "data": profile})
-                self.speak("Filling form. I'll tell you how many fields I got.")
+                self.speak("Filling form.")
             except Exception as e:
                 self.speak(f"Could not fill form: {e}")
             return
 
+        # ── Extract emails ─────────────────────────────────────
         if any(t in cmd for t in ["extract emails", "find emails", "scrape emails"]):
-            self.speak("Scanning page for emails.")
-            def _do_email():
-                _, msg = web_automation.extract_emails()
-                self.speak(msg)
-            threading.Thread(target=_do_email, daemon=True).start()
+            _bg(web_automation.extract_emails, announce="Scanning page for emails.")
             return
 
     def _resolve_disambiguation(self, cmd: str) -> bool:
@@ -397,43 +575,230 @@ Output format:
             ok, msg = fm.handle_by_type(chosen)
             self.speak(f"Opening {fname}." if ok else f"Couldn't open {fname}: {msg}")
         elif action == "delete":
-            # Re-run face auth for deletion on chosen file
-            self._delete_with_face_auth(chosen)
+            from modules.file_manager import get_file_manager
+            fm = get_file_manager()
+            fm.set_speak(self.speak)
+            ok, msg = fm.delete_verified(chosen)
+            self.speak(msg)
         return True
 
-    def _delete_with_face_auth(self, path: str):
-        import os as _os
-        from modules.file_manager import get_file_manager
-        from modules.vision_engine import get_vision_engine
-        fm = get_file_manager()
-        fm.set_speak(self.speak)
-        ve = get_vision_engine()
-        if ve is None:
-            self.speak("Camera offline. Delete blocked.")
+    def _delete_with_face_auth(self, filepath: str):
+        """Verify owner identity then delete file."""
+        import threading
+        from modules import face_auth
+
+        if not face_auth.is_enrolled():
+            self.speak("Face auth not set up. Say 'enroll my face' first, then try deleting again.")
             return
-        encodings, _ = ve._face_db.get_all_encodings()
-        if not encodings:
-            self.speak("No face enrolled. Say 'enroll my face' first.")
+
+        self.speak("Look at the camera to confirm deletion.")
+
+        def _run():
+            verified = face_auth.verify_owner()
+            if verified:
+                try:
+                    import os as _os
+                    name = _os.path.basename(filepath)
+                    _os.remove(filepath)
+                    self.speak(f"Identity confirmed. Deleted {name}.")
+                except Exception as e:
+                    self.speak(f"Verified but delete failed: {e}")
+            else:
+                self.speak("Face not recognized. Deletion cancelled.")
+
+        threading.Thread(target=_run, daemon=True).start()
+
+    def _handle_routine_command(self, cmd: str):
+        from modules.pattern_learner import (
+            confirm_suggestion, reject_suggestion,
+            get_pending_suggestion, list_routines, delete_routine,
+        )
+
+        # Confirm
+        if any(w in cmd for w in ["yes automate", "automate it", "yeah automate"]):
+            pending = get_pending_suggestion()
+            if not pending:
+                self.speak("No pending automation suggestion right now.")
+                return
+            ok = confirm_suggestion()
+            if ok:
+                self.speak(f"Done. I'll run '{pending.get('example_cmd', 'that command')}' automatically from now on.")
             return
+
+        # Reject
+        if any(w in cmd for w in ["no skip", "skip it", "don't automate", "no automate", "no don't"]):
+            pending = get_pending_suggestion()
+            reject_suggestion()
+            self.speak("Got it. I won't suggest that again.")
+            return
+
+        # List routines
+        if any(w in cmd for w in ["show my routines", "list routines", "what routines", "my routines"]):
+            routines = list_routines()
+            if not routines:
+                self.speak("No automated routines set up yet.")
+                return
+            parts = [r.get("cmd", "")[:40] for r in routines[:5]]
+            self.speak(f"You have {len(routines)} automated routines: {', then '.join(parts)}.")
+            return
+
+        # Delete routine
+        if any(w in cmd for w in ["delete routine", "remove routine"]):
+            routines = list_routines()
+            if not routines:
+                self.speak("No routines to delete.")
+                return
+            # find matching by keyword in cmd
+            for r in routines:
+                if any(word in cmd for word in r.get("cmd", "").lower().split()[:3]):
+                    delete_routine(r["id"])
+                    self.speak(f"Removed routine: {r.get('cmd', '')[:40]}.")
+                    return
+            self.speak("Couldn't find that routine. Say 'list routines' to see them.")
+
+    def _handle_calendar_voice_command(self, cmd: str):
+        """
+        Handle voice commands like:
+        - "tomorrow gym session is cancelled"
+        - "meeting is at 7pm instead of 6pm"
+        - "what's on my calendar"
+        - "add event gym tomorrow 10am"
+        """
+        import json as _json
+        from datetime import datetime as _dt
+        from zoneinfo import ZoneInfo as _ZI
+        IST = _ZI("Asia/Kolkata")
+        today = _dt.now(tz=IST).strftime("%Y-%m-%d")
+        today_name = _dt.now(tz=IST).strftime("%A, %d %B %Y")
+
+        # Read events query
+        if any(w in cmd for w in ["what's on my calendar", "my schedule", "show my events", "what events", "upcoming events"]):
+            try:
+                from modules.calendar_agent import get_3day_events, format_event_for_speech, get_upcoming_events
+                events = get_upcoming_events(hours=72)
+                if not events:
+                    self.speak("Nothing on your calendar for the next 3 days.")
+                else:
+                    parts = [format_event_for_speech(e) for e in events[:5]]
+                    self.speak("Coming up: " + ", then ".join(parts) + ".")
+            except Exception as _e:
+                self.speak(f"Couldn't read calendar: {_e}")
+            return
+
+        # Use Groq to parse cancel/reschedule/add intent
+        prompt = f"""You are a calendar command parser for a voice assistant.
+Parse this voice command and return JSON.
+
+Today is: {today_name} ({today})
+Command: "{cmd}"
+
+Return ONLY a JSON object:
+{{
+  "action": "cancel|reschedule|add|unknown",
+  "event_title_hint": "what event is being referred to, in English",
+  "original_date": "YYYY-MM-DD or null",
+  "original_time": "HH:MM or null",
+  "new_date": "YYYY-MM-DD or null",
+  "new_time": "HH:MM in 24h or null",
+  "link": "URL or null"
+}}
+
+Rules:
+- "tomorrow" = date after {today}
+- "cancelled", "is cancelled", "cancel" = action: cancel
+- "instead of", "moved to", "now at", "at X instead", "rescheduled" = action: reschedule
+- "add", "schedule", "put on calendar" = action: add
+- For reschedule: original_time = OLD time, new_time = NEW time
+- "7pm" = 19:00, "3pm" = 15:00, "10am" = 10:00, "7 baje" = 07:00 or 19:00 (use context)
+
+Return ONLY JSON."""
+
         try:
-            from modules.ws_bridge import broadcast as _bcast
-            _bcast({"type": "face_verify", "state": "scanning"})
-        except Exception:
-            pass
-        self.speak("Admin level authentication required. Stare at the camera for face verification.")
-        time.sleep(3)
-        verified = ve.verify_face("vansh")
-        try:
-            from modules.ws_bridge import broadcast as _bcast
-            _bcast({"type": "face_verify", "state": "success" if verified else "failed"})
-        except Exception:
-            pass
-        if not verified:
-            self.speak("Not matched. Delete blocked.")
+            from groq import Groq as _Groq
+            import os as _os
+            from dotenv import load_dotenv as _lde
+            _lde()
+            _g = _Groq(api_key=_os.getenv("GROQ_API_KEY", ""))
+            resp = _g.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.1,
+                max_tokens=250,
+            )
+            raw = resp.choices[0].message.content.strip()
+            if raw.startswith("```"):
+                raw = raw.split("```")[1]
+                if raw.startswith("json"):
+                    raw = raw[4:]
+            parsed = _json.loads(raw.strip())
+        except Exception as _pe:
+            self.speak("I couldn't understand that calendar command.")
             return
-        self.speak("Identity confirmed.")
-        ok, msg = fm.delete_verified(path)
-        self.speak(msg)
+
+        action = parsed.get("action", "unknown")
+        title_hint = parsed.get("event_title_hint", "")
+        orig_date = parsed.get("original_date")
+        new_time = parsed.get("new_time")
+        new_date = parsed.get("new_date")
+
+        if action == "cancel":
+            try:
+                from modules.calendar_agent import find_event_by_voice_cmd, cancel_event
+                mapping = find_event_by_voice_cmd(title_hint, orig_date)
+                if not mapping:
+                    self.speak(f"I couldn't find a {title_hint} event on your calendar.")
+                    return
+                ok = cancel_event(mapping["calendar_event_id"])
+                if ok:
+                    self.speak(f"{mapping.get('title', title_hint)} cancelled and removed from your calendar.")
+                else:
+                    self.speak("Couldn't remove the event. Calendar error.")
+            except Exception as _e:
+                self.speak(f"Calendar error: {_e}")
+
+        elif action == "reschedule":
+            try:
+                from modules.calendar_agent import find_event_by_voice_cmd, update_event
+                mapping = find_event_by_voice_cmd(title_hint, orig_date)
+                if not mapping:
+                    self.speak(f"I couldn't find a {title_hint} event to reschedule.")
+                    return
+                ok = update_event(mapping["calendar_event_id"], time_str=new_time, date_str=new_date)
+                if ok:
+                    t_str = ""
+                    if new_time:
+                        try:
+                            t_str = f" to {_dt.strptime(new_time, '%H:%M').strftime('%I:%M %p').lstrip('0')}"
+                        except Exception:
+                            t_str = f" to {new_time}"
+                    self.speak(f"{mapping.get('title', title_hint)} rescheduled{t_str}. Calendar updated.")
+                else:
+                    self.speak("Couldn't update the event. Calendar error.")
+            except Exception as _e:
+                self.speak(f"Calendar error: {_e}")
+
+        elif action == "add":
+            try:
+                from modules.calendar_agent import add_event
+                add_date = new_date or orig_date or today
+                add_time = new_time or parsed.get("original_time") or "09:00"
+                event = add_event(title=title_hint, date_str=add_date, time_str=add_time,
+                                  link=parsed.get("link"))
+                if event:
+                    try:
+                        dt = _dt.strptime(f"{add_date} {add_time}", "%Y-%m-%d %H:%M")
+                        t_str = dt.strftime("%I:%M %p").lstrip("0")
+                        d_str = dt.strftime("%d %B")
+                    except Exception:
+                        t_str, d_str = add_time, add_date
+                    self.speak(f"Added {title_hint} at {t_str} on {d_str} to your calendar.")
+                else:
+                    self.speak("Couldn't add the event. Calendar error.")
+            except Exception as _e:
+                self.speak(f"Calendar error: {_e}")
+
+        else:
+            self.speak("I couldn't determine what calendar action you wanted.")
 
     def _handle_file_command(self, cmd: str) -> bool:
         """
@@ -758,6 +1123,44 @@ Output format:
 
         # ── DISAMBIGUATION — must be checked before everything else ──
         if self._resolve_disambiguation(cmd):
+            return
+
+        # ── FACE AUTH ──
+        _FACE_TRIGGERS = [
+            "enroll my face", "enroll face", "setup face auth", "set up face auth",
+            "register my face", "add my face", "face enrollment", "face setup",
+            "train face", "learn my face",
+        ]
+        if any(t in cmd for t in _FACE_TRIGGERS):
+            from modules import face_auth
+            face_auth.init(self.speak)
+            face_auth.enroll_owner()
+            return
+
+        if any(t in cmd for t in ["delete face data", "remove face data", "forget my face", "clear face auth"]):
+            from modules import face_auth
+            ok = face_auth.delete_face_data()
+            self.speak("Face data removed." if ok else "No face data stored.")
+            return
+
+        if any(t in cmd for t in ["is face enrolled", "face auth status", "face setup status"]):
+            from modules import face_auth
+            self.speak("Face is enrolled." if face_auth.is_enrolled() else "No face enrolled yet. Say 'enroll my face' to set up.")
+            return
+
+        # ── SCREENSHOT ──
+        if any(t in cmd for t in ["screenshot", "capture screen", "take a screenshot", "screen capture"]):
+            try:
+                from modules.screenshot_engine import capture_sync
+                from modules.ws_bridge import broadcast
+                filename = capture_sync()
+                if filename:
+                    broadcast({"type": "screenshot_ready", "filename": filename, "ts": time.strftime("%H:%M")})
+                    self.speak(f"Screenshot captured and sent to your phone.")
+                else:
+                    self.speak("Screenshot failed. Check pyautogui is installed.")
+            except Exception as _e:
+                self.speak(f"Screenshot error: {_e}")
             return
 
         # ── CAMERA VISION — must be FIRST before ai_parse burns keys ──
@@ -1349,28 +1752,6 @@ Output format:
             self.speak(self._get_crypto_price(coin))
             return
 
-        if any(w in cmd for w in ["enroll my face", "register my face", "add my face", "save my face"]):
-            from modules.vision_engine import get_vision_engine
-            ve = get_vision_engine()
-            if ve:
-                try:
-                    from modules.ws_bridge import broadcast as _bcast
-                    _bcast({"type": "face_verify", "state": "enrolling"})
-                except Exception:
-                    pass
-                self.speak("Look directly at the camera. Capturing your face now.")
-                time.sleep(2)
-                ok, msg = ve.enroll_face("vansh")
-                try:
-                    from modules.ws_bridge import broadcast as _bcast
-                    _bcast({"type": "face_verify", "state": "success" if ok else "failed"})
-                except Exception:
-                    pass
-                self.speak(msg)
-            else:
-                self.speak("Camera not available for face enrollment.")
-            return
-
         if any(w in cmd for w in ["show log report", "command report", "log analysis", "how many commands"]):
             from modules.log_analyzer import analyze_logs
             analyze_logs()
@@ -1412,6 +1793,19 @@ Output format:
             rg = get_response_generator()
             if rg: rg.instant("previous")
             self.spotify_handler.previous_track()
+            return
+
+        # device-only switch (no song) — e.g. "switch playback to AlliedNode"
+        _sw_match = re.search(
+            r'(?:switch|transfer|move|change)\s+(?:playback|spotify|music|audio|the music)?\s*(?:to|on)\s+(.+)',
+            cmd, re.IGNORECASE
+        )
+        if _sw_match:
+            _device_spoken = _sw_match.group(1).strip()
+            _resolved      = _resolve_device_alias(_device_spoken)
+            _status        = self.spotify_handler.switch_device(_resolved)
+            _save_device_alias(_device_spoken, _resolved)
+            self.speak(_status)
             return
 
         if any(w in cmd for w in ["remember that", "remember this", "add to memory", "note that"]):
@@ -1599,10 +1993,11 @@ Examples:
                 self.speak(f"Replied to {sender}.")
             else:
                 self.speak("What should I say in the reply?")
-                # Restore instant feedback
+            if _rg and _orig_instant:
+                _rg.instant = _orig_instant
+            return
         if _rg and _orig_instant:
             _rg.instant = _orig_instant
-            return
 
         if any(w in cmd for w in ["pick up", "accept", "ignore", "reject", "contact later", "reply later", "send voice", "don't want to talk"]):
             from modules.whatsapp_handler import handle_whatsapp_command
