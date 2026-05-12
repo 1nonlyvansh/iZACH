@@ -295,6 +295,18 @@ Output format:
                 self._handle_calendar_voice_command(resolved_cmd)
                 continue
 
+            _SHELL_TRIGGERS = [
+                "run command", "run powershell", "execute command", "run script",
+                "run terminal command", "run this command", "execute this command",
+                "open terminal", "open powershell", "shell command",
+                "powershell command", "run ps", "run ps command",
+                "confirm command", "yes run it", "run it", "confirm run",
+                "cancel command", "cancel the command", "don't run",
+            ]
+            if any(t in resolved_cmd for t in _SHELL_TRIGGERS):
+                self._handle_shell_command(resolved_cmd)
+                continue
+
             if "playlist" in resolved_cmd or resolved_cmd.startswith("open ") or any(t in resolved_cmd for t in _SYSTEM_CONTROL_TRIGGERS) or any(m in resolved_cmd for m in _FILE_FAST_PATH + ["screenshot", "capture screen", "take a screenshot", "screen capture", "what am i holding", "what's in my hand", "what do you see", "look at this", "what is this", "identify this", "what's this", "how many calories", "what food is this", "scan this", "describe what you see", "what can you see", "look at camera", "work mode", "focus mode", "gym mode", "idle mode", "switch to work", "switch to focus", "switch to gym", "switch to idle", "click on", "click the", "read the screen", "what's on screen", "read screen", "remember that", "remember this", "what do you remember", "forget that", "reply to", "reply her", "reply him", "what did he say", "what did she say", "bitcoin", "ethereum", "crypto", "btc price", "eth price", "dogecoin", "solana", "crypto rate"]):
                 self._classify_and_execute(resolved_cmd)
                 continue
@@ -607,6 +619,82 @@ Output format:
                 self.speak("Face not recognized. Deletion cancelled.")
 
         threading.Thread(target=_run, daemon=True).start()
+
+    # ── SHELL EXECUTOR ──────────────────────────────────────────────
+    _pending_shell_id: str = None
+
+    def _handle_shell_command(self, cmd: str):
+        from modules import shell_executor
+
+        # Confirmation response for pending command
+        if any(t in cmd for t in ["confirm command", "yes run it", "run it", "confirm run"]):
+            if self._pending_shell_id:
+                shell_executor.run_confirmed(self._pending_shell_id, speak_fn=self.speak)
+                self._pending_shell_id = None
+            else:
+                self.speak("No command waiting for confirmation.")
+            return
+
+        if any(t in cmd for t in ["cancel command", "cancel the command", "don't run"]):
+            if self._pending_shell_id:
+                shell_executor.cancel_pending(self._pending_shell_id)
+                self._pending_shell_id = None
+                self.speak("Command cancelled.")
+            else:
+                self.speak("No command to cancel.")
+            return
+
+        # Extract the raw command from the voice input
+        raw = cmd
+        for prefix in [
+            "run powershell", "run command", "execute command", "run script",
+            "run terminal command", "run this command", "execute this command",
+            "shell command", "powershell command", "run ps command", "run ps",
+            "open terminal", "open powershell",
+        ]:
+            if raw.startswith(prefix):
+                raw = raw[len(prefix):].strip()
+                break
+
+        if not raw:
+            # No inline command — ask for it
+            self.speak("What command should I run?")
+            return
+
+        # Use LLM to generate a clean PowerShell command from natural language
+        ps_cmd = self._resolve_shell_intent(raw)
+
+        # Broadcast confirm request, save pending id
+        exec_id = shell_executor.request_confirmation(ps_cmd)
+        self._pending_shell_id = exec_id
+        self.speak(f"I'll run: {ps_cmd}. Say 'run it' to confirm or 'cancel command' to abort.")
+
+    def _resolve_shell_intent(self, raw: str) -> str:
+        """Use Groq to turn natural language into a PowerShell command."""
+        import os
+        from groq import Groq
+        try:
+            client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+            resp = client.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                messages=[
+                    {
+                        "role": "system",
+                        "content": (
+                            "You are a PowerShell expert. Convert the user's natural language request "
+                            "into a single PowerShell command. Reply with ONLY the command — no explanation, "
+                            "no markdown fences, no extra text. Keep commands concise and safe."
+                        ),
+                    },
+                    {"role": "user", "content": raw},
+                ],
+                max_tokens=120,
+                temperature=0.1,
+            )
+            return resp.choices[0].message.content.strip().strip("`")
+        except Exception:
+            # Fall back to raw text if LLM fails
+            return raw
 
     def _handle_routine_command(self, cmd: str):
         from modules.pattern_learner import (

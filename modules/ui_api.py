@@ -1398,3 +1398,47 @@ def face_delete():
         return jsonify({"ok": ok})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
+
+
+# ── SHELL EXECUTOR ────────────────────────────────────────────────────────────
+
+@ui_bp.route("/shell/run", methods=["POST"])
+def shell_run():
+    """Run a PowerShell command directly (UI-initiated, already confirmed by user)."""
+    data = request.get_json(force=True, silent=True) or {}
+    cmd  = (data.get("command") or "").strip()
+    if not cmd:
+        return jsonify({"ok": False, "error": "No command provided"}), 400
+    try:
+        from modules import shell_executor
+        ok, msg = shell_executor.run_direct(cmd)
+        return jsonify({"ok": ok, "message": msg})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@ui_bp.route("/shell/confirm", methods=["POST"])
+def shell_confirm():
+    """Confirm a pending shell command (from voice confirmation flow)."""
+    data    = request.get_json(force=True, silent=True) or {}
+    exec_id = (data.get("id") or "").strip()
+    if not exec_id:
+        return jsonify({"ok": False, "error": "No id provided"}), 400
+    try:
+        from modules import shell_executor
+        ok, msg = shell_executor.run_confirmed(exec_id)
+        return jsonify({"ok": ok, "message": msg})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@ui_bp.route("/shell/cancel", methods=["POST"])
+def shell_cancel():
+    data    = request.get_json(force=True, silent=True) or {}
+    exec_id = (data.get("id") or "").strip()
+    try:
+        from modules import shell_executor
+        shell_executor.cancel_pending(exec_id)
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500

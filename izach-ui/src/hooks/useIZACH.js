@@ -57,6 +57,10 @@ export function useIZACH() {
   // face verification overlay state
   const [faceState, setFaceState] = useState('idle')
 
+  // shell executor state
+  const [shellConfirm, setShellConfirm] = useState(null)   // {id, command} | null
+  const [shellOutput,  setShellOutput]  = useState(null)   // {id, command, lines[], done, exitCode} | null
+
   // whatsapp QR code — raw string, cleared when connected
   const [whatsappQr, setWhatsappQr] = useState(null)
 
@@ -118,6 +122,22 @@ export function useIZACH() {
             }
             else if (data.type === 'whatsapp_qr') {
               setWhatsappQr(data.qr || null)
+            }
+            else if (data.type === 'shell_confirm') {
+              if (data.state === 'pending') {
+                setShellConfirm({ id: data.id, command: data.command })
+              } else {
+                setShellConfirm(null)
+              }
+            }
+            else if (data.type === 'shell_output') {
+              if (data.state === 'running') {
+                setShellOutput({ id: data.id, command: data.command, lines: [], done: false, exitCode: null })
+              } else if (data.state === 'streaming') {
+                setShellOutput(prev => prev ? { ...prev, lines: [...prev.lines, data.chunk] } : prev)
+              } else if (data.state === 'done') {
+                setShellOutput(prev => prev ? { ...prev, done: true, exitCode: data.exit_code, truncated: data.truncated } : prev)
+              }
             }
             else if (data.type === 'device_connected') {
               setAndroidDevices(prev => [...prev.filter(d => d !== data.device_name), data.device_name])
@@ -447,6 +467,8 @@ export function useIZACH() {
     faceState,
     whatsappQr,
     calendarEvents, setCalendarEvents,
+    shellConfirm, setShellConfirm,
+    shellOutput,  setShellOutput,
     chatBottomRef,
     send, stopSpeech,
   }
