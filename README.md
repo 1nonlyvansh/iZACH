@@ -200,24 +200,6 @@ Pair it with the Android companion app and your phone becomes a remote interface
 
 ---
 
-### Adding APK to a GitHub Release
-
-To distribute your own build:
-
-1. Build the APK in Android Studio:
-   `Build → Generate Signed Bundle / APK → APK`
-
-2. Create a GitHub Release:
-   ```
-   GitHub repo → Releases → Draft a new release
-   Tag: v1.0.0
-   Title: iZACH v1.0.0
-   ```
-
-3. Drag and drop the `.apk` file into the release assets
-
-4. Publish release — the download badge above will auto-link to `releases/latest`
-
 ---
 
 ## Voice Command Examples
