@@ -270,6 +270,40 @@ def list_tabs():
         return False, f"List tabs failed: {e}"
 
 
+def open_multiple_tabs(tab_actions: list):
+    """
+    tab_actions: [{"action": "navigate"|"search", "target": str}, ...]
+    Reuses current page for tab 0, opens new pages for the rest.
+    """
+    results = []
+    for i, tab in enumerate(tab_actions):
+        try:
+            action = tab.get("action", "navigate")
+            target = tab.get("target", "")
+            if i == 0:
+                page = _get_page()
+            else:
+                ctx = _get_context()
+                page = ctx.new_page()
+                global _active_tab_idx
+                _active_tab_idx = len(ctx.pages) - 1
+
+            if action == "search":
+                page.goto("https://www.google.com", timeout=10000)
+                page.wait_for_selector("textarea[name='q']", timeout=5000)
+                page.fill("textarea[name='q']", target)
+                page.press("textarea[name='q']", "Enter")
+                results.append(f"tab {i+1}: searching {target}")
+            else:
+                url = _resolve_url(target)
+                page.goto(url, timeout=15000)
+                results.append(f"tab {i+1}: {target}")
+        except Exception as e:
+            results.append(f"tab {i+1} failed: {e}")
+
+    return True, "Opened " + ", ".join(results) + "."
+
+
 # ── YouTube autoplay ──────────────────────────────────────────
 
 def youtube_play(query: str):

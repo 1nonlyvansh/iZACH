@@ -101,6 +101,7 @@ class CommandChain:
         self.pending_song_request = ""
 
         self.awaiting_disambiguation = None  # {"action": "open"|"delete", "matches": [...], "query": str}
+        self._pending_install: str | None = None
 
     def _get_crypto_price(self, coin: str) -> str:
         import requests as _req
@@ -206,6 +207,42 @@ Output format:
                         continue
             except Exception:
                 pass
+
+            # App install confirmation
+            if self._pending_install:
+                _words = set(resolved_cmd.split())
+                _affirm = {"yes", "yeah", "yep", "sure", "ok", "okay", "download", "install", "haan"}
+                _negate = {"no", "nope", "nahi", "skip", "cancel", "dont"}
+                if _words & _affirm and len(_words) <= 4:
+                    _app = self._pending_install
+                    self._pending_install = None
+                    from modules.app_installer import download_installer
+                    import threading as _thr
+                    _thr.Thread(
+                        target=lambda a=_app: self.speak(download_installer(a)[1]),
+                        daemon=True,
+                    ).start()
+                    continue
+                elif _words & _negate and len(_words) <= 4:
+                    self._pending_install = None
+                    self.speak("Okay, skipping installation.")
+                    continue
+
+            # Multi-tab browser command
+            _MULTI_TAB_MARKERS = ["one for", "another tab", "first tab", "second tab",
+                                   "two tabs", "2 tabs", "3 tabs", "multiple tabs",
+                                   "in one tab", "in a tab", "in another tab"]
+            if "tab" in resolved_cmd and any(m in resolved_cmd for m in _MULTI_TAB_MARKERS):
+                _tabs = self._parse_multi_tab_command(resolved_cmd)
+                if _tabs and len(_tabs) >= 2:
+                    from modules import web_automation as _wa
+                    import threading as _thr
+                    self.speak(f"Opening {len(_tabs)} tabs.")
+                    _thr.Thread(
+                        target=lambda t=_tabs: self.speak(_wa.open_multiple_tabs(t)[1]),
+                        daemon=True,
+                    ).start()
+                    continue
 
             # Web automation (before system control to intercept "open X")
             _WEB_AUTOMATION_TRIGGERS = [
@@ -566,6 +603,41 @@ Output format:
         if any(t in cmd for t in ["extract emails", "find emails", "scrape emails"]):
             _bg(web_automation.extract_emails, announce="Scanning page for emails.")
             return
+
+    def _parse_multi_tab_command(self, cmd: str) -> list | None:
+        """Use Groq to parse multi-tab voice command into [{action, target}, ...] list."""
+        try:
+            import json, os
+            from groq import Groq
+            client = Groq(api_key=os.getenv("GROQ_API_KEY", ""))
+            prompt = f"""Parse this browser command into a JSON array of tab actions.
+Command: "{cmd}"
+
+Return ONLY a valid JSON array. Each element must have:
+  "action": "navigate" (open a website) or "search" (search Google)
+  "target": website name/URL or search query string
+
+Example output:
+[{{"action": "navigate", "target": "github.com"}}, {{"action": "search", "target": "dog pictures"}}]
+
+Return ONLY the JSON array. No explanation."""
+            resp = client.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.1,
+                max_tokens=200,
+            )
+            raw = resp.choices[0].message.content.strip()
+            if raw.startswith("```"):
+                raw = raw.split("```")[1]
+                if raw.startswith("json"):
+                    raw = raw[4:]
+            parsed = json.loads(raw.strip())
+            if isinstance(parsed, list) and len(parsed) >= 2:
+                return parsed
+        except Exception:
+            pass
+        return None
 
     def _resolve_disambiguation(self, cmd: str) -> bool:
         """Handle user response after iZACH asked 'which one?'. Returns True if handled."""
@@ -1562,6 +1634,16 @@ Return ONLY JSON."""
             if user_music:
                 parsed["platform"] = user_music if isinstance(user_music, str) else "spotify"
 
+        # If open_app intent and app not installed — offer download instead
+        if parsed.get("intent") == "open_app":
+            _app_name = (parsed.get("app") or "").strip()
+            if _app_name:
+                from modules.app_installer import is_app_installed, get_installer_info
+                if not is_app_installed(_app_name) and get_installer_info(_app_name):
+                    self._pending_install = _app_name.lower()
+                    self.speak(f"{_app_name.title()} isn't installed on your PC. Want me to download the installer?")
+                    return
+
         # Route known intents, skip unknown ones to fallback AI
         result = self.router.route(parsed)
 
@@ -2131,9 +2213,14 @@ Examples:
                     position = pos
                     full = full.replace(f"on the {pos}", "").replace(f"to the {pos}", "").replace(pos, "").strip()
                     break
+            from modules.app_installer import is_app_installed, get_installer_info
+            if not is_app_installed(full) and get_installer_info(full):
+                self._pending_install = full.lower()
+                self.speak(f"{full.title()} isn't installed on your PC. Want me to download the installer?")
+                return
             from modules.context_engine import handle_open_with_position
             open_result = handle_open_with_position(full, position)
-            if "opened" in open_result.lower():
+            if "opened" in open_result.lower() or "front" in open_result.lower():
                 self.speak(f"{full.title()} is open.")
             else:
                 self.speak(f"Couldn't open {full}.")
