@@ -60,6 +60,7 @@ Pair it with the Android companion app and your phone becomes a remote interface
 
 **🤖 Automation**
 - Web automation via Playwright (14 functions)
+- Playwright browser auto-closes after 10 min idle
 - PowerShell executor with safety block list
 - File manager: open, find, rename, move, copy, delete, sort, organize
 - Screenshot capture → phone transfer
@@ -77,14 +78,14 @@ Pair it with the Android companion app and your phone becomes a remote interface
 - Calendar event extraction from speech
 
 **📱 Connectivity**
-- WhatsApp bridge — read & reply hands-free
+- WhatsApp bridge — lazy-started on first WA command (~350MB saved idle)
 - Spotify — play, pause, skip, playlists, device switch
 - Google Calendar sync
 - Android companion app (Wi-Fi)
 - Ngrok tunnel for remote access
 
 **🔐 Security**
-- Face authentication (dlib, 0.50 tolerance)
+- Face authentication — lazy-loaded on first face command (~80MB saved idle)
 - Face-gated file deletion
 - Pre-commit hook blocks secrets & large files
 - PowerShell command safety block list
@@ -95,6 +96,17 @@ Pair it with the Android companion app and your phone becomes a remote interface
 - Calorie estimation from food
 - Brand/item recognition
 - Screen element detection
+
+**⚡ Performance**
+- WhatsApp bridge lazy-starts — Puppeteer not loaded until first WA command
+- Face auth lazy-loads — dlib/cv2 not imported until first face command
+- `api_keys.json` + `memory.json` reads cached (30s TTL / dirty-flag)
+- Playwright browser freed after idle — no persistent Chromium in background
+
+**🖥️ UI**
+- COMMANDS tab in Settings — 12 categories, 80+ voice commands, expandable reference
+- Cache Manager — 12 cache types with live size badges (up from 7)
+- Lazy Electron launch — UI starts only when needed
 
 </td>
 </tr>

@@ -4,6 +4,9 @@ from groq import Groq
 from google import genai
 from google.genai import types
 
+_style_cache: dict = {}
+_STYLE_TTL = 30  # seconds
+
 
 class AIProvider:
     def __init__(self, groq_key, gemini_keys):
@@ -45,6 +48,10 @@ class AIProvider:
 
     @staticmethod
     def _style_instruction() -> str:
+        global _style_cache
+        now = time.time()
+        if _style_cache and now - _style_cache.get("ts", 0) < _STYLE_TTL:
+            return _style_cache["value"]
         try:
             import json as _j
             with open("api_keys.json") as _f:
@@ -62,7 +69,9 @@ class AIProvider:
             parts.append("Keep every response to 1-2 sentences maximum, no exceptions.")
         elif verbosity == "detailed":
             parts.append("Provide thorough explanations with examples and context where relevant.")
-        return " ".join(parts)
+        result = " ".join(parts)
+        _style_cache = {"value": result, "ts": now}
+        return result
 
     def _call_groq(self, query):
         style = self._style_instruction()

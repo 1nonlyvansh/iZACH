@@ -23,12 +23,68 @@ import re
 import os
 import json
 import threading
+import time
 
 _playwright_instance = None
 _browser = None
 _context = None
 _init_lock = threading.Lock()
 _active_tab_idx = -1  # -1 = last tab
+_last_used = 0.0
+_IDLE_TIMEOUT = 600  # close browser after 10 min idle
+
+
+def _idle_watcher():
+    while True:
+        time.sleep(60)
+        global _browser, _context, _playwright_instance, _last_used
+        with _init_lock:
+            if _context is not None and _last_used > 0 and (time.time() - _last_used) > _IDLE_TIMEOUT:
+                try:
+                    _context.close()
+                except Exception:
+                    pass
+                try:
+                    _browser.close()
+                except Exception:
+                    pass
+                try:
+                    _playwright_instance.stop()
+                except Exception:
+                    pass
+                _context = None
+                _browser = None
+                _playwright_instance = None
+                _last_used = 0.0
+                print("[WEB] Playwright browser closed — idle timeout.")
+
+
+threading.Thread(target=_idle_watcher, daemon=True).start()
+
+
+def close_browser():
+    """Immediately close Playwright browser and free memory."""
+    global _browser, _context, _playwright_instance, _last_used
+    with _init_lock:
+        if _context is None:
+            return
+        try:
+            _context.close()
+        except Exception:
+            pass
+        try:
+            _browser.close()
+        except Exception:
+            pass
+        try:
+            _playwright_instance.stop()
+        except Exception:
+            pass
+        _context = None
+        _browser = None
+        _playwright_instance = None
+        _last_used = 0.0
+    print("[WEB] Playwright browser closed.")
 
 _SHORTNAMES = {
     "youtube":  "https://www.youtube.com",
@@ -49,13 +105,14 @@ _USER_PROFILE_PATH = "user_profile.json"
 
 
 def _get_context():
-    global _playwright_instance, _browser, _context
+    global _playwright_instance, _browser, _context, _last_used
     with _init_lock:
         if _context is None:
             from playwright.sync_api import sync_playwright
             _playwright_instance = sync_playwright().start()
             _browser = _playwright_instance.chromium.launch(headless=False)
             _context = _browser.new_context()
+        _last_used = time.time()
     return _context
 
 

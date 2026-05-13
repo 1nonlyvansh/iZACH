@@ -686,6 +686,7 @@ Return ONLY the JSON array. No explanation."""
         """Verify owner identity then delete file."""
         import threading
         from modules import face_auth
+        face_auth.init(self.speak)
 
         if not face_auth.is_enrolled():
             self.speak("Face auth not set up. Say 'enroll my face' first, then try deleting again.")
@@ -2033,7 +2034,8 @@ Return ONLY JSON."""
             return
 
         if _last_whatsapp_message_check(cmd):
-            from modules.whatsapp_handler import get_last_message
+            from modules.whatsapp_handler import get_last_message, ensure_bridge_running
+            ensure_bridge_running()
             last = get_last_message()
             if last and last.get("text"):
                 sender = last.get("sender", "They")
@@ -2067,7 +2069,13 @@ Explain in one sentence what they want. Start with their name. Sound like JARVIS
                 self.speak("Please say a time. For example, remind me to drink water at 5pm.")
             return
         
-        #Whsatsapp Bridge Commands
+        #WhatsApp Bridge Commands
+        if any(w in cmd for w in ["connect whatsapp", "start whatsapp", "launch whatsapp"]):
+            from modules.whatsapp_handler import ensure_bridge_running
+            ensure_bridge_running()
+            self.speak("Starting WhatsApp bridge now. Give it a moment to connect.")
+            return
+
         if any(w in cmd for w in ["whatsapp status", "is whatsapp connected", "whatsapp connected"]):
             try:
                 import requests as req
@@ -2126,6 +2134,8 @@ Start with the sender's name. Do not quote the message directly."""
             return
 
         # Disable instant feedback for WhatsApp commands
+        from modules.whatsapp_handler import ensure_bridge_running as _ebr
+        _ebr()
         from modules.response_generator import get_response_generator
         _rg = get_response_generator()
         _orig_instant = None

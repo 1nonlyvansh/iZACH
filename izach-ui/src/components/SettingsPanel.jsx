@@ -347,6 +347,256 @@ function GeneralSection({ settings, onSave }) {
   )
 }
 
+// ── Commands reference data ───────────────────────────────────
+const COMMAND_CATEGORIES = [
+  {
+    id: 'music',
+    label: 'MUSIC & SPOTIFY',
+    icon: '♪',
+    commands: [
+      'play something chill on spotify',
+      'play <song name>',
+      'pause / resume music',
+      'next song / previous song',
+      'set volume to 60',
+      'what song is this',
+      'play my liked songs',
+      'shuffle playlist',
+    ],
+  },
+  {
+    id: 'whatsapp',
+    label: 'WHATSAPP',
+    icon: '✉',
+    commands: [
+      'read my messages',
+      'what did <name> say',
+      'reply to <name> — <message>',
+      'send <name> a message — <text>',
+      'any new messages',
+      'read last message from <name>',
+    ],
+  },
+  {
+    id: 'system',
+    label: 'SYSTEM CONTROL',
+    icon: '⚙',
+    commands: [
+      'set volume to 50',
+      'mute / unmute',
+      'increase brightness',
+      'turn on dark mode / light mode',
+      'turn on / off wifi',
+      'battery status',
+      'how much ram is being used',
+      'what\'s my cpu temperature',
+      'take a screenshot',
+      'lock the screen',
+      'shutdown / restart',
+      'empty recycle bin',
+    ],
+  },
+  {
+    id: 'files',
+    label: 'FILE MANAGER',
+    icon: '📁',
+    commands: [
+      'open downloads folder',
+      'find <filename>',
+      'delete old files in downloads',
+      'organize my desktop',
+      'rename <file> to <new name>',
+      'move <file> to documents',
+      'copy <file> to desktop',
+      'what\'s the largest file in downloads',
+    ],
+  },
+  {
+    id: 'web',
+    label: 'WEB & BROWSER',
+    icon: '🌐',
+    commands: [
+      'open youtube',
+      'search for <query>',
+      'play <query> on youtube',
+      'summarize this page',
+      'open a new tab',
+      'close this tab',
+      'get me the news',
+      'what\'s the price of <product>',
+      'fill my details',
+    ],
+  },
+  {
+    id: 'calendar',
+    label: 'CALENDAR & REMINDERS',
+    icon: '📅',
+    commands: [
+      'remind me to <task> at <time>',
+      'what\'s on my calendar today',
+      'set an alarm for 7am',
+      'schedule meeting with <name> at <time>',
+      'cancel my 3pm reminder',
+      'what do I have tomorrow',
+      'morning briefing',
+    ],
+  },
+  {
+    id: 'apps',
+    label: 'APPS & WINDOWS',
+    icon: '▣',
+    commands: [
+      'open <app name>',
+      'close <app name>',
+      'switch to chrome',
+      'snap window to the left',
+      'minimize everything',
+      'open vs code',
+      'open calculator',
+    ],
+  },
+  {
+    id: 'vision',
+    label: 'VISION & SCREEN',
+    icon: '👁',
+    commands: [
+      'what\'s on my screen',
+      'read the screen',
+      'what do you see',
+      'describe what\'s in front of me',
+      'take a photo',
+    ],
+  },
+  {
+    id: 'memory',
+    label: 'MEMORY',
+    icon: '🧠',
+    commands: [
+      'remember that my name is <name>',
+      'remember my phone number is <number>',
+      'what do you know about me',
+      'forget my phone number',
+      'remember my email is <email>',
+    ],
+  },
+  {
+    id: 'face',
+    label: 'FACE AUTH',
+    icon: '⬡',
+    commands: [
+      'enroll my face',
+      'verify my identity',
+      'delete my face data',
+      'is my face enrolled',
+    ],
+  },
+  {
+    id: 'ai',
+    label: 'AI & GENERAL',
+    icon: '◈',
+    commands: [
+      'what can you do',
+      'who are you',
+      'tell me a joke',
+      'what\'s the weather like',
+      'translate <phrase> to hindi',
+      'explain <topic>',
+      'what time is it',
+      'what\'s today\'s date',
+    ],
+  },
+  {
+    id: 'patterns',
+    label: 'ROUTINES & PATTERNS',
+    icon: '↺',
+    commands: [
+      'confirm routine',
+      'reject routine',
+      'what patterns have you learned',
+      'run my morning routine',
+    ],
+  },
+]
+
+function CommandsSection() {
+  const [open, setOpen] = useState(null)
+
+  function toggle(id) {
+    setOpen(prev => prev === id ? null : id)
+  }
+
+  return (
+    <div style={{ padding: '8px 0 16px' }}>
+      <div style={{ padding: '4px 20px 12px' }}>
+        <p style={{ color: '#3a6070', fontFamily: "'JetBrains Mono'", fontSize: '10px', margin: 0, lineHeight: 1.6 }}>
+          All voice commands. Click category to expand.
+        </p>
+      </div>
+
+      {COMMAND_CATEGORIES.map(cat => {
+        const isOpen = open === cat.id
+        return (
+          <div key={cat.id} style={{ margin: '0 12px 4px' }}>
+            {/* Category header */}
+            <button
+              onClick={() => toggle(cat.id)}
+              style={{
+                width: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
+                padding: '8px 12px',
+                background: isOpen ? 'rgba(0,229,255,0.07)' : 'rgba(0,229,255,0.02)',
+                border: `1px solid ${isOpen ? 'rgba(0,229,255,0.25)' : '#0d2a3a'}`,
+                borderRadius: isOpen ? '4px 4px 0 0' : 4,
+                cursor: 'pointer',
+                transition: 'all 0.15s',
+              }}
+            >
+              <span style={{ color: '#00e5ff', fontSize: '12px', width: 16, textAlign: 'center' }}>{cat.icon}</span>
+              <span style={{ color: isOpen ? '#00e5ff' : '#c8e8f0', fontFamily: "'Share Tech Mono'", fontSize: '10px', letterSpacing: '0.12em', flex: 1, textAlign: 'left' }}>
+                {cat.label}
+              </span>
+              <span style={{ color: '#3a6070', fontSize: '10px', fontFamily: "'JetBrains Mono'" }}>
+                {isOpen ? '▲' : '▼'}
+              </span>
+            </button>
+
+            {/* Commands list */}
+            {isOpen && (
+              <div style={{
+                background: 'rgba(0,229,255,0.02)',
+                border: '1px solid rgba(0,229,255,0.15)',
+                borderTop: 'none',
+                borderRadius: '0 0 4px 4px',
+                padding: '8px 12px 10px',
+              }}>
+                {cat.commands.map((cmd, i) => (
+                  <div
+                    key={i}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      gap: 8,
+                      padding: '4px 0',
+                      borderBottom: i < cat.commands.length - 1 ? '1px solid rgba(13,42,58,0.5)' : 'none',
+                    }}
+                  >
+                    <span style={{ color: '#00e5ff', fontFamily: "'Share Tech Mono'", fontSize: '10px', marginTop: 1, opacity: 0.5 }}>›</span>
+                    <span style={{ color: '#c8e8f0', fontFamily: "'JetBrains Mono'", fontSize: '10px', lineHeight: 1.5 }}>
+                      {cmd}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 // ── Main SettingsPanel export ─────────────────────────────────
 export default function SettingsPanel({
   memoryEntries,
@@ -355,11 +605,12 @@ export default function SettingsPanel({
   onDeleteMemory,
   onSaveSettings,
 }) {
-  const [tab, setTab] = useState('memory')  // 'memory' | 'general'
+  const [tab, setTab] = useState('memory')  // 'memory' | 'general' | 'commands'
 
   const tabs = [
-    { id: 'memory',  label: 'MEMORY'   },
-    { id: 'general', label: 'SETTINGS' },
+    { id: 'memory',   label: 'MEMORY'   },
+    { id: 'general',  label: 'SETTINGS' },
+    { id: 'commands', label: 'COMMANDS' },
   ]
 
   return (
@@ -410,6 +661,9 @@ export default function SettingsPanel({
           settings={settings}
           onSave={onSaveSettings}
         />
+      )}
+      {tab === 'commands' && (
+        <CommandsSection />
       )}
     </div>
   )

@@ -665,6 +665,32 @@ def cache_sizes():
     sp_sz = sum(f.stat().st_size for f in sp_files)
     sizes["spotify_cache"] = f"{_fmt(sp_sz)}" if sp_files else "empty"
 
+    # speech_files — speech_*.mp3 in root
+    speech_files = list(root.glob("speech_*.mp3"))
+    speech_sz = sum(f.stat().st_size for f in speech_files)
+    sizes["speech_files"] = f"{_fmt(speech_sz)}  ·  {len(speech_files)} files" if speech_files else "empty"
+
+    # logs directory
+    sz, cnt = _dir_bytes(root / "logs")
+    sizes["logs"] = f"{_fmt(sz)}  ·  {cnt} files" if cnt else "empty"
+
+    # command_log.csv
+    cl = root / "command_log.csv"
+    sizes["command_log"] = _fmt(cl.stat().st_size) if cl.exists() else "empty"
+
+    # wa_processed_msgs.json
+    wa = root / "wa_processed_msgs.json"
+    sizes["wa_processed"] = _fmt(wa.stat().st_size) if wa.exists() else "empty"
+
+    # __pycache__ dirs
+    pc_total, pc_count = 0, 0
+    for pc in root.rglob("__pycache__"):
+        if pc.is_dir():
+            s, c = _dir_bytes(pc)
+            pc_total += s
+            pc_count += c
+    sizes["pycache"] = f"{_fmt(pc_total)}  ·  {pc_count} files" if pc_count else "empty"
+
     return jsonify({"ok": True, "sizes": sizes})
 
 
@@ -745,6 +771,56 @@ def cache_clear():
             cleared.append("Spotify OAuth token")
         except Exception as e:
             errors.append(f"spotify_cache: {e}")
+
+    if "speech_files" in targets:
+        try:
+            count = 0
+            for f in root.glob("speech_*.mp3"):
+                f.unlink(missing_ok=True)
+                count += 1
+            cleared.append(f"speech files ({count} files)")
+        except Exception as e:
+            errors.append(f"speech_files: {e}")
+
+    if "logs" in targets:
+        try:
+            count = sum(
+                1 for f in (root / "logs").iterdir()
+                if f.is_file() and not f.unlink(missing_ok=True)
+            )
+            cleared.append(f"logs ({count} files)")
+        except Exception as e:
+            errors.append(f"logs: {e}")
+
+    if "command_log" in targets:
+        try:
+            cl = root / "command_log.csv"
+            if cl.exists():
+                cl.write_text("timestamp,source,command,result,duration\n", encoding="utf-8")
+            cleared.append("command history CSV")
+        except Exception as e:
+            errors.append(f"command_log: {e}")
+
+    if "wa_processed" in targets:
+        try:
+            wa = root / "wa_processed_msgs.json"
+            if wa.exists():
+                wa.write_text("[]", encoding="utf-8")
+            cleared.append("WhatsApp processed IDs")
+        except Exception as e:
+            errors.append(f"wa_processed: {e}")
+
+    if "pycache" in targets:
+        try:
+            import shutil as _shutil
+            count = 0
+            for pc in root.rglob("__pycache__"):
+                if pc.is_dir():
+                    _shutil.rmtree(pc, ignore_errors=True)
+                    count += 1
+            cleared.append(f"Python bytecode cache ({count} dirs)")
+        except Exception as e:
+            errors.append(f"pycache: {e}")
 
     return jsonify({"ok": True, "cleared": cleared, "errors": errors})
 

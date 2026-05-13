@@ -71,19 +71,33 @@ def init_whatsapp(speak, chain, ai_func=None):
     _load_contacts()
     threading.Thread(target=lambda: app.run(host='0.0.0.0', port=5050, debug=False, use_reloader=False), daemon=True).start()
     threading.Thread(target=_monitor_connection, daemon=True).start()
-    threading.Thread(target=_start_bridge, daemon=True).start()
-    print("[WHATSAPP] Handler Online on port 5050")
+    print("[WHATSAPP] Handler Online on port 5050 — bridge lazy-loaded on first WA command.")
+
+_bridge_started = False
+_bridge_lock = threading.Lock()
+
 
 def _start_bridge():
     import subprocess, time
-    time.sleep(3)  # Wait for Flask to start first
+    time.sleep(3)
     try:
         bridge_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "whatsapp_bridge.js")
         subprocess.Popen(["node", bridge_path],
                         creationflags=subprocess.CREATE_NEW_CONSOLE)
-        print("[WHATSAPP] Bridge started automatically")
+        print("[WHATSAPP] Bridge started")
     except Exception as e:
-        print(f"[WHATSAPP] Could not auto-start bridge: {e}")
+        print(f"[WHATSAPP] Could not start bridge: {e}")
+
+
+def ensure_bridge_running():
+    """Lazy-start WhatsApp bridge on first WA command. Safe to call many times."""
+    global _bridge_started
+    with _bridge_lock:
+        if _bridge_started:
+            return
+        _bridge_started = True
+    threading.Thread(target=_start_bridge, daemon=True).start()
+    print("[WHATSAPP] Bridge starting — first WhatsApp command triggered launch.")
 
 def _monitor_connection():
     import time, requests as req

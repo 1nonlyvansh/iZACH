@@ -4,7 +4,14 @@ const CACHE_ITEMS = [
   {
     id: 'temp',
     label: 'Temp Files',
-    desc: '/temp/ directory files',
+    desc: '/temp/ directory',
+    warning: null,
+    defaultChecked: true,
+  },
+  {
+    id: 'speech_files',
+    label: 'Speech Audio Files',
+    desc: 'speech_*.mp3 in root — leftover TTS audio',
     warning: null,
     defaultChecked: true,
   },
@@ -25,15 +32,43 @@ const CACHE_ITEMS = [
   {
     id: 'screenshots',
     label: 'Screenshots',
-    desc: 'All JPEG files in /screenshots/',
+    desc: '/screenshots/ — all captured JPEGs',
     warning: 'Permanently deletes all captured screenshots. Cannot be undone.',
+    defaultChecked: false,
+  },
+  {
+    id: 'logs',
+    label: 'Log Files',
+    desc: '/logs/ — runtime debug & error logs',
+    warning: null,
+    defaultChecked: false,
+  },
+  {
+    id: 'command_log',
+    label: 'Command History CSV',
+    desc: 'command_log.csv — all voice/text commands',
+    warning: 'Pattern learning uses this file. Clearing it resets routine detection.',
+    defaultChecked: false,
+  },
+  {
+    id: 'wa_processed',
+    label: 'WhatsApp Processed IDs',
+    desc: 'wa_processed_msgs.json — processed message dedup store',
+    warning: null,
     defaultChecked: false,
   },
   {
     id: 'context',
     label: 'Context History',
-    desc: 'iZACH conversation memory & entity store',
+    desc: 'In-memory conversation & entity store',
     warning: 'Clears all conversation context. iZACH will forget recent session history.',
+    defaultChecked: false,
+  },
+  {
+    id: 'pycache',
+    label: 'Python Bytecode Cache',
+    desc: '__pycache__/ — compiled .pyc files',
+    warning: null,
     defaultChecked: false,
   },
   {
@@ -46,7 +81,7 @@ const CACHE_ITEMS = [
   {
     id: 'spotify_cache',
     label: 'Spotify OAuth Token',
-    desc: '.cache/ — Spotify authentication token',
+    desc: '.cache/ — Spotify auth token',
     warning: 'Spotify will require full browser re-authentication after this.',
     defaultChecked: false,
   },
@@ -159,16 +194,30 @@ function CacheModal({ onClose }) {
                     {checked && <span style={{ color: '#00e5ff', fontSize: 10, lineHeight: 1 }}>✓</span>}
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ color: checked ? '#c8f0ff' : '#3a6070', fontSize: 10, letterSpacing: '0.08em' }}>
-                      {item.label}
-                    </div>
-                    <div style={{ color: '#1a3a4a', fontSize: 9, marginTop: 2, letterSpacing: '0.05em', display: 'flex', gap: 6, alignItems: 'baseline' }}>
-                      <span>{item.desc}</span>
-                      {sizes[item.id] && (
-                        <span style={{ color: '#2a5a70', fontStyle: 'normal' }}>
-                          [{sizes[item.id]}]
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                      <span style={{ color: checked ? '#c8f0ff' : '#3a6070', fontSize: 10, letterSpacing: '0.08em' }}>
+                        {item.label}
+                      </span>
+                      {sizes[item.id] && sizes[item.id] !== 'empty' && (
+                        <span style={{
+                          color: '#00e5ff',
+                          fontSize: 9,
+                          fontFamily: "'JetBrains Mono'",
+                          background: 'rgba(0,229,255,0.08)',
+                          border: '1px solid rgba(0,229,255,0.2)',
+                          borderRadius: 3,
+                          padding: '1px 6px',
+                          letterSpacing: '0.05em',
+                        }}>
+                          {sizes[item.id]}
                         </span>
                       )}
+                      {sizes[item.id] === 'empty' && (
+                        <span style={{ color: '#1a3a4a', fontSize: 9, fontFamily: "'JetBrains Mono'" }}>empty</span>
+                      )}
+                    </div>
+                    <div style={{ color: '#1a3a4a', fontSize: 9, marginTop: 2, letterSpacing: '0.05em' }}>
+                      {item.desc}
                     </div>
                     {item.warning && (
                       <div style={{

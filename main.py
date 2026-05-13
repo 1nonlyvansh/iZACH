@@ -583,13 +583,7 @@ def start_brain(ui=None):
     except Exception as _ple:
         print(f"[PATTERNS] Init failed: {_ple}")
 
-    try:
-        from modules import face_auth as _face_auth
-        _face_auth.init(speak_fn=speak)
-        _enrolled = _face_auth.is_enrolled()
-        print(f"[FACE AUTH] {'Owner face enrolled.' if _enrolled else 'No face enrolled — say enroll my face to set up.'}")
-    except Exception as _fae:
-        print(f"[FACE AUTH] Init failed: {_fae}")
+    print("[FACE AUTH] Lazy-loaded — activates on first face command.")
 
     # Prune old command history per retention setting
     try:

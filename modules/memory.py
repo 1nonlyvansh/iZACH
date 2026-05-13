@@ -4,16 +4,29 @@ import time
 
 MEMORY_FILE = os.path.join(os.path.dirname(os.path.dirname(__file__)), "memory.json")
 
+_mem_cache: dict | None = None
+_cache_dirty = True
+
+
 def load_memory() -> dict:
+    global _mem_cache, _cache_dirty
+    if not _cache_dirty and _mem_cache is not None:
+        return _mem_cache
     try:
         with open(MEMORY_FILE, "r") as f:
-            return json.load(f)
+            _mem_cache = json.load(f)
     except Exception:
-        return {}
+        _mem_cache = {}
+    _cache_dirty = False
+    return _mem_cache
+
 
 def save_memory(data: dict):
+    global _mem_cache, _cache_dirty
     with open(MEMORY_FILE, "w") as f:
         json.dump(data, f, indent=2)
+    _mem_cache = data
+    _cache_dirty = False
 
 def add_memory(key: str, value: str):
     data = load_memory()
