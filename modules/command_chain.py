@@ -191,6 +191,22 @@ Output format:
         for cmd in sub_commands:
             resolved_cmd = self._resolve_pronouns(cmd)
 
+            # Calendar event confirmation (JARVIS-style: "Should I add X?")
+            try:
+                from modules import event_extractor as _ev_ext
+                if _ev_ext.has_pending_event():
+                    _words = set(resolved_cmd.split())
+                    _affirm = {"yes", "yeah", "yep", "sure", "ok", "okay", "haan", "add", "please"}
+                    _negate = {"no", "nope", "nahi", "skip", "dont", "cancel"}
+                    if _words & _affirm and len(_words) <= 4:
+                        _ev_ext.confirm_pending_event()
+                        continue
+                    elif _words & _negate and len(_words) <= 4:
+                        _ev_ext.reject_pending_event()
+                        continue
+            except Exception:
+                pass
+
             # Web automation (before system control to intercept "open X")
             _WEB_AUTOMATION_TRIGGERS = [
                 # navigate

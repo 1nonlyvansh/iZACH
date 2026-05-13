@@ -18,6 +18,8 @@ IST = ZoneInfo("Asia/Kolkata")
 
 _groq_client: Groq | None = None
 _speak_func = None
+_pending_events: list = []
+_pending_lock = threading.Lock()
 
 
 def init(speak_fn=None):
@@ -73,7 +75,7 @@ def _process(text: str, sender: str, msg_id: str, timestamp: str):
     elif is_reschedule:
         _handle_reschedule(extracted, sender)
     elif is_event:
-        _handle_new_event(extracted, sender, msg_id)
+        _queue_for_confirmation(extracted, sender, msg_id)
 
 
 def _extract(text: str, sender: str, timestamp: str) -> dict | None:
@@ -142,17 +144,93 @@ Return ONLY the JSON. No explanation, no markdown, no code blocks."""
         return None
 
 
+def _queue_for_confirmation(extracted: dict, sender: str, msg_id: str):
+    with _pending_lock:
+        was_empty = len(_pending_events) == 0
+        _pending_events.append((extracted, sender, msg_id))
+    if was_empty:
+        _ask_about_pending()
+
+
+def _ask_about_pending():
+    with _pending_lock:
+        if not _pending_events:
+            return
+        extracted, sender, _ = _pending_events[0]
+
+    title = extracted.get("title") or "Untitled Event"
+    date_str = extracted.get("date")
+    time_str = extracted.get("time")
+
+    date_readable = ""
+    if date_str:
+        try:
+            date_readable = datetime.strptime(date_str, "%Y-%m-%d").strftime("%d %B")
+        except Exception:
+            date_readable = date_str
+
+    time_readable = ""
+    if time_str:
+        try:
+            time_readable = f" at {datetime.strptime(time_str, '%H:%M').strftime('%I:%M %p').lstrip('0')}"
+        except Exception:
+            time_readable = f" at {time_str}"
+
+    question = f"Should I add {title}"
+    if date_readable:
+        question += f" on {date_readable}"
+    question += f"{time_readable} to your calendar?"
+
+    if _speak_func:
+        _speak_func(question)
+
+
+def has_pending_event() -> bool:
+    with _pending_lock:
+        return bool(_pending_events)
+
+
+def confirm_pending_event() -> bool:
+    with _pending_lock:
+        if not _pending_events:
+            return False
+        extracted, sender, msg_id = _pending_events.pop(0)
+        remaining = len(_pending_events)
+
+    threading.Thread(target=_handle_new_event, args=(extracted, sender, msg_id), daemon=True).start()
+
+    if remaining:
+        threading.Timer(2.0, _ask_about_pending).start()
+    return True
+
+
+def reject_pending_event() -> bool:
+    with _pending_lock:
+        if not _pending_events:
+            return False
+        extracted, _, _ = _pending_events.pop(0)
+        remaining = len(_pending_events)
+
+    title = extracted.get("title", "that event")
+    if _speak_func:
+        _speak_func(f"Okay, skipping {title}.")
+
+    if remaining:
+        threading.Timer(1.5, _ask_about_pending).start()
+    return True
+
+
 def _handle_new_event(extracted: dict, sender: str, msg_id: str):
     from modules.calendar_agent import add_event, format_event_for_speech
 
     title = extracted.get("title") or "Untitled Event"
     date_str = extracted.get("date")
-    time_str = extracted.get("time")
+    time_str = extracted.get("time") or "09:00"
     link = extracted.get("link")
     event_type = extracted.get("event_type", "other")
 
-    if not date_str or not time_str:
-        logger.info(f"[EventExtractor] Incomplete event (no date/time): {extracted}")
+    if not date_str:
+        logger.info(f"[EventExtractor] Incomplete event (no date): {extracted}")
         return
 
     description = f"From WhatsApp message by {sender}"
