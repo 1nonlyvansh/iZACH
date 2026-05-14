@@ -589,6 +589,22 @@ def start_brain(ui=None):
     except Exception as _ple:
         print(f"[PATTERNS] Init failed: {_ple}")
 
+    try:
+        from modules.curiosity_engine import init as _init_curiosity, start as _start_curiosity
+        _init_curiosity(speak_fn=speak)
+        _start_curiosity()
+        print("[CURIOSITY] Engine started.")
+    except Exception as _ce:
+        print(f"[CURIOSITY] Init failed: {_ce}")
+
+    try:
+        from modules.system_log_analyzer import init as _init_syslog, start as _start_syslog
+        _init_syslog(speak_fn=speak)
+        _start_syslog()
+        print("[SYSLOG] Analyzer started.")
+    except Exception as _sle:
+        print(f"[SYSLOG] Init failed: {_sle}")
+
     print("[FACE AUTH] Lazy-loaded — activates on first face command.")
 
     # Prune old command history per retention setting
@@ -689,6 +705,18 @@ def start_brain(ui=None):
                     pass
                 if _wake_detector:
                     _wake_detector.extend_active()
+
+                # Curiosity engine answer intercept — if iZACH just asked a
+                # question, treat the next input as the answer, not a command.
+                try:
+                    from modules.curiosity_engine import is_waiting_for_answer, capture_answer, record_interaction as _ce_record
+                    _ce_record()
+                    if is_waiting_for_answer():
+                        capture_answer(query)
+                        continue
+                except Exception:
+                    pass
+
                 _t0 = time.time()
                 try:
                     chain_engine.process(query)

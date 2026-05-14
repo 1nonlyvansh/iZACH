@@ -14,11 +14,14 @@ VAULT_PATH = r"C:\Projects\iZACH\iZACH-Brain"
 
 
 FILES = {
-    "profile":     "User Profile.md",
-    "preferences": "Behavior Preferences.md",
-    "insights":    "Usage Insights.md",
-    "weaknesses":  "System Weaknesses.md",
-    "commands":    "Frequent Commands.md",
+    "profile":        "User Profile.md",
+    "preferences":    "Behavior Preferences.md",
+    "insights":       "Usage Insights.md",
+    "weaknesses":     "System Weaknesses.md",
+    "commands":       "Frequent Commands.md",
+    "learned_facts":  "Learned Facts.md",
+    "system_profile": "System Profile.md",
+    "brain_index":    "iZACH Brain.md",
 }
 
 
@@ -186,3 +189,93 @@ def generate_insights(log_file: str = "command_log.csv"):
     # Also update frequent commands
     update_frequent_commands(cmd_counts)
     print("[OBSIDIAN] Insights generated.")
+
+
+def log_learned_fact(key: str, category: str, question: str, answer: str):
+    """
+    Save an answer from the curiosity engine into Learned Facts.md.
+    Each entry is linked back to [[iZACH Brain]] for graph connectivity.
+    """
+    content = _read("learned_facts")
+    if not content:
+        content = (
+            "# Learned Facts\n"
+            "*Answers iZACH collected by asking [[iZACH Brain|the user]] directly.*\n\n"
+        )
+
+    entry = (
+        f"\n### {category} — `{key}`\n"
+        f"**Asked:** {_ts()}\n"
+        f"**Q:** {question}\n"
+        f"**A:** {answer}\n"
+        f"*Tags: #{category.lower()} #learned*\n"
+    )
+
+    if _is_duplicate(content, answer.strip()):
+        # Update existing answer instead of duplicating
+        return
+
+    content += entry
+    _write("learned_facts", content)
+    _update_brain_index()
+    print(f"[OBSIDIAN] Learned fact saved: {key}")
+
+
+def save_system_profile(summary: str, raw_apps: str = "", raw_events: str = ""):
+    """
+    Write system log analysis to System Profile.md.
+    Linked to [[iZACH Brain]] for graph connectivity.
+    """
+    top_apps = [line.strip() for line in raw_apps.splitlines() if line.strip()][:30]
+    apps_section = "\n".join(f"- `{a}`" for a in top_apps) if top_apps else "_No data_"
+
+    content = (
+        f"# System Profile\n"
+        f"*Last analyzed: {_ts()} — part of [[iZACH Brain]]*\n\n"
+        f"## Analysis\n"
+        f"{summary}\n\n"
+        f"## Recently Used Apps (last 10 days)\n"
+        f"{apps_section}\n\n"
+        f"## Linked Notes\n"
+        f"- [[User Profile]]\n"
+        f"- [[Behavior Preferences]]\n"
+        f"- [[Usage Insights]]\n"
+    )
+    _write("system_profile", content)
+    _update_brain_index()
+    print("[OBSIDIAN] System profile saved.")
+
+
+def _update_brain_index():
+    """
+    Maintain iZACH Brain.md — a central hub note with [[wikilinks]] to all
+    other notes. Call after any write so the graph stays connected.
+    """
+    note_links = {
+        "profile":        ("User Profile",        "Who the user is — name, role, preferences."),
+        "preferences":    ("Behavior Preferences", "Learned behavioral patterns and preferences."),
+        "learned_facts":  ("Learned Facts",        "Answers iZACH collected by asking the user."),
+        "system_profile": ("System Profile",       "10-day Windows system usage and health analysis."),
+        "insights":       ("Usage Insights",       "Command usage stats and session summaries."),
+        "weaknesses":     ("System Weaknesses",    "Recurring failures and problem areas."),
+        "commands":       ("Frequent Commands",    "Top commands by usage frequency."),
+    }
+
+    links_md = ""
+    for key, (title, desc) in note_links.items():
+        exists = os.path.exists(_path(key))
+        status = "✓" if exists else "○"
+        links_md += f"- {status} [[{title}]] — {desc}\n"
+
+    content = (
+        f"# iZACH Brain\n"
+        f"*Central knowledge graph — updated {_ts()}*\n\n"
+        f"> This is iZACH's memory hub. All notes link back here.\n\n"
+        f"## Knowledge Nodes\n"
+        f"{links_md}\n"
+        f"## About\n"
+        f"iZACH builds this graph automatically — through observation, conversation, "
+        f"and system analysis. Each node stores a different type of memory.\n"
+    )
+    _write("brain_index", content)
+    print("[OBSIDIAN] Brain index updated.")
