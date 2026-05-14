@@ -49,6 +49,8 @@ Pair it with the Android companion app and your phone becomes a remote interface
 - Gemini fallback (3 rotated keys)
 - Context memory across sessions
 - Disambiguation for ambiguous commands
+- Hinglish language matching — replies in casual Hindi/English mix when user writes in Hinglish
+- **Mic muted during TTS playback** — prevents feedback loop where built-in mic picks up speaker output; 0.6s post-speech cooldown
 
 **🖥️ System Control**
 - Volume, brightness, Wi-Fi, dark/light mode
@@ -76,6 +78,9 @@ Pair it with the Android companion app and your phone becomes a remote interface
 - MongoDB brain (falls back to local JSON)
 - Proactive task suggestions
 - Calendar event extraction from speech
+- **Curiosity engine** — asks one question per session during idle moments to build a personal profile; intercepts next voice input as answer; saves to MongoDB + Obsidian
+- **System log analyzer** — reads last 10 days of Windows Event Logs, Prefetch, boot history, disk/RAM; sends to Gemini for a personality-style usage analysis; stored in MongoDB + Obsidian
+- **Obsidian brain graph** — vault at `iZACH-Brain/` with `[[wikilinks]]` between all memory nodes; `iZACH Brain.md` hub auto-updated on every write
 
 **📱 Connectivity**
 - WhatsApp bridge — lazy-started on first WA command (~350MB saved idle)
@@ -96,6 +101,7 @@ Pair it with the Android companion app and your phone becomes a remote interface
 - Calorie estimation from food
 - Brand/item recognition
 - Screen element detection
+- **MJPEG live stream** — `GET /vision/stream` at ~15 fps; shared camera ref-counted so zero idle RAM when no client connected
 
 **⚡ Performance**
 - WhatsApp bridge lazy-starts — Puppeteer not loaded until first WA command
@@ -409,9 +415,12 @@ iZACH/
 │   ├── file_manager.py      # File operations
 │   ├── calendar_agent.py    # Google Calendar sync
 │   ├── pattern_learner.py   # Behavioral pattern engine
+│   ├── curiosity_engine.py  # Proactive questioning + answer capture
+│   ├── system_log_analyzer.py # 10-day Windows system analysis
+│   ├── obsidian_brain.py    # Obsidian vault writer + brain graph
 │   ├── spotify_controller.py
 │   ├── whatsapp_handler.py
-│   ├── camera_vision.py     # Gemini Vision integration
+│   ├── camera_vision.py     # Gemini Vision + MJPEG stream
 │   ├── ws_bridge.py         # WebSocket broadcast hub
 │   └── ui_api.py            # Flask REST endpoints
 ├── izach-ui/                # Electron + React desktop app
@@ -438,7 +447,7 @@ iZACH/
 | Browser | Playwright (Chromium) |
 | Vision | OpenCV · face_recognition (dlib) · Gemini Vision |
 | Automation | PyAutoGUI · pywin32 · psutil |
-| Memory | MongoDB · JSON fallback |
+| Memory | MongoDB · Obsidian vault (`[[wikilinks]]` graph) · JSON fallback |
 | Android | Kotlin · OkHttp · Wi-Fi (HTTP to Flask :5050) |
 
 ---
