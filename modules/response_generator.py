@@ -78,16 +78,26 @@ Respond with ONLY the spoken words. No quotes. Nothing else."""
 # Language detector (simple, no external libs)
 # ─────────────────────────────────────────────
 def _detect_language(text: str) -> str:
-    """Returns 'hi' if Hindi/Urdu detected, else 'en'."""
+    """Returns 'hi' if Hinglish/Hindi detected, else 'en'."""
     if not text:
         return "en"
     hindi_chars = set("अआइईउऊएऐओऔकखगघचछजझटठडढणतथदधनपफबभमयरलवशषसहक्षत्रज्ञ")
-    urdu_words  = {"kya", "nahi", "haan", "theek", "acha", "bhai", "yaar",
-                   "karo", "kar", "bolo", "sunao", "batao", "dekho", "chalao"}
-    words = text.lower().split()
+    # Common Hinglish words (Latin-script Hindi/Urdu used in casual Indian texting)
+    hinglish_words = {
+        "kya", "nahi", "nhi", "haan", "han", "theek", "thik", "acha", "accha",
+        "bhai", "yaar", "kar", "karo", "kal", "abhi", "bolo", "sunao", "batao",
+        "dekho", "chalao", "chal", "ho", "hai", "hain", "tha", "thi", "bhi",
+        "toh", "tou", "bas", "bilkul", "sahi", "galat", "matlab", "matlab",
+        "mujhe", "mera", "tera", "apna", "kuch", "koi", "sab", "kyun", "kyunki",
+        "phir", "fir", "woh", "wo", "yeh", "ye", "iska", "uska", "mere", "tere",
+        "bata", "laga", "leke", "karke", "rehna", "reh", "hua", "hui", "hue",
+        "zyada", "thoda", "bahut", "acchi", "alag", "seedha", "pata", "nahi",
+    }
+    words = [w.strip(".,!?") for w in text.lower().split()]
     if any(c in hindi_chars for c in text):
         return "hi"
-    if sum(1 for w in words if w in urdu_words) >= 2:
+    # 1 strong word is enough — don't require 2 (user might mix lightly)
+    if sum(1 for w in words if w in hinglish_words) >= 1:
         return "hi"
     return "en"
 

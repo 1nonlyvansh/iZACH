@@ -289,10 +289,27 @@ def get_ai_response(query):
     from modules.memory import get_memory_as_context
     from modules.context_memory import get_context_memory
     from modules.personality import PERSONALITY_PROMPT, detect_sentiment, get_companion_response, get_tone_for_sentiment
+    from modules.response_generator import _detect_language
     from modules.state_engine import state
     cm = get_context_memory()
 
     resolved    = cm.resolve_followup(query)
+    lang        = _detect_language(query)
+
+    # Hard per-query language directive — injected after the user message so the
+    # model cannot override it with the general personality rule.
+    if lang == "hi":
+        lang_directive = (
+            "\n[LANGUAGE RULE] User wrote in Hinglish. Reply in casual Hinglish — "
+            "mix Hindi/Urdu words with English naturally, like Indian friends text. "
+            "Example style: 'Bhai sorted hai', 'Chal theek hai', 'Acha nice'."
+        )
+    else:
+        lang_directive = (
+            "\n[LANGUAGE RULE] User wrote in English. Reply in English ONLY. "
+            "Do NOT use any Hindi/Urdu words — no 'bhai', no 'yaar', no 'kya', nothing."
+        )
+
     parts       = []
     personal_mem = get_memory_as_context()
     if personal_mem:
@@ -306,14 +323,12 @@ def get_ai_response(query):
     parts.insert(0, persona_prefix + PERSONALITY_PROMPT)
 
     if parts:
-        full_query = "\n\n".join(parts) + f"\n\nUser: {resolved}"
+        full_query = "\n\n".join(parts) + f"\n\nUser: {resolved}{lang_directive}"
     else:
-        full_query = resolved
+        full_query = resolved + lang_directive
 
     response = ai_manager.send_message(full_query)
 
-    from modules.response_generator import _detect_language
-    lang      = _detect_language(query)
     sentiment = detect_sentiment(query)
     if lang == "en":
         companion = get_companion_response(sentiment)
