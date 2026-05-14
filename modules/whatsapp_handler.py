@@ -3,10 +3,12 @@ import requests
 import asyncio
 import edge_tts
 import os
+from concurrent.futures import ThreadPoolExecutor
 from flask import Flask, request, jsonify
 
 app = Flask(__name__)
 _OWNER = os.getenv("OWNER_NAME", "User")
+_announce_pool = ThreadPoolExecutor(max_workers=1)
 _speak_func = None
 _chain_func = None
 _pending_call = None
@@ -236,11 +238,7 @@ def incoming_message():
         pass
 
     if _speak_func and _ai_func and _notif_whatsapp_enabled():
-        threading.Thread(
-            target=_announce_message,
-            args=(sender, text, number),
-            daemon=True
-        ).start()
+        _announce_pool.submit(_announce_message, sender, text, number)
 
     return jsonify({'status': 'notified'})
 

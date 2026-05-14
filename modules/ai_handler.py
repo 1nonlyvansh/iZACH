@@ -1,8 +1,11 @@
 import time
 import re
+import httpx
 from groq import Groq
 from google import genai
 from google.genai import types
+
+_HTTP_LIMITS = httpx.Limits(max_connections=5, max_keepalive_connections=2)
 
 _style_cache: dict = {}
 _STYLE_TTL = 30  # seconds
@@ -10,7 +13,7 @@ _STYLE_TTL = 30  # seconds
 
 class AIProvider:
     def __init__(self, groq_key, gemini_keys):
-        self.groq_client = Groq(api_key=groq_key)
+        self.groq_client = Groq(api_key=groq_key, http_client=httpx.Client(limits=_HTTP_LIMITS))
         self.gemini_keys = gemini_keys
         self.current_gem_idx = 0
         self.gemini_client = None

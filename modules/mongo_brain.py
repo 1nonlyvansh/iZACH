@@ -21,7 +21,7 @@ def init_db():
     if _mongo_failed:
         return None
     try:
-        _client = MongoClient("mongodb://127.0.0.1:27017/", serverSelectionTimeoutMS=2000)
+        _client = MongoClient("mongodb://127.0.0.1:27017/", serverSelectionTimeoutMS=2000, maxPoolSize=3)
         _client.server_info()
         _db = _client["izach"]
         print("[MONGO] Connected to MongoDB")

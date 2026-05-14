@@ -31,7 +31,7 @@ _context = None
 _init_lock = threading.Lock()
 _active_tab_idx = -1  # -1 = last tab
 _last_used = 0.0
-_IDLE_TIMEOUT = 600  # close browser after 10 min idle
+_IDLE_TIMEOUT = 120  # close browser after 2 min idle
 
 
 def _idle_watcher():
@@ -135,10 +135,17 @@ def _resolve_url(target: str) -> str:
     return url
 
 
+_groq_client = None
+
+def _get_groq_client():
+    global _groq_client
+    if _groq_client is None:
+        from groq import Groq
+        _groq_client = Groq(api_key=os.getenv("GROQ_API_KEY", ""))
+    return _groq_client
+
 def _groq_summarize(prompt_system: str, content: str, max_tokens: int = 200) -> str:
-    from groq import Groq
-    client = Groq(api_key=os.getenv("GROQ_API_KEY", ""))
-    resp = client.chat.completions.create(
+    resp = _get_groq_client().chat.completions.create(
         model="llama-3.3-70b-versatile",
         messages=[
             {"role": "system", "content": prompt_system},
