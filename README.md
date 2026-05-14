@@ -81,6 +81,7 @@ Pair it with the Android companion app and your phone becomes a remote interface
 - **Curiosity engine** — asks one question per session during idle moments to build a personal profile; intercepts next voice input as answer; saves to MongoDB + Obsidian
 - **System log analyzer** — reads last 10 days of Windows Event Logs, Prefetch, boot history, disk/RAM; sends to Gemini for a personality-style usage analysis; stored in MongoDB + Obsidian
 - **Obsidian brain graph** — vault at `iZACH-Brain/` with `[[wikilinks]]` between all memory nodes; `iZACH Brain.md` hub auto-updated on every write
+- **Relationship memory** — remembers people by name; say "Divya is my college friend" or "remember that Rohan works at Google"; say "who is Divya?" to recall; each person gets a linked `People/{Name}.md` Obsidian note; WhatsApp contacts auto-registered on first message
 
 **📱 Connectivity**
 - WhatsApp bridge — lazy-started on first WA command (~350MB saved idle)
@@ -88,6 +89,7 @@ Pair it with the Android companion app and your phone becomes a remote interface
 - Google Calendar sync
 - Android companion app (Wi-Fi)
 - Ngrok tunnel for remote access
+- **Auto-draft WhatsApp reply** — say "draft a reply" or "what should I say"; iZACH fetches last 12 messages from that chat, factors in relationship context, generates a contextual draft and speaks it; approve ("send it"), reject ("cancel"), or revise ("change it to…") by voice
 
 **🔐 Security**
 - Face authentication — lazy-loaded on first face command (~80MB saved idle)
@@ -250,6 +252,15 @@ Pair it with the Android companion app and your phone becomes a remote interface
 // Communication
 "What did she say on WhatsApp?"
 "Reply: I'll be there in 10 minutes"
+"Draft a reply"
+"What should I say?"
+→ iZACH speaks draft → "Send it" / "Cancel" / "Change it to I'm busy right now"
+
+// People
+"Divya is my college friend"
+"Remember that Rohan works at Google"
+"Who is Divya?"
+"What do you know about Rohan?"
 
 // Vision
 "What am I holding?"
@@ -418,6 +429,8 @@ iZACH/
 │   ├── curiosity_engine.py  # Proactive questioning + answer capture
 │   ├── system_log_analyzer.py # 10-day Windows system analysis
 │   ├── obsidian_brain.py    # Obsidian vault writer + brain graph
+│   ├── relationship_memory.py # People profiles (MongoDB + Obsidian)
+│   ├── wa_draft_engine.py   # WhatsApp auto-draft + voice approval flow
 │   ├── spotify_controller.py
 │   ├── whatsapp_handler.py
 │   ├── camera_vision.py     # Gemini Vision + MJPEG stream
