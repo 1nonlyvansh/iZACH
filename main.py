@@ -116,22 +116,15 @@ async def generate_and_play(text):
         try:
             import json as _j
             with open("api_keys.json") as _f:
-                _spd = int(_j.load(_f).get("tts_speed", 0))
-            rate = _combined_rate(rate, _spd)
+                _cfg = _j.load(_f)
+            rate = _combined_rate(rate, int(_cfg.get("tts_speed", 0)))
+            _active_voice = _cfg.get("voice", VOICE) or VOICE
         except Exception:
-            pass
+            _active_voice = VOICE
 
         try:
             pygame.mixer.music.stop()
             pygame.mixer.music.unload()
-        except Exception:
-            pass
-
-        _active_voice = VOICE
-        try:
-            import json as _jv
-            with open("api_keys.json") as _fv:
-                _active_voice = _jv.load(_fv).get("voice", VOICE) or VOICE
         except Exception:
             pass
 
@@ -155,10 +148,7 @@ async def generate_and_play(text):
                 words = seg_text.split()
                 if words:
                     chars_total = max(len(seg_text), 1)
-                    try:
-                        duration = pygame.mixer.Sound(audio_file).get_length()
-                    except Exception:
-                        duration = max(len(seg_text) * 0.065, 1.5)
+                    duration = max(len(seg_text) * 0.065, 1.5)
 
                     displayed = []
                     for word in words:
@@ -600,36 +590,6 @@ def start_brain(ui=None):
             _ww_enabled = _json.load(_f).get("wake_word_enabled", False)
     except Exception:
         pass
-
-    # Read clap_enabled from settings (default True)
-    _clap_enabled = True
-    try:
-        with open("api_keys.json") as _f:
-            _clap_enabled = _json.load(_f).get("clap_enabled", True)
-    except Exception:
-        pass
-
-    def _on_single_clap():
-        speak("Listening.")
-        if _ww_enabled and _wake_detector is not None:
-            _wake_detector.extend_active()
-
-    def _on_double_clap():
-        try:
-            pygame.mixer.music.stop()
-        except Exception:
-            pass
-
-    _clap_det = None
-    if _clap_enabled:
-        try:
-            from modules.clap_detector import init_clap_detector
-            _clap_det = init_clap_detector(on_single=_on_single_clap, on_double=_on_double_clap)
-            _clap_det.start()
-        except Exception as _ce:
-            print(f"[CLAP] Failed to start: {_ce}")
-    else:
-        print("[CLAP] Disabled in settings.")
 
     # Start wake word detector if enabled
     _wake_detector = None

@@ -288,18 +288,21 @@ function WhatsAppPanel({ status, qr }) {
 }
 
 function MmaPanel({ mmaStatus, androidDevices }) {
-  const [connectQr, setConnectQr] = useState(null)
+  const [connectQr, setConnectQr]       = useState(null)
+  const [qrMode, setQrMode]             = useState('lan')      // 'lan' | 'tailscale'
+  const [tailscaleIp, setTailscaleIp]   = useState(null)
 
   useEffect(() => {
-    if (androidDevices.length === 0) {
-      fetch('http://localhost:5050/connect/qr')
-        .then(r => r.json())
-        .then(d => { if (d.ok) setConnectQr(d.qr_base64) })
-        .catch(() => {})
-    } else {
-      setConnectQr(null)
-    }
-  }, [androidDevices.length])
+    if (androidDevices.length !== 0) { setConnectQr(null); return }
+    fetch(`http://localhost:5050/connect/qr?mode=${qrMode}`)
+      .then(r => r.json())
+      .then(d => {
+        if (!d.ok) return
+        setConnectQr(d.qr_base64)
+        if (d.tailscale_ip) setTailscaleIp(d.tailscale_ip)
+      })
+      .catch(() => {})
+  }, [androidDevices.length, qrMode])
 
   return (
     <div>
@@ -347,8 +350,33 @@ function MmaPanel({ mmaStatus, androidDevices }) {
 
         {androidDevices.length === 0 && (
           <div style={{ marginTop: 6 }}>
+            {tailscaleIp && (
+              <div style={{ display: 'flex', gap: 4, marginBottom: 8 }}>
+                {['lan', 'tailscale'].map(m => (
+                  <button
+                    key={m}
+                    onClick={() => setQrMode(m)}
+                    style={{
+                      flex: 1,
+                      padding: '3px 0',
+                      background: qrMode === m ? '#0a2a3a' : 'transparent',
+                      border: `1px solid ${qrMode === m ? '#1a6a8a' : '#0a2a3a'}`,
+                      borderRadius: 3,
+                      color: qrMode === m ? '#c8f0ff' : '#1a4a5a',
+                      fontFamily: "'Share Tech Mono'",
+                      fontSize: '8px',
+                      letterSpacing: '0.1em',
+                      cursor: 'pointer',
+                      textTransform: 'uppercase',
+                    }}
+                  >
+                    {m === 'lan' ? 'Local' : 'Remote'}
+                  </button>
+                ))}
+              </div>
+            )}
             <p style={{ color: '#3a6070', fontFamily: "'Share Tech Mono'", fontSize: '8px', letterSpacing: '0.12em', marginBottom: 8 }}>
-              SCAN TO CONNECT PHONE
+              {qrMode === 'tailscale' ? `TAILSCALE · ${tailscaleIp}` : 'SCAN TO CONNECT PHONE'}
             </p>
             {connectQr ? (
               <img
@@ -362,7 +390,9 @@ function MmaPanel({ mmaStatus, androidDevices }) {
               </p>
             )}
             <p style={{ color: '#1a4a5a', fontFamily: "'JetBrains Mono'", fontSize: '8px', marginTop: 6, lineHeight: 1.4 }}>
-              Open iZACH app → Settings → Scan QR Code
+              {qrMode === 'tailscale'
+                ? 'Requires Tailscale on both devices · works from any network'
+                : 'Open iZACH app → Settings → Scan QR Code'}
             </p>
           </div>
         )}

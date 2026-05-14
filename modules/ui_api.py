@@ -527,7 +527,7 @@ def settings_post():
 
         # Only update non-key fields (never accept raw key overwrites from UI)
         allowed = {
-            "wake_word_enabled", "clap_enabled", "voice", "tts_speed",
+            "wake_word_enabled", "voice", "tts_speed",
             "response_style", "response_verbosity", "safe_mode_enabled",
             "notif_performance", "notif_whatsapp", "notif_downloads",
             "command_history_enabled", "log_retention_days",
@@ -1367,19 +1367,45 @@ def confirm_command():
 
 # ─────────────────────────────────────────────────────────────
 # GET /connect/qr  — QR code encoding backend URL + WS host for Android app
+# Optional ?mode=tailscale  → encodes Tailscale IP instead of LAN IP
 # ─────────────────────────────────────────────────────────────
+
+def _get_tailscale_ip():
+    """Return Tailscale IP (100.x.x.x) or None if not installed/connected."""
+    import subprocess as _sp
+    try:
+        flags = _sp.CREATE_NO_WINDOW if hasattr(_sp, 'CREATE_NO_WINDOW') else 0
+        r = _sp.run(
+            ["tailscale", "ip", "-4"],
+            capture_output=True, text=True, timeout=3,
+            creationflags=flags
+        )
+        ip = r.stdout.strip().split('\n')[0]
+        if ip and ip.startswith("100."):
+            return ip
+    except Exception:
+        pass
+    return None
+
 
 @ui_bp.route("/connect/qr", methods=["GET"])
 def connect_qr():
     import socket as _socket, json as _json2, io as _io, base64 as _b64
     import qrcode as _qr
+
+    mode = request.args.get("mode", "lan")
+
     try:
         _s = _socket.socket(_socket.AF_INET, _socket.SOCK_DGRAM)
         _s.connect(("8.8.8.8", 80))
-        ip = _s.getsockname()[0]
+        lan_ip = _s.getsockname()[0]
         _s.close()
     except Exception:
-        ip = "127.0.0.1"
+        lan_ip = "127.0.0.1"
+
+    tailscale_ip = _get_tailscale_ip()
+    ip = tailscale_ip if (mode == "tailscale" and tailscale_ip) else lan_ip
+
     payload = _json2.dumps({"backend_url": f"http://{ip}:5050", "ws_host": ip})
     _qr_img = _qr.QRCode(version=1, box_size=8, border=3)
     _qr_img.add_data(payload)
@@ -1388,7 +1414,14 @@ def connect_qr():
     buf = _io.BytesIO()
     img.save(buf, format="PNG")
     b64 = _b64.b64encode(buf.getvalue()).decode()
-    return jsonify({"ok": True, "qr_base64": b64, "backend_url": f"http://{ip}:5050", "ws_host": ip})
+    return jsonify({
+        "ok":           True,
+        "qr_base64":    b64,
+        "backend_url":  f"http://{ip}:5050",
+        "ws_host":      ip,
+        "tailscale_ip": tailscale_ip,
+        "mode":         mode,
+    })
 
 
 # ─────────────────────────────────────────────────────────────

@@ -191,7 +191,6 @@ function SelectField({ label, value, onChange, options }) {
 function GeneralSection({ settings, onSave }) {
   const [form, setForm] = useState({
     wake_word_enabled:       settings.wake_word_enabled       ?? false,
-    clap_enabled:            settings.clap_enabled            ?? true,
     voice:                   settings.voice                   ?? 'en-US-ChristopherNeural',
     tts_speed:               settings.tts_speed               ?? 0,
     response_style:          settings.response_style          ?? 'casual',
@@ -240,8 +239,6 @@ function GeneralSection({ settings, onSave }) {
       {/* ── VOICE & AUDIO ─────────────────────────── */}
       <SectionHeader label="VOICE & AUDIO" />
       <Toggle label="Wake Word Detection ('Hey iZACH')"              checked={form.wake_word_enabled}  onChange={v => set('wake_word_enabled', v)} />
-      <Toggle label="Clap Detection (single = listen, double = stop)" checked={form.clap_enabled}       onChange={v => set('clap_enabled', v)} />
-
       <SelectField
         label="TTS VOICE"
         value={form.voice}
@@ -339,7 +336,7 @@ function GeneralSection({ settings, onSave }) {
         <div style={{ padding: '8px 20px 16px' }}>
           <Btn label="SAVE SETTINGS" onClick={handleSave} />
           <p style={{ color: '#1a4a5a', fontFamily: "'JetBrains Mono'", fontSize: '9px', marginTop: 6 }}>
-            Voice, AI, notifications &amp; privacy apply instantly. Wake word / clap toggles need restart.
+            Voice, AI, notifications &amp; privacy apply instantly. Wake word toggle needs restart.
           </p>
         </div>
       )}

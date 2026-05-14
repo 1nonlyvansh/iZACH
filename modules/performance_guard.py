@@ -2,13 +2,21 @@ import psutil
 import threading
 import time
 
+_perf_notif_cache: tuple[bool, float] = (True, 0.0)
+
 def _perf_notif_enabled() -> bool:
+    global _perf_notif_cache
+    val, ts = _perf_notif_cache
+    if time.time() - ts < 60:
+        return val
     try:
         import json as _j
         with open("api_keys.json") as _f:
-            return bool(_j.load(_f).get("notif_performance", True))
+            val = bool(_j.load(_f).get("notif_performance", True))
     except Exception:
-        return True
+        val = True
+    _perf_notif_cache = (val, time.time())
+    return val
 
 
 class PerformanceGuard:
@@ -66,7 +74,7 @@ class PerformanceGuard:
             except Exception as e:
                 print(f"[PERF GUARD ERROR] {e}")
             
-            time.sleep(1) # Poll every second
+            time.sleep(5)  # Poll every 5s — psutil CPU calls are expensive
 
     def start(self):
         t = threading.Thread(target=self._monitor_loop, daemon=True)
