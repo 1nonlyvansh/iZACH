@@ -7,6 +7,7 @@ No persistent camera thread — zero idle RAM usage.
 
 import cv2
 import time
+import threading
 import os as _os
 from dotenv import load_dotenv as _ldenv
 _ldenv()
@@ -22,6 +23,39 @@ _last_call_time = 0
 _vision_in_progress = False
 MIN_CALL_INTERVAL = 10
 
+# ── Persistent streaming camera ───────────────────────────────
+_stream_cap: cv2.VideoCapture | None = None
+_stream_lock = threading.Lock()
+_stream_clients = 0
+
+
+def _start_stream_cam():
+    global _stream_cap, _stream_clients
+    with _stream_lock:
+        _stream_clients += 1
+        if _stream_cap is None:
+            _stream_cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+            _stream_cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+            _stream_cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+            _stream_cap.set(cv2.CAP_PROP_BUFFERSIZE, 2)
+
+
+def _stop_stream_cam():
+    global _stream_cap, _stream_clients
+    with _stream_lock:
+        _stream_clients = max(0, _stream_clients - 1)
+        if _stream_clients == 0 and _stream_cap is not None:
+            _stream_cap.release()
+            _stream_cap = None
+
+
+def _read_stream_frame():
+    with _stream_lock:
+        if _stream_cap is None:
+            return None
+        ret, frame = _stream_cap.read()
+        return cv2.flip(frame, 1) if ret else None
+
 
 def _get_gemini_client():
     from google import genai
@@ -29,7 +63,12 @@ def _get_gemini_client():
 
 
 def _capture_frame():
-    """Open camera, grab one frame, release immediately."""
+    """Grab one frame — reuses streaming camera if active, else opens/closes."""
+    with _stream_lock:
+        if _stream_cap is not None:
+            ret, frame = _stream_cap.read()
+            return cv2.flip(frame, 1) if ret else None
+
     cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)

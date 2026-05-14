@@ -62,7 +62,7 @@ Hard rules:
 - NEVER repeat the task name robotically
 - Sound like a human, not a chatbot
 - If status is failure: be direct, one line, no apology
-- If language hint is "hi": respond in casual Hindi
+- If language hint is "hi": respond in Hinglish (casual mix of Hindi/Urdu words and English, like Indian friends texting — e.g. "Bhai ho gaya", "Chal sorted hai", "Done kar diya")
 
 Good examples:
 "Playing Kanye now."
@@ -167,7 +167,7 @@ class ResponseGenerator:
         target = context.get("target", "")
         status = context.get("status", "success")
         detail = context.get("detail", "")
-        lang_note = "Respond in Hindi (romanized is fine)." if lang == "hi" else ""
+        lang_note = "Respond in Hinglish — casual mix of Hindi/Urdu and English. Like: 'Bhai ho gaya', 'Chal sorted hai'. Never use pure Hindi script." if lang == "hi" else ""
 
         return (
             f"Task: {task}\n"

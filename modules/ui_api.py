@@ -869,7 +869,39 @@ def vision_ask():
         return jsonify({"ok": True, "answer": answer})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
-    
+
+
+# ─────────────────────────────────────────────────────────────
+# GET /vision/stream  — MJPEG live camera feed for UI
+# ─────────────────────────────────────────────────────────────
+
+@ui_bp.route("/vision/stream")
+def vision_stream():
+    import cv2 as _cv2
+    from flask import Response as _Response
+    from modules.camera_vision import _start_stream_cam, _stop_stream_cam, _read_stream_frame
+
+    def _generate():
+        _start_stream_cam()
+        try:
+            while True:
+                frame = _read_stream_frame()
+                if frame is None:
+                    time.sleep(0.1)
+                    continue
+                ret, buf = _cv2.imencode('.jpg', frame, [_cv2.IMWRITE_JPEG_QUALITY, 65])
+                if not ret:
+                    continue
+                yield (b'--frame\r\nContent-Type: image/jpeg\r\n\r\n'
+                       + buf.tobytes() + b'\r\n')
+                time.sleep(0.067)  # ~15 fps
+        except GeneratorExit:
+            pass
+        finally:
+            _stop_stream_cam()
+
+    return _Response(_generate(), mimetype='multipart/x-mixed-replace; boundary=frame')
+
 
 # ─────────────────────────────────────────────────────────────
 # GET /mic/devices   — list audio input devices
