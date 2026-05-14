@@ -661,7 +661,7 @@ def cache_sizes():
     sizes["wwebjs_cache"] = f"{_fmt(sz)}  ·  {cnt} files" if cnt else "empty"
 
     sp_dir = root / ".cache"
-    sp_files = [f for f in sp_dir.iterdir() if f.is_file()] if sp_dir.exists() else []
+    sp_files = [f for f in sp_dir.iterdir() if f.is_file()] if sp_dir.is_dir() else []
     sp_sz = sum(f.stat().st_size for f in sp_files)
     sizes["spotify_cache"] = f"{_fmt(sp_sz)}" if sp_files else "empty"
 

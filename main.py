@@ -139,8 +139,18 @@ async def generate_and_play(text):
 
             audio_file = f"speech_{uuid.uuid4().hex[:8]}.mp3"
             try:
-                communicate = edge_tts.Communicate(seg_text, seg_voice, rate=rate)
-                await communicate.save(audio_file)
+                # Retry up to 2 times — edge_tts occasionally returns "No audio
+                # was received" on transient network hiccups.
+                for _attempt in range(3):
+                    try:
+                        communicate = edge_tts.Communicate(seg_text, seg_voice, rate=rate)
+                        await communicate.save(audio_file)
+                        if os.path.getsize(audio_file) > 0:
+                            break
+                    except Exception as _tts_err:
+                        if _attempt == 2:
+                            raise
+                        await asyncio.sleep(0.5 * (_attempt + 1))
                 pygame.mixer.music.load(audio_file)
                 pygame.mixer.music.play()
 
