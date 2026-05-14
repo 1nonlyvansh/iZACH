@@ -52,6 +52,10 @@ class InterruptEngine:
         """Inject the stop-speech function from main.py."""
         self._stop_fn = fn
 
+    def is_speaking(self) -> bool:
+        with self._lock:
+            return self._is_speaking
+
     def set_speaking(self, val: bool):
         """Called by main.py when TTS starts/stops."""
         with self._lock:

@@ -197,6 +197,8 @@ async def generate_and_play(text):
     except Exception as e:
         print(f"[TTS ERROR] {e}")
     finally:
+        # Small cooldown so speaker reverb clears before mic re-opens.
+        await asyncio.sleep(0.6)
         _speaking = False
         try:
             from modules.interrupt_engine import get_interrupt_engine
@@ -355,6 +357,20 @@ def listen():
     if app and hasattr(app, 'is_mic_active') and not app.is_mic_active():
         time.sleep(0.5)
         return "none"
+
+    # Block mic while TTS is playing — prevents feedback loop where mic
+    # picks up speaker output and processes it as a command.
+    if _speaking:
+        time.sleep(0.1)
+        return "none"
+    try:
+        from modules.interrupt_engine import get_interrupt_engine
+        if get_interrupt_engine().is_speaking():
+            time.sleep(0.1)
+            return "none"
+    except Exception:
+        pass
+
     if _mic is None:
         _init_mic()
     try:
