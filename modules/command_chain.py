@@ -2098,6 +2098,54 @@ Explain in one sentence what they want. Start with their name. Sound like JARVIS
                 self.speak("Could not reach WhatsApp bridge.")
             return
         
+        # ── Relationship memory commands ──────────────────────────
+        # "who is Divya" / "what do you know about Rohan"
+        if any(w in cmd for w in ["who is ", "what do you know about ", "tell me about "]):
+            import re as _re
+            m = _re.search(r"(?:who is|what do you know about|tell me about)\s+([A-Za-z]+(?:\s[A-Za-z]+)?)", cmd, _re.IGNORECASE)
+            if m:
+                name = m.group(1).strip().title()
+                from modules.relationship_memory import get_summary
+                self.speak(get_summary(name))
+            else:
+                self.speak("Who do you want me to look up?")
+            return
+
+        # "X is my Y" / "remember that X works at Y" / "X studies at Y"
+        if re.search(r"\b(is my|works at|studies at|goes to)\b", cmd, re.IGNORECASE) or \
+           cmd.lower().startswith("remember that ") or cmd.lower().startswith("note that "):
+            from modules.relationship_memory import extract_and_save_from_command
+            # Capitalize first word so regex in extract_and_save works
+            cap_cmd = cmd[0].upper() + cmd[1:] if cmd else cmd
+            saved, msg = extract_and_save_from_command(cap_cmd)
+            if saved:
+                self.speak(msg)
+                return
+            # Fall through to AI if no pattern matched
+
+        # ── Auto-draft WhatsApp reply ─────────────────────────────
+        # "draft a reply to Divya" / "what should I say to her" / "auto reply"
+        if any(w in cmd for w in ["draft a reply", "draft reply", "auto reply", "auto draft",
+                                   "what should i say", "suggest a reply", "what to say to"]):
+            from modules.whatsapp_handler import get_last_message, _send_message, ensure_bridge_running
+            ensure_bridge_running()
+            last = get_last_message()
+            if not last or not last.get("number"):
+                self.speak("No recent WhatsApp message to draft a reply for.")
+                return
+            from modules.wa_draft_engine import draft_reply, init as _init_draft
+            from modules.whatsapp_handler import _ai_func
+            _init_draft(self.speak, _ai_func, _send_message)
+            # Extract optional instruction after trigger phrase
+            instruction = ""
+            for trigger in ["draft a reply to", "draft reply to", "what should i say to",
+                            "suggest a reply to", "what to say to"]:
+                if trigger in cmd:
+                    instruction = cmd.split(trigger, 1)[-1].strip()
+                    break
+            draft_reply(last["number"], last.get("sender", "them"), instruction)
+            return
+
         if any(w in cmd for w in ["what did he say", "what did she say", "what did they say",
                                    "what he said", "what she said", "what's the message",
                                    "read the message", "what did he send", "read it",

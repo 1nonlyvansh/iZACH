@@ -742,6 +742,16 @@ def start_brain(ui=None):
                 except Exception:
                     pass
 
+                # WhatsApp draft approval intercept — if iZACH just spoke a
+                # draft reply, treat the next input as approve/reject/revise.
+                try:
+                    from modules.wa_draft_engine import is_waiting_for_approval, handle_approval
+                    if is_waiting_for_approval():
+                        handle_approval(query)
+                        continue
+                except Exception:
+                    pass
+
                 _t0 = time.time()
                 try:
                     chain_engine.process(query)

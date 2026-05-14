@@ -23,6 +23,7 @@ FILES = {
     "system_profile": "System Profile.md",
     "brain_index":    "iZACH Brain.md",
 }
+PEOPLE_DIR = "People"   # sub-folder inside vault for person notes
 
 
 # ── CORE UTILITIES ────────────────────────────────────────────
@@ -246,6 +247,77 @@ def save_system_profile(summary: str, raw_apps: str = "", raw_events: str = ""):
     print("[OBSIDIAN] System profile saved.")
 
 
+def save_person_profile(name: str, facts: dict):
+    """
+    Write/update a person note at iZACH-Brain/People/{Name}.md.
+    Each note links back to [[iZACH Brain]] for graph connectivity.
+    Merges new facts with existing content — never overwrites known data.
+    """
+    people_path = os.path.join(VAULT_PATH, PEOPLE_DIR)
+    os.makedirs(people_path, exist_ok=True)
+    note_path = os.path.join(people_path, f"{name}.md")
+
+    # Read existing content to merge
+    existing = {}
+    if os.path.exists(note_path):
+        with open(note_path, "r", encoding="utf-8") as f:
+            for line in f:
+                m = __import__("re").match(r"^\*\*(.+?):\*\*\s+(.+)$", line.strip())
+                if m:
+                    existing[m.group(1).lower().replace(" ", "_")] = m.group(2)
+
+    merged = {**existing, **{k: v for k, v in facts.items() if v}}
+
+    label_map = {
+        "relation":    "Relationship",
+        "works_at":    "Works at",
+        "studies_at":  "Studies at",
+        "notes":       "Notes",
+        "whatsapp_number": "WhatsApp",
+        "last_topic":  "Last topic",
+        "birthday":    "Birthday",
+    }
+
+    facts_md = ""
+    for k, v in merged.items():
+        label = label_map.get(k, k.replace("_", " ").title())
+        facts_md += f"**{label}:** {v}\n"
+
+    content = (
+        f"# {name}\n"
+        f"*Last updated: {_ts()} — part of [[iZACH Brain]] → [[Relationships]]*\n\n"
+        f"## Profile\n"
+        f"{facts_md}\n"
+        f"## Notes\n"
+        f"_iZACH learns more about {name} over time through conversation and WhatsApp context._\n"
+    )
+    with open(note_path, "w", encoding="utf-8") as f:
+        f.write(content)
+
+    # Update/create Relationships index note
+    _update_relationships_index(people_path)
+    print(f"[OBSIDIAN] Person profile saved: {name}")
+
+
+def _update_relationships_index(people_path: str):
+    """Maintain People/Relationships.md — index of all known people."""
+    people = []
+    if os.path.isdir(people_path):
+        for fname in os.listdir(people_path):
+            if fname.endswith(".md") and fname != "Relationships.md":
+                people.append(fname[:-3])
+
+    links = "\n".join(f"- [[{p}]]" for p in sorted(people))
+    content = (
+        f"# Relationships\n"
+        f"*Part of [[iZACH Brain]] — updated {_ts()}*\n\n"
+        f"People iZACH knows about:\n\n"
+        f"{links}\n"
+    )
+    with open(os.path.join(people_path, "Relationships.md"), "w", encoding="utf-8") as f:
+        f.write(content)
+
+
 def _update_brain_index():
     """
     Maintain iZACH Brain.md — a central hub note with [[wikilinks]] to all
@@ -260,12 +332,17 @@ def _update_brain_index():
         "weaknesses":     ("System Weaknesses",    "Recurring failures and problem areas."),
         "commands":       ("Frequent Commands",    "Top commands by usage frequency."),
     }
+    # Check People folder separately
+    people_dir = os.path.join(VAULT_PATH, PEOPLE_DIR)
+    people_count = len([f for f in os.listdir(people_dir) if f.endswith(".md") and f != "Relationships.md"]) if os.path.isdir(people_dir) else 0
+    people_status = f"✓ ({people_count} people)" if people_count else "○"
 
     links_md = ""
     for key, (title, desc) in note_links.items():
         exists = os.path.exists(_path(key))
         status = "✓" if exists else "○"
         links_md += f"- {status} [[{title}]] — {desc}\n"
+    links_md += f"- {people_status} [[Relationships]] — People iZACH knows about.\n"
 
     content = (
         f"# iZACH Brain\n"

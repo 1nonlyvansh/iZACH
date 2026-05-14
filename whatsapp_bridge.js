@@ -155,6 +155,28 @@ function createClient() {
         }
     });
 
+    // Fetch recent messages from a specific chat (for draft engine)
+    app.get('/messages/chat', async (req, res) => {
+        const { number, limit = 10 } = req.query;
+        if (!number) return res.status(400).json({ error: 'number required' });
+        try {
+            const chats = await client.getChats();
+            const chat = chats.find(c => c.id._serialized === number || c.id.user === number.replace('@c.us', ''));
+            if (!chat) return res.json({ messages: [], count: 0 });
+            const msgs = await chat.fetchMessages({ limit: parseInt(limit) });
+            const out = [];
+            for (const msg of msgs) {
+                if (msg.isStatus) continue;
+                const contact = msg.fromMe ? null : await msg.getContact().catch(() => null);
+                const name = msg.fromMe ? 'Me' : (contact?.pushname || contact?.name || number);
+                out.push({ id: msg.id._serialized, sender: name, fromMe: msg.fromMe, text: msg.body, timestamp: msg.timestamp });
+            }
+            res.json({ messages: out, count: out.length });
+        } catch (e) {
+            res.status(500).json({ error: e.message });
+        }
+    });
+
     app.post('/logout', async (req, res) => {
         try {
             await client.logout();

@@ -212,6 +212,16 @@ def incoming_message():
     except Exception:
         pass
 
+    # Auto-register WhatsApp number in relationship memory so draft engine
+    # can link name → number for future fetch.
+    try:
+        from modules.relationship_memory import get_person, add_fact
+        person = get_person(sender)
+        if not person.get("whatsapp_number"):
+            add_fact(sender, "whatsapp_number", number)
+    except Exception:
+        pass
+
     from modules.context_memory import get_context_memory
     get_context_memory().record_whatsapp_received(sender, text, number)
 
