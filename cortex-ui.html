@@ -688,6 +688,44 @@ body.tb-autohide.tb-reveal #device-bar { opacity:0.5; pointer-events:all; }
 .sh-cmd-inp   { flex:1; background:rgba(0,0,0,0.25); border:1px solid rgba(0,148,255,0.2); border-radius:4px; color:rgba(0,148,255,0.85); font-size:8px; padding:3px 6px; outline:none; }
 .sh-msg       { font-size:8px; color:rgba(0,200,83,0.8); min-height:12px; margin-top:3px; text-align:center; }
 
+/* ── NEWS WIDGET ── */
+#p-news { left:80px; top:80px; width:580px; height:600px; }
+.news-ticker-wrap { overflow:hidden; background:rgba(0,0,0,0.3); border-radius:4px; padding:4px 8px; margin-bottom:8px; border:1px solid rgba(0,148,255,0.12); white-space:nowrap; }
+.news-ticker-inner{ display:inline-block; animation:newsTickerScroll 30s linear infinite; font-size:8px; color:rgba(0,220,255,0.8); letter-spacing:.09em; }
+@keyframes newsTickerScroll{ 0%{transform:translateX(100%)} 100%{transform:translateX(-100%)} }
+.news-main-layout{ display:grid; grid-template-columns:240px 1fr; gap:8px; margin-bottom:8px; }
+.news-tv-frame   { background:#000; border-radius:6px; overflow:hidden; border:1px solid rgba(0,148,255,0.18); }
+.news-tv-frame iframe{ width:240px; height:135px; border:none; display:block; }
+.news-tv-label   { font-size:6px; color:rgba(0,148,255,0.35); letter-spacing:.12em; text-align:center; padding:3px 0; }
+.news-channel-row{ display:flex; gap:3px; flex-wrap:wrap; margin-top:4px; }
+.news-ch-btn     { background:rgba(0,148,255,0.06); border:1px solid rgba(0,148,255,0.15); border-radius:3px; color:rgba(0,148,255,0.55); font-size:7px; padding:2px 5px; cursor:pointer; letter-spacing:.06em; transition:all .2s; }
+.news-ch-btn:hover,.news-ch-btn.active{ background:rgba(0,148,255,0.18); color:#00f0ff; border-color:rgba(0,148,255,0.4); }
+.news-right-col  { display:flex; flex-direction:column; }
+.news-market-row { display:flex; gap:4px; margin-bottom:6px; flex-wrap:wrap; }
+.news-mkt-chip   { background:rgba(0,148,255,0.05); border:1px solid rgba(0,148,255,0.12); border-radius:4px; padding:3px 7px; font-size:7px; letter-spacing:.07em; }
+.news-mkt-label  { color:rgba(0,148,255,0.4); }
+.news-mkt-val    { color:rgba(0,220,255,0.85); font-family:'JetBrains Mono',monospace; }
+.news-mkt-up     { color:#00c853; }
+.news-mkt-dn     { color:#ff5252; }
+.news-topic-bar  { display:flex; gap:3px; margin-bottom:6px; flex-wrap:wrap; }
+.news-topic-btn  { background:rgba(0,148,255,0.06); border:1px solid rgba(0,148,255,0.12); border-radius:4px; color:rgba(0,148,255,0.5); font-size:7px; padding:3px 7px; cursor:pointer; letter-spacing:.07em; transition:all .2s; }
+.news-topic-btn.active{ background:rgba(0,148,255,0.2); border-color:rgba(0,148,255,0.4); color:#00f0ff; }
+.news-headline-list{ flex:1; max-height:200px; overflow-y:auto; display:flex; flex-direction:column; gap:4px; }
+.news-hl-item    { background:rgba(0,148,255,0.03); border:1px solid rgba(0,148,255,0.08); border-radius:5px; padding:6px 8px; cursor:pointer; transition:background .15s; }
+.news-hl-item:hover{ background:rgba(0,148,255,0.08); }
+.news-hl-num     { font-size:7px; color:rgba(0,148,255,0.3); margin-right:4px; }
+.news-hl-title   { font-size:8px; color:rgba(0,220,255,0.8); line-height:1.4; }
+.news-hl-meta    { font-size:6px; color:rgba(0,148,255,0.35); margin-top:2px; }
+.news-hl-narrate { float:right; background:rgba(0,148,255,0.08); border:1px solid rgba(0,148,255,0.18); border-radius:3px; color:rgba(0,148,255,0.6); font-size:6px; padding:1px 4px; cursor:pointer; }
+.news-hl-narrate:hover{ background:rgba(0,148,255,0.18); color:#00f0ff; }
+.news-ctrl-row   { display:flex; gap:5px; margin-top:6px; align-items:center; }
+.news-btn        { background:rgba(0,148,255,0.08); border:1px solid rgba(0,148,255,0.2); border-radius:4px; color:rgba(0,148,255,0.75); font-size:8px; padding:4px 10px; cursor:pointer; letter-spacing:.07em; transition:all .2s; }
+.news-btn:hover  { background:rgba(0,148,255,0.18); color:#00f0ff; }
+.news-settings-overlay { background:rgba(0,0,0,0.85); border:1px solid rgba(0,148,255,0.2); border-radius:6px; padding:10px; position:absolute; bottom:30px; right:10px; width:200px; z-index:10; display:none; }
+.news-set-lbl    { font-size:7px; color:rgba(0,148,255,0.4); letter-spacing:.1em; margin-bottom:3px; }
+.news-set-inp    { width:100%; background:rgba(0,0,0,0.25); border:1px solid rgba(0,148,255,0.2); border-radius:3px; color:rgba(0,148,255,0.8); font-size:8px; padding:3px 6px; outline:none; box-sizing:border-box; margin-bottom:6px; }
+.news-set-sel    { width:100%; background:rgba(0,0,0,0.25); border:1px solid rgba(0,148,255,0.2); border-radius:3px; color:rgba(0,148,255,0.8); font-size:8px; padding:3px 5px; outline:none; box-sizing:border-box; margin-bottom:6px; }
+
 /* ── INSTAGRAM WIDGET ── */
 #p-ig  { left:80px; top:80px; width:360px; height:600px; }
 .ig-stat-row  { display:flex; gap:6px; margin-bottom:10px; }
@@ -1190,6 +1228,9 @@ body.spotlight-mode .pnl:not(.spotlighted) {
   </button>
   <button class="wp-btn" id="wpb-ig" onclick="togWgt('p-ig')" title="INSTAGRAM">
     <span class="wp-ic">◎</span><span class="wp-lbl">INSTAGRAM</span>
+  </button>
+  <button class="wp-btn" id="wpb-news" onclick="togWgt('p-news')" title="NEWS">
+    <span class="wp-ic">≡</span><span class="wp-lbl">NEWS</span>
   </button>
 </div>
 
@@ -2394,6 +2435,112 @@ body.spotlight-mode .pnl:not(.spotlighted) {
   <div class="rh"></div>
 </div>
 
+<!-- ══════════════════ NEWS PANEL ══════════════════ -->
+<div id="p-news" class="pnl" style="position:relative;">
+  <div class="cb cb-tl"></div><div class="cb cb-tr"></div><div class="cb cb-bl"></div><div class="cb cb-br"></div>
+  <div class="ph">
+    <span class="ph-id">24 · NEWS</span>
+    <span class="ph-sub" id="news-ph-sub">LIVE · MARKETS · HEADLINES</span>
+    <button class="news-btn" style="padding:2px 8px;font-size:7px;margin-left:auto;" onclick="newsToggleSettings()">⚙</button>
+  </div>
+  <div class="pb" style="position:relative;">
+
+    <!-- Ticker -->
+    <div class="news-ticker-wrap">
+      <span class="news-ticker-inner" id="news-ticker-text">Loading market data…</span>
+    </div>
+
+    <!-- Main layout: TV left + right panel -->
+    <div class="news-main-layout">
+
+      <!-- Left: YouTube Live -->
+      <div>
+        <div class="news-tv-frame">
+          <iframe id="news-tv-iframe" src="" allow="autoplay; encrypted-media" allowfullscreen
+            title="Live News"></iframe>
+        </div>
+        <div class="news-tv-label" id="news-tv-label">NDTV 24×7</div>
+        <div class="news-channel-row" id="news-channel-row">
+          <!-- populated by JS -->
+        </div>
+      </div>
+
+      <!-- Right: Market chips + headlines -->
+      <div class="news-right-col">
+        <!-- Market chips -->
+        <div class="news-market-row" id="news-market-row">
+          <div class="news-mkt-chip"><span class="news-mkt-label">SENSEX </span><span class="news-mkt-val" id="mkt-sensex">--</span></div>
+          <div class="news-mkt-chip"><span class="news-mkt-label">NIFTY </span><span class="news-mkt-val" id="mkt-nifty">--</span></div>
+          <div class="news-mkt-chip"><span class="news-mkt-label">BTC </span><span class="news-mkt-val" id="mkt-btc">--</span></div>
+          <div class="news-mkt-chip"><span class="news-mkt-label">GOLD </span><span class="news-mkt-val" id="mkt-gold">--</span></div>
+          <div class="news-mkt-chip"><span class="news-mkt-label">⛽ </span><span class="news-mkt-val" id="mkt-petrol">--</span></div>
+        </div>
+
+        <!-- Topic selector -->
+        <div class="news-topic-bar" id="news-topic-bar">
+          <div class="news-topic-btn active" data-topic="india"    onclick="newsLoadTopic('india')">INDIA</div>
+          <div class="news-topic-btn"        data-topic="world"    onclick="newsLoadTopic('world')">WORLD</div>
+          <div class="news-topic-btn"        data-topic="tech"     onclick="newsLoadTopic('tech')">TECH</div>
+          <div class="news-topic-btn"        data-topic="sports"   onclick="newsLoadTopic('sports')">SPORTS</div>
+          <div class="news-topic-btn"        data-topic="business" onclick="newsLoadTopic('business')">BUSINESS</div>
+          <div class="news-topic-btn"        data-topic="cricket"  onclick="newsLoadTopic('cricket')">CRICKET</div>
+        </div>
+
+        <!-- Headline list -->
+        <div class="news-headline-list" id="news-headline-list">
+          <div style="font-size:8px;color:rgba(0,148,255,0.3);text-align:center;padding:12px;">Loading headlines…</div>
+        </div>
+
+        <!-- Controls -->
+        <div class="news-ctrl-row">
+          <button class="news-btn" onclick="newsNarrate()">▶ NARRATE ALL</button>
+          <button class="news-btn" onclick="newsRefresh()">↻ REFRESH</button>
+          <span style="font-size:7px;color:rgba(0,148,255,0.3);margin-left:auto;" id="news-last-updated"></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Settings overlay -->
+    <div class="news-settings-overlay" id="news-settings-overlay">
+      <div style="font-size:8px;color:rgba(0,148,255,0.7);margin-bottom:8px;letter-spacing:.1em;">NEWS SETTINGS</div>
+
+      <div class="news-set-lbl">PREFERRED CHANNEL</div>
+      <select class="news-set-sel" id="news-pref-channel">
+        <option value="ndtv">NDTV 24x7</option>
+        <option value="republic">Republic TV</option>
+        <option value="aajtak">Aaj Tak</option>
+        <option value="aljazeera">Al Jazeera</option>
+        <option value="skynews">Sky News</option>
+        <option value="bbc">BBC News</option>
+        <option value="cnn">CNN</option>
+        <option value="wion">WION</option>
+      </select>
+
+      <div class="news-set-lbl">HEADLINE COUNT</div>
+      <input class="news-set-inp" id="news-hl-count" type="number" value="6" min="3" max="15">
+
+      <div class="news-set-lbl">WEATHER CITY</div>
+      <input class="news-set-inp" id="news-city" placeholder="New Delhi">
+
+      <div class="news-set-lbl">NEWSAPI KEY (optional)</div>
+      <input class="news-set-inp" id="news-api-key" placeholder="Leave blank for Google News RSS">
+
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
+        <input type="checkbox" id="news-boot-toggle" onchange="newsSaveSettings()">
+        <label for="news-boot-toggle" style="font-size:7px;color:rgba(0,148,255,0.55);">News briefing at boot</label>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">
+        <input type="checkbox" id="news-autonarrate" onchange="newsSaveSettings()">
+        <label for="news-autonarrate" style="font-size:7px;color:rgba(0,148,255,0.55);">Auto-narrate on open</label>
+      </div>
+
+      <button class="news-btn" style="width:100%;" onclick="newsSaveSettings();newsToggleSettings();">SAVE & CLOSE</button>
+    </div>
+
+  </div>
+  <div class="rh"></div>
+</div>
+
 <!-- ══════════════════ INSTAGRAM PANEL ══════════════════ -->
 <div id="p-ig" class="pnl">
   <div class="cb cb-tl"></div><div class="cb cb-tr"></div><div class="cb cb-bl"></div><div class="cb cb-br"></div>
@@ -2782,7 +2929,7 @@ tick(); setInterval(tick,1000);
 // STATE MACHINE
 // ════════════════════════════════════════════════════
 let camStream=null;
-const allWgts=['p-comm','p-audio','p-sched','p-sys','p-intel','p-mem','p-msg','p-wx','p-rel','p-feed','p-hist','p-clock','p-phone','p-devices','p-agents','p-gesture','p-ocr','p-print','p-fit','p-loc','p-sh','p-sc','p-ig'];
+const allWgts=['p-comm','p-audio','p-sched','p-sys','p-intel','p-mem','p-msg','p-wx','p-rel','p-feed','p-hist','p-clock','p-phone','p-devices','p-agents','p-gesture','p-ocr','p-print','p-fit','p-loc','p-sh','p-sc','p-ig','p-news'];
 const dkMap={'p-comm':'dk-comm','p-audio':'dk-aud','p-sched':'dk-sch','p-sys':'dk-sys','p-intel':'dk-int','p-mem':'dk-mem','p-msg':'dk-msg','p-wx':'dk-wx','p-rel':'dk-rel','p-feed':'dk-feed','p-hist':'dk-hist','p-clock':'dk-clk','p-phone':'dk-phone','p-devices':'dk-devices','p-agents':'dk-agents'};
 
 function slideScreens(show){
@@ -2868,6 +3015,7 @@ const wpMap={
   'p-sh':'wpb-sh',
   'p-sc':'wpb-sc',
   'p-ig':'wpb-ig',
+  'p-news':'wpb-news',
 };
 function togWgt(id){
   const el=document.getElementById(id); if(!el)return;
@@ -5090,6 +5238,227 @@ async function shSaveSettings() {
 
 // Load smart home data when panel opens
 document.getElementById('wpb-sh')?.addEventListener('click', () => { shRefresh(); });
+
+
+// ════════════════════════════════════════════════════
+// NEWS PANEL (Phase 6)
+// ════════════════════════════════════════════════════
+
+let _newsTopic      = 'india';
+let _newsChannel    = 'ndtv';
+let _newsSettingsOpen = false;
+let _newsRefreshTimer = null;
+
+const _NEWS_CHANNELS = {
+  ndtv:      {name:'NDTV 24×7',    id:'UCTi1q9_HHMtqOYGrqBh7L5g'},
+  republic:  {name:'Republic TV',  id:'UCGEmMouKT5HpSxU5qJGQC5Q'},
+  aajtak:    {name:'Aaj Tak',      id:'UCt4t-jeY85JegMlZ-E5UWuQ'},
+  aljazeera: {name:'Al Jazeera',   id:'UCNye-wNBqNL5ZzHSJj3l8Bg'},
+  skynews:   {name:'Sky News',     id:'UC-ZklF9M_c09kNaD-1fL3Xg'},
+  bbc:       {name:'BBC News',     id:'UC16niRr50-MSBwiO3YDb3RA'},
+  cnn:       {name:'CNN',          id:'UCupvZG-5ko_eiXAupbDfxWw'},
+  wion:      {name:'WION',         id:'UCkNaKNNeNERzDLF4IgQFJ5A'},
+};
+
+function newsGetEmbedUrl(key, autoplay=false) {
+  const ch = _NEWS_CHANNELS[key] || _NEWS_CHANNELS.ndtv;
+  return `https://www.youtube-nocookie.com/embed/live_stream?channel=${ch.id}&autoplay=${autoplay?1:0}&mute=1&controls=1&modestbranding=1`;
+}
+
+// ── init on open ──────────────────────────────────────────────
+async function newsInit() {
+  // Load settings first
+  const cfg = await fetch(`${API}/news/settings`).then(r => r.json()).catch(() => ({}));
+  _newsChannel = cfg.preferred_channel || 'ndtv';
+  const hlCount = cfg.headline_count || 6;
+
+  // Set settings panel values
+  const pc = document.getElementById('news-pref-channel');
+  if (pc) pc.value = _newsChannel;
+  if (document.getElementById('news-hl-count')) document.getElementById('news-hl-count').value = hlCount;
+  if (document.getElementById('news-city'))     document.getElementById('news-city').value     = cfg.weather_city || 'New Delhi';
+  if (document.getElementById('news-api-key'))  document.getElementById('news-api-key').value  = cfg.newsapi_key || '';
+  if (document.getElementById('news-boot-toggle'))  document.getElementById('news-boot-toggle').checked  = cfg.boot_news || false;
+  if (document.getElementById('news-autonarrate'))  document.getElementById('news-autonarrate').checked  = cfg.auto_narrate || false;
+
+  // Build channel buttons
+  const row = document.getElementById('news-channel-row');
+  if (row) {
+    row.innerHTML = Object.entries(_NEWS_CHANNELS).map(([key, ch]) =>
+      `<button class="news-ch-btn ${key===_newsChannel?'active':''}" onclick="newsSetChannel('${key}')">${ch.name.split(' ')[0].toUpperCase()}</button>`
+    ).join('');
+  }
+
+  // Set TV iframe
+  newsSetChannel(_newsChannel, false);
+
+  // Load market + headlines
+  await Promise.all([newsLoadMarket(), newsLoadTopic(_newsTopic)]);
+
+  // Auto-narrate
+  if (cfg.auto_narrate) {
+    setTimeout(newsNarrate, 1500);
+  }
+
+  // Periodic refresh: market every 3 min, headlines every 5 min
+  clearInterval(_newsRefreshTimer);
+  _newsRefreshTimer = setInterval(() => {
+    const panel = document.getElementById('p-news');
+    if (panel && panel.classList.contains('show')) {
+      newsLoadMarket();
+    }
+  }, 180000);
+}
+
+// ── channel ───────────────────────────────────────────────────
+function newsSetChannel(key, autoplay=false) {
+  _newsChannel = key;
+  const iframe = document.getElementById('news-tv-iframe');
+  const label  = document.getElementById('news-tv-label');
+  if (iframe) iframe.src = newsGetEmbedUrl(key, autoplay);
+  if (label && _NEWS_CHANNELS[key]) label.textContent = _NEWS_CHANNELS[key].name;
+  // Update active button
+  document.querySelectorAll('.news-ch-btn').forEach(b => {
+    b.classList.toggle('active', b.textContent === (_NEWS_CHANNELS[key]?.name.split(' ')[0].toUpperCase() || ''));
+  });
+}
+
+// ── market ────────────────────────────────────────────────────
+async function newsLoadMarket() {
+  try {
+    const d = await fetch(`${API}/news/market`).then(r => r.json()).catch(() => ({}));
+    const indices = d.indices || {};
+    const crypto  = d.crypto  || {};
+
+    function fmtIndex(label, key) {
+      const el = document.getElementById(key);
+      if (!el || !indices[label]) return;
+      const v = indices[label];
+      const arrow = v.pct >= 0 ? '▲' : '▼';
+      const cls   = v.pct >= 0 ? 'news-mkt-up' : 'news-mkt-dn';
+      el.innerHTML = `<span class="${cls}">${arrow}${Math.abs(v.pct).toFixed(1)}%</span> ${v.price.toLocaleString('en-IN')}`;
+    }
+    fmtIndex('SENSEX', 'mkt-sensex');
+    fmtIndex('NIFTY',  'mkt-nifty');
+
+    if (crypto.BTC) {
+      const b   = crypto.BTC;
+      const cls = b.change >= 0 ? 'news-mkt-up' : 'news-mkt-dn';
+      const arr = b.change >= 0 ? '▲' : '▼';
+      document.getElementById('mkt-btc').innerHTML =
+        `$${b.usd.toLocaleString()} <span class="${cls}">${arr}${Math.abs(b.change).toFixed(1)}%</span>`;
+    }
+    if (d.gold) {
+      document.getElementById('mkt-gold').textContent = `$${d.gold.usd_oz}/oz`;
+    }
+    if (d.petrol) {
+      const m = String(d.petrol).match(/₹\s*([\d.]+)/);
+      if (m) document.getElementById('mkt-petrol').textContent = `₹${m[1]}/L`;
+    }
+
+    // Ticker
+    const tr = await fetch(`${API}/news/ticker`).then(r => r.json()).catch(() => ({}));
+    if (tr.ticker) {
+      document.getElementById('news-ticker-text').textContent = tr.ticker;
+      // Reset animation
+      const el = document.getElementById('news-ticker-text');
+      el.style.animation = 'none';
+      el.offsetHeight;
+      el.style.animation = '';
+    }
+  } catch(e) {}
+}
+
+// ── headlines ─────────────────────────────────────────────────
+async function newsLoadTopic(topic) {
+  _newsTopic = topic;
+
+  // Update topic buttons
+  document.querySelectorAll('.news-topic-btn').forEach(b =>
+    b.classList.toggle('active', b.dataset.topic === topic)
+  );
+
+  const list = document.getElementById('news-headline-list');
+  if (!list) return;
+  list.innerHTML = '<div style="font-size:8px;color:rgba(0,148,255,0.3);text-align:center;padding:12px;">Loading…</div>';
+
+  const count = parseInt(document.getElementById('news-hl-count')?.value || '6');
+  const r = await fetch(`${API}/news/headlines?topic=${topic}&count=${count}`)
+    .then(x => x.json()).catch(() => ({items:[]}));
+  const items = r.items || [];
+
+  if (!items.length) {
+    list.innerHTML = '<div style="font-size:8px;color:rgba(0,148,255,0.3);text-align:center;padding:12px;">No headlines</div>';
+    return;
+  }
+
+  list.innerHTML = items.map((it, i) => `
+    <div class="news-hl-item" onclick="newsNarrateOne(${i+1})">
+      <div>
+        <span class="news-hl-num">${i+1}.</span>
+        <span class="news-hl-title">${it.title}</span>
+        <button class="news-hl-narrate" onclick="event.stopPropagation();newsNarrateOne(${i+1})">▶ HEAR</button>
+      </div>
+      <div class="news-hl-meta">${it.source || ''} ${it.published ? '· ' + it.published : ''}</div>
+    </div>
+  `).join('');
+
+  const upd = document.getElementById('news-last-updated');
+  if (upd) upd.textContent = 'Updated ' + new Date().toLocaleTimeString();
+}
+
+// ── narration ─────────────────────────────────────────────────
+async function newsNarrate() {
+  const count = parseInt(document.getElementById('news-hl-count')?.value || '5');
+  await fetch(`${API}/news/narrate`, {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({topic: _newsTopic, count}),
+  }).catch(() => {});
+}
+
+async function newsNarrateOne(index) {
+  await fetch(`${API}/news/narrate/${index}`, {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({topic: _newsTopic}),
+  }).catch(() => {});
+}
+
+// ── refresh ───────────────────────────────────────────────────
+async function newsRefresh() {
+  // Clear headline cache server-side (by re-fetching after small delay)
+  const list = document.getElementById('news-headline-list');
+  if (list) list.innerHTML = '<div style="font-size:8px;color:rgba(0,148,255,0.3);text-align:center;padding:12px;">Refreshing…</div>';
+  await Promise.all([newsLoadMarket(), newsLoadTopic(_newsTopic)]);
+}
+
+// ── settings ─────────────────────────────────────────────────
+function newsToggleSettings() {
+  _newsSettingsOpen = !_newsSettingsOpen;
+  const ov = document.getElementById('news-settings-overlay');
+  if (ov) ov.style.display = _newsSettingsOpen ? 'block' : 'none';
+}
+
+async function newsSaveSettings() {
+  const cfg = {
+    preferred_channel: document.getElementById('news-pref-channel')?.value || 'ndtv',
+    headline_count:    parseInt(document.getElementById('news-hl-count')?.value || '6'),
+    weather_city:      document.getElementById('news-city')?.value.trim() || 'New Delhi',
+    newsapi_key:       document.getElementById('news-api-key')?.value.trim() || '',
+    boot_news:         document.getElementById('news-boot-toggle')?.checked || false,
+    auto_narrate:      document.getElementById('news-autonarrate')?.checked || false,
+  };
+  await fetch(`${API}/news/settings`, {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify(cfg),
+  }).catch(() => {});
+  // Apply channel change immediately
+  newsSetChannel(cfg.preferred_channel, false);
+}
+
+// ── panel lifecycle ───────────────────────────────────────────
+document.getElementById('wpb-news')?.addEventListener('click', () => {
+  newsInit();
+});
 
 
 // ════════════════════════════════════════════════════

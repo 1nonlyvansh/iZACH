@@ -3580,3 +3580,98 @@ def ig_insights():
         return jsonify(get_insights())
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+# =============================================================================
+# ── NEWS ENGINE (Phase 6) ─────────────────────────────────────────────────────
+# =============================================================================
+
+@ui_bp.route("/news/headlines", methods=["GET"])
+def news_headlines():
+    """?topic=india&count=6"""
+    topic = request.args.get("topic", "india")
+    count = int(request.args.get("count", 6))
+    try:
+        from modules.news_engine import get_headline_items
+        return jsonify({"topic": topic, "items": get_headline_items(topic, count)})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@ui_bp.route("/news/market", methods=["GET"])
+def news_market():
+    """Full market snapshot: indices, crypto, gold, petrol."""
+    try:
+        from modules.news_engine import get_market_snapshot
+        return jsonify(get_market_snapshot())
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@ui_bp.route("/news/ticker", methods=["GET"])
+def news_ticker():
+    """Single-line ticker string."""
+    try:
+        from modules.news_engine import build_ticker_text
+        return jsonify({"ticker": build_ticker_text()})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@ui_bp.route("/news/channels", methods=["GET"])
+def news_channels():
+    """All YouTube channel configs."""
+    try:
+        from modules.news_engine import YOUTUBE_CHANNELS, get_channel_embed_url
+        result = {}
+        for key, ch in YOUTUBE_CHANNELS.items():
+            result[key] = {**ch, "embed_url": get_channel_embed_url(key)}
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@ui_bp.route("/news/narrate", methods=["POST"])
+def news_narrate():
+    """Body: {topic, count}  — narrate headlines via TTS."""
+    data  = request.get_json(silent=True) or {}
+    topic = data.get("topic", "india")
+    count = int(data.get("count", 5))
+    try:
+        from modules.news_engine import narrate_headlines
+        text = narrate_headlines(topic, count, speak_immediately=True)
+        return jsonify({"ok": True, "text": text})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@ui_bp.route("/news/narrate/<int:index>", methods=["POST"])
+def news_narrate_single(index: int):
+    """Speak more detail about headline at 1-based index."""
+    data  = request.get_json(silent=True) or {}
+    topic = data.get("topic", "india")
+    try:
+        from modules.news_engine import narrate_single
+        text = narrate_single(index, topic)
+        return jsonify({"ok": True, "text": text})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@ui_bp.route("/news/settings", methods=["GET"])
+def news_settings_get():
+    try:
+        from modules.news_engine import load_settings
+        return jsonify(load_settings())
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@ui_bp.route("/news/settings", methods=["POST"])
+def news_settings_post():
+    data = request.get_json(silent=True) or {}
+    try:
+        from modules.news_engine import save_settings
+        return jsonify(save_settings(data))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500

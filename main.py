@@ -721,6 +721,13 @@ def start_brain(ui=None):
         print(f"[INSTAGRAM] Init failed: {_ige}")
 
     try:
+        from modules.news_engine import init as _news_init
+        _news_init(speak_fn=speak, ai_fn=get_ai_response_raw)
+        print("[NEWS] Engine initialized.")
+    except Exception as _newse:
+        print(f"[NEWS] Init failed: {_newse}")
+
+    try:
         from modules.pattern_learner import init as _init_patterns, start as _start_patterns
         _init_patterns(speak_fn=speak, chain_fn=chain_engine.process)
         _start_patterns()

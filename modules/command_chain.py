@@ -482,6 +482,8 @@ Output format:
                 'smart home': 'p-sh', 'home control': 'p-sh', 'iot': 'p-sh',
                 'thermostat': 'p-sh', 'nest': 'p-sh', 'chromecast': 'p-sh',
                 'instagram': 'p-ig', 'dms': 'p-ig', 'instagram inbox': 'p-ig',
+                'news': 'p-news', 'headlines': 'p-news', 'live news': 'p-news',
+                'market': 'p-news', 'stocks': 'p-news',
             }
             _has_widget_kw = 'widget' in resolved_cmd or 'panel' in resolved_cmd
             _close_all_except = ('close all' in resolved_cmd or 'hide all' in resolved_cmd) and 'except' in resolved_cmd
@@ -741,6 +743,29 @@ Output format:
                             self._classify_and_execute(resolved_cmd)
                 except Exception as _she:
                     import logging as _l; _l.getLogger("iZACH.Chain").debug(f"[SH] {_she}")
+                    self._classify_and_execute(resolved_cmd)
+                continue
+
+            # ── PHASE 6: NEWS VOICE COMMANDS ─────────────────────────────────
+            _NEWS_TRIGGERS = [
+                "read news", "today's news", "latest news", "tell me the news",
+                "news briefing", "what's in the news", "news headlines",
+                "what's happening", "give me news", "any news",
+                "india news", "world news", "tech news", "sports news",
+                "business news", "cricket news", "politics news",
+                "market update", "stock market", "sensex", "nifty",
+                "market snapshot", "tell me more about headline",
+            ]
+            if any(t in resolved_cmd for t in _NEWS_TRIGGERS):
+                try:
+                    from modules.news_engine import execute_voice_command as _news_cmd
+                    result = _news_cmd(resolved_cmd)
+                    if result.get("success"):
+                        pass  # news engine already spoke via _speak_fn
+                    else:
+                        self._classify_and_execute(resolved_cmd)
+                except Exception as _ne:
+                    import logging as _l; _l.getLogger("iZACH.Chain").debug(f"[NEWS] {_ne}")
                     self._classify_and_execute(resolved_cmd)
                 continue
 
