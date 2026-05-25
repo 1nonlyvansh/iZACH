@@ -5,6 +5,7 @@ Registered onto the same Flask app as whatsapp_handler (port 5050).
 """
 
 import os
+import re
 import time
 import threading
 import uuid as _uuid
@@ -82,11 +83,7 @@ def register_ui_api(app, chain_fn, speak_fn, get_response_fn, spotify_handler=No
     except Exception as _e:
         print(f"[UI API] Download monitor failed: {_e}")
 
-    CORS(app, resources={r"/*": {"origins": [
-        "http://localhost:5173",
-        "http://localhost:4173",
-        "app://*",
-    ]}})
+    CORS(app, resources={r"/*": {"origins": "*"}})
 
     app.register_blueprint(ui_bp)
     print("[UI API] Registered on Flask app. CORS enabled for React/Electron.")
@@ -122,11 +119,7 @@ def ui_command():
         return jsonify({"ok": False, "error": "Empty command"}), 400
 
     _log_message("YOU", text)
-    try:
-        from modules.ws_bridge import broadcast
-        broadcast({"type": "chat", "sender": "YOU", "text": text, "ts": time.strftime("%H:%M")})
-    except Exception:
-        pass
+    # UI already adds the YOU message locally — no WS echo needed
 
     # File-related voice command shortcuts — handled before chain
     _lc = text.lower()
@@ -165,23 +158,12 @@ def ui_command():
         except Exception as _e:
             reply = f"PC context error: {_e}"
         _log_message("iZACH", reply)
-        try:
-            from modules.ws_bridge import broadcast
-            broadcast({"type": "chat", "sender": "iZACH", "text": reply, "ts": time.strftime("%H:%M")})
-        except Exception:
-            pass
         return jsonify({"ok": True, "response": reply, "ts": time.strftime("%H:%M")})
 
     if any(k in _lc for k in ("send file", "transfer file", "send to phone", "send me file",
                                 "send report", "send pdf", "send document")):
         reply = "Which file? Type / in chat to browse your PC files."
         _log_message("iZACH", reply)
-        try:
-            from modules.ws_bridge import broadcast
-            broadcast({"type": "chat", "sender": "iZACH", "text": reply,
-                       "ts": time.strftime("%H:%M"), "action": "open_file_picker"})
-        except Exception:
-            pass
         return jsonify({"ok": True, "response": reply, "action": "open_file_picker",
                         "ts": time.strftime("%H:%M")})
 
@@ -192,11 +174,6 @@ def ui_command():
         except Exception:
             reply = "Cannot read shared folder."
         _log_message("iZACH", reply)
-        try:
-            from modules.ws_bridge import broadcast
-            broadcast({"type": "chat", "sender": "iZACH", "text": reply, "ts": time.strftime("%H:%M")})
-        except Exception:
-            pass
         return jsonify({"ok": True, "response": reply, "ts": time.strftime("%H:%M")})
 
     # Safe mode — dangerous commands require confirmation
@@ -251,10 +228,6 @@ def ui_command():
 
         response_text = " ".join(captured).strip() or "Done."
         _log_message("iZACH", response_text)
-        try:
-            broadcast({"type": "chat", "sender": "iZACH", "text": response_text, "ts": time.strftime("%H:%M")})
-        except Exception:
-            pass
 
         return jsonify({
             "ok":       True,
@@ -320,13 +293,6 @@ def ui_status():
         except Exception:
             pass
 
-        android_devices = []
-        try:
-            from modules.ws_bridge import get_android_devices
-            android_devices = get_android_devices()
-        except Exception:
-            pass
-
         return jsonify({
             "ok":              True,
             "cpu":             round(cpu, 1),
@@ -339,7 +305,6 @@ def ui_status():
             "ts":              time.strftime("%H:%M:%S"),
             "whatsapp":        wa_online,
             "mma":             mma_online,
-            "android_devices": android_devices,
         })
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
@@ -531,7 +496,12 @@ def settings_post():
             "response_style", "response_verbosity", "safe_mode_enabled",
             "notif_performance", "notif_whatsapp", "notif_downloads",
             "command_history_enabled", "log_retention_days",
-            "theme", "language",
+            "theme", "language", "ui", "screensaver_timeout",
+            "morning_briefing_time", "weather_city",
+            "briefing_enabled", "briefing_greeting", "briefing_news",
+            "briefing_gold_rate", "briefing_silver_rate", "briefing_weather",
+            "briefing_battery_status", "briefing_battery_health",
+            "briefing_ram", "briefing_events", "briefing_whatsapp",
         }
         for k, v in incoming.items():
             if k in allowed:
@@ -539,6 +509,203 @@ def settings_post():
 
         with open(SETTINGS_FILE, "w") as f:
             _json.dump(existing, f, indent=2)
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+# ─────────────────────────────────────────────────────────────
+# GET  /api-keys   — return masked status of mutable API keys
+# POST /api-keys   — write new values to .env, hot-reload module vars
+# ─────────────────────────────────────────────────────────────
+
+_MUTABLE_KEYS = [
+    "GROQ_API_KEY",
+    "GEMINI_KEY_1", "GEMINI_KEY_2", "GEMINI_KEY_3",
+    "SPOTIPY_CLIENT_ID", "SPOTIPY_CLIENT_SECRET", "SPOTIPY_REDIRECT_URI",
+    "OPENROUTER_API_KEY",
+    "EDAMAM_APP_ID", "EDAMAM_APP_KEY",
+]
+_ENV_FILE = ".env"
+
+
+def _read_env() -> dict:
+    """Parse .env into a dict (key=value, strips quotes)."""
+    env = {}
+    try:
+        with open(_ENV_FILE) as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                k, _, v = line.partition("=")
+                env[k.strip()] = v.strip().strip('"').strip("'")
+    except FileNotFoundError:
+        pass
+    return env
+
+
+def _write_env(updates: dict):
+    """Write updated keys back to .env, preserving order and comments."""
+    try:
+        with open(_ENV_FILE) as f:
+            lines = f.readlines()
+    except FileNotFoundError:
+        lines = []
+
+    written = set()
+    new_lines = []
+    for line in lines:
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "=" not in stripped:
+            new_lines.append(line)
+            continue
+        k = stripped.split("=", 1)[0].strip()
+        if k in updates:
+            new_lines.append(f"{k}={updates[k]}\n")
+            written.add(k)
+        else:
+            new_lines.append(line)
+
+    for k, v in updates.items():
+        if k not in written:
+            new_lines.append(f"{k}={v}\n")
+
+    with open(_ENV_FILE, "w") as f:
+        f.writelines(new_lines)
+
+
+@ui_bp.route("/api-keys", methods=["GET"])
+def api_keys_get():
+    env = _read_env()
+    result = {}
+    for k in _MUTABLE_KEYS:
+        v = env.get(k, "")
+        if v and len(v) > 6:
+            result[k] = v[:4] + "•" * (len(v) - 4)
+        elif v:
+            result[k] = "•" * len(v)
+        else:
+            result[k] = ""
+    return jsonify({"ok": True, "keys": result})
+
+
+@ui_bp.route("/api-keys", methods=["POST"])
+def api_keys_post():
+    try:
+        incoming = request.get_json(silent=True) or {}
+        updates = {k: v for k, v in incoming.items() if k in _MUTABLE_KEYS and isinstance(v, str)}
+        if not updates:
+            return jsonify({"ok": False, "error": "No valid keys provided"}), 400
+
+        _write_env(updates)
+
+        # Hot-reload module-level vars where possible
+        try:
+            import modules.camera_vision as _cv
+            for k, v in updates.items():
+                if k == "GROQ_API_KEY":
+                    _cv.GROQ_KEY = v
+                elif k == "GEMINI_KEY_1":
+                    _cv.GEMINI_KEYS[0] = v
+                elif k == "GEMINI_KEY_2":
+                    _cv.GEMINI_KEYS[1] = v
+                elif k == "GEMINI_KEY_3":
+                    _cv.GEMINI_KEYS[2] = v
+                elif k == "OPENROUTER_API_KEY":
+                    _cv.OPENROUTER_KEY = v
+                elif k == "EDAMAM_APP_ID":
+                    _cv.EDAMAM_APP_ID = v
+                elif k == "EDAMAM_APP_KEY":
+                    _cv.EDAMAM_APP_KEY = v
+        except Exception:
+            pass
+        # Groq key also used in ai_handler — reload its env
+        if any(k in updates for k in ("GROQ_API_KEY", "GEMINI_KEY_1", "GEMINI_KEY_2", "GEMINI_KEY_3")):
+            try:
+                import os as _os
+                from dotenv import load_dotenv as _ld
+                _ld(override=True)
+                import modules.ai_handler as _ah
+                if hasattr(_ah, "GROQ_API_KEY") and "GROQ_API_KEY" in updates:
+                    _ah.GROQ_API_KEY = updates["GROQ_API_KEY"]
+            except Exception:
+                pass
+
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+# ─────────────────────────────────────────────────────────────
+# GET  /websites         — list custom websites
+# POST /websites         — add {name, url}
+# DELETE /websites/<key> — remove by key (lowercased name)
+# ─────────────────────────────────────────────────────────────
+_WEBSITES_FILE = "custom_websites.json"
+
+
+def _read_websites() -> list:
+    try:
+        with open(_WEBSITES_FILE) as f:
+            return _json.load(f)
+    except Exception:
+        return []
+
+
+def _write_websites(sites: list):
+    with open(_WEBSITES_FILE, "w") as f:
+        _json.dump(sites, f, indent=2)
+    # Sync into web_automation._SHORTNAMES live
+    try:
+        from modules import web_automation as _wa
+        for s in sites:
+            _wa._SHORTNAMES[s["key"]] = s["url"]
+    except Exception:
+        pass
+
+
+@ui_bp.route("/websites", methods=["GET"])
+def websites_get():
+    return jsonify({"ok": True, "websites": _read_websites()})
+
+
+@ui_bp.route("/websites", methods=["POST"])
+def websites_post():
+    try:
+        data = request.get_json(silent=True) or {}
+        name = (data.get("name") or "").strip()
+        url  = (data.get("url")  or "").strip()
+        if not name or not url:
+            return jsonify({"ok": False, "error": "name and url required"}), 400
+        if not url.startswith("http"):
+            url = "https://" + url
+        key = name.lower()
+        sites = _read_websites()
+        if any(s["key"] == key for s in sites):
+            return jsonify({"ok": False, "error": "Already exists"}), 409
+        sites.append({"name": name, "key": key, "url": url})
+        _write_websites(sites)
+        return jsonify({"ok": True, "name": name, "key": key, "url": url})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@ui_bp.route("/websites/<path:key>", methods=["DELETE"])
+def websites_delete(key):
+    try:
+        sites = _read_websites()
+        before = len(sites)
+        sites = [s for s in sites if s["key"] != key]
+        if len(sites) == before:
+            return jsonify({"ok": False, "error": "Not found"}), 404
+        _write_websites(sites)
+        # Remove from live shortnames
+        try:
+            from modules import web_automation as _wa
+            _wa._SHORTNAMES.pop(key, None)
+        except Exception:
+            pass
         return jsonify({"ok": True})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
@@ -694,6 +861,37 @@ def cache_sizes():
     return jsonify({"ok": True, "sizes": sizes})
 
 
+# GET /ollama/stats  — training + model stats
+# POST /ollama/rebuild  — force rebuild custom izach model
+@ui_bp.route("/ollama/stats", methods=["GET"])
+def ollama_stats():
+    try:
+        from modules import ollama_trainer, training_collector
+        stats = ollama_trainer.get_stats()
+        tc = training_collector.get_stats()
+        stats["total_samples"] = tc["total_samples"]
+        stats["training_size_kb"] = tc["size_kb"]
+        return jsonify({"ok": True, **stats})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)})
+
+
+@ui_bp.route("/ollama/rebuild", methods=["POST"])
+def ollama_rebuild():
+    try:
+        import threading
+        from modules import ollama_trainer, training_collector
+        def _run():
+            from modules.ollama_trainer import _save_last_built, create_model
+            success = create_model()
+            if success:
+                _save_last_built(training_collector.get_stats()["total_samples"])
+        threading.Thread(target=_run, daemon=True, name="ollama-force-rebuild").start()
+        return jsonify({"ok": True, "message": "Rebuild started in background"})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)})
+
+
 @ui_bp.route("/cache/clear", methods=["POST"])
 def cache_clear():
     from pathlib import Path as _Path
@@ -825,6 +1023,53 @@ def cache_clear():
     return jsonify({"ok": True, "cleared": cleared, "errors": errors})
 
 
+# ─────────────────────────────────────────────────────────────
+# GET /phone/status  — Android app connection status
+# GET /phone/qr      — QR code for pairing (base64 PNG)
+# These are stubs; a future Android companion app will push
+# real status via WebSocket broadcast({"type":"phone_status",...}).
+# ─────────────────────────────────────────────────────────────
+
+_phone_connected = False
+_phone_device_name = ""
+_phone_qr_b64 = None
+
+
+@ui_bp.route("/phone/status", methods=["GET"])
+def phone_status_get():
+    return jsonify({
+        "ok":          True,
+        "connected":   _phone_connected,
+        "device_name": _phone_device_name,
+        "qr":          _phone_qr_b64,
+    })
+
+
+@ui_bp.route("/phone/status", methods=["POST"])
+def phone_status_post():
+    """Android app calls this to report its connection state."""
+    global _phone_connected, _phone_device_name
+    data = request.get_json(silent=True) or {}
+    _phone_connected   = bool(data.get("connected", False))
+    _phone_device_name = str(data.get("device_name", ""))
+    try:
+        from modules.ws_bridge import broadcast
+        broadcast({
+            "type":        "phone_status",
+            "connected":   _phone_connected,
+            "device_name": _phone_device_name,
+            "qr":          _phone_qr_b64,
+        })
+    except Exception:
+        pass
+    return jsonify({"ok": True})
+
+
+@ui_bp.route("/phone/qr", methods=["GET"])
+def phone_qr():
+    return jsonify({"ok": True, "qr": _phone_qr_b64})
+
+
 @ui_bp.route("/obsidian/sync", methods=["POST"])
 def obsidian_sync():
     try:
@@ -853,6 +1098,33 @@ def ui_stop():
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
     
+# ─────────────────────────────────────────────────────────────
+# GET  /vision/cameras — list available camera indices
+# POST /vision/camera  — { "index": N } switch active camera
+# ─────────────────────────────────────────────────────────────
+
+@ui_bp.route("/vision/cameras")
+def vision_cameras():
+    try:
+        from modules.camera_vision import list_cameras, _cam_device_index
+        cameras = list_cameras()
+        return jsonify({"ok": True, "cameras": cameras, "active": _cam_device_index})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@ui_bp.route("/vision/camera", methods=["POST"])
+def vision_set_camera():
+    try:
+        data = request.get_json(silent=True) or {}
+        idx = int(data.get("index", 0))
+        from modules.camera_vision import set_camera_device
+        set_camera_device(idx)
+        return jsonify({"ok": True, "active": idx})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
 # ─────────────────────────────────────────────────────────────
 # POST /vision/ask
 # Body:    { "question": "what am i holding?" }
@@ -959,7 +1231,7 @@ def ui_upload():
     dest = os.path.join(SHARED_DIR, filename)
     f.save(dest)
     size = os.path.getsize(dest)
-    return jsonify({"ok": True, "filename": filename, "size": size})
+    return jsonify({"ok": True, "filename": filename, "path": dest, "size": size})
 
 
 @ui_bp.route("/files", methods=["GET"])
@@ -1398,6 +1670,134 @@ def confirm_command():
 
 
 # ─────────────────────────────────────────────────────────────
+# Document Generation
+# POST /document/generate
+# body: { "content": "...", "format": "pdf"|"docx",
+#          "title": "...", "template": "custom"|"activity_report"|"weekly_summary" }
+# GET  /document/list  — files in shared/ folder
+# ─────────────────────────────────────────────────────────────
+
+@ui_bp.route("/document/generate", methods=["POST"])
+def document_generate():
+    data     = request.get_json(silent=True) or {}
+    content  = data.get("content", "")
+    fmt      = data.get("format", "pdf")
+    title    = data.get("title", "iZACH Document")
+    template = data.get("template", "custom")
+    try:
+        from modules.document_engine import generate
+        ok, msg, path = generate(content, fmt, title, template)
+        return jsonify({"ok": ok, "message": msg,
+                        "filename": os.path.basename(path) if path else ""})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+# ─────────────────────────────────────────────────────────────
+# Network Monitor
+# GET /network/devices      — LAN devices from latest scan
+# GET /network/connections  — active TCP connections per process
+# GET /network/alerts       — alert history
+# POST /network/trust       — { "mac": "aa:bb:...", "label": "TV" }
+# POST /network/scan        — force rescan now
+# ─────────────────────────────────────────────────────────────
+
+@ui_bp.route("/network/devices", methods=["GET"])
+def network_devices():
+    try:
+        from modules.network_monitor import get_devices
+        return jsonify({"ok": True, "devices": get_devices()})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@ui_bp.route("/network/connections", methods=["GET"])
+def network_connections():
+    try:
+        from modules.network_monitor import get_connections
+        return jsonify({"ok": True, "connections": get_connections()})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@ui_bp.route("/network/alerts", methods=["GET"])
+def network_alerts():
+    try:
+        from modules.network_monitor import get_alerts
+        return jsonify({"ok": True, "alerts": get_alerts()})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@ui_bp.route("/network/trust", methods=["POST"])
+def network_trust():
+    data  = request.get_json(silent=True) or {}
+    mac   = data.get("mac", "").strip().lower()
+    label = data.get("label", "").strip()
+    if not mac:
+        return jsonify({"ok": False, "error": "mac required"}), 400
+    try:
+        from modules.network_monitor import trust_device
+        trust_device(mac, label)
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@ui_bp.route("/network/scan", methods=["POST"])
+def network_scan():
+    try:
+        from modules.network_monitor import scan_now
+        import threading
+        threading.Thread(target=scan_now, daemon=True).start()
+        return jsonify({"ok": True, "message": "Scan started."})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+# ─────────────────────────────────────────────────────────────
+# GET /window  — active foreground window info
+# ─────────────────────────────────────────────────────────────
+
+@ui_bp.route("/window", methods=["GET"])
+def active_window():
+    try:
+        from modules.window_watcher import get_active_window
+        return jsonify({"ok": True, **get_active_window()})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+# ─────────────────────────────────────────────────────────────
+# GET  /location          — current location (SSID + city + coords)
+# POST /location/label    — { "ssid": "HomeWifi", "label": "Home" }
+# ─────────────────────────────────────────────────────────────
+
+@ui_bp.route("/location", methods=["GET"])
+def get_location_api():
+    try:
+        from modules.location_engine import get_location
+        return jsonify({"ok": True, **get_location()})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@ui_bp.route("/location/label", methods=["POST"])
+def label_location():
+    data  = request.get_json(silent=True) or {}
+    ssid  = data.get("ssid", "").strip()
+    label = data.get("label", "").strip()
+    if not ssid or not label:
+        return jsonify({"ok": False, "error": "ssid and label required"}), 400
+    try:
+        from modules.location_engine import label_ssid
+        label_ssid(ssid, label)
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+# ─────────────────────────────────────────────────────────────
 # GET /connect/qr  — QR code encoding backend URL + WS host for Android app
 # Optional ?mode=tailscale  → encodes Tailscale IP instead of LAN IP
 # ─────────────────────────────────────────────────────────────
@@ -1508,6 +1908,42 @@ def calendar_delete_event(event_id):
         return jsonify({"ok": False, "error": str(e)}), 500
 
 
+# ── Voice Auth ────────────────────────────────────────────────
+
+@ui_bp.route("/voice/status", methods=["GET"])
+def voice_status():
+    try:
+        from modules.voice_id import is_enrolled, get_meta
+        return jsonify({"ok": True, "enrolled": is_enrolled(), "meta": get_meta()})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@ui_bp.route("/voice/enroll", methods=["POST"])
+def voice_enroll():
+    try:
+        from modules.voice_id import enroll_voice_async, _speak_fn
+        if _speak_fn is None:
+            from modules.voice_id import init as _vi_init
+            # speak_fn not injected yet — enroll will still work but no TTS
+        data  = request.get_json(silent=True) or {}
+        label = data.get("label", "owner").strip() or "owner"
+        enroll_voice_async(label)
+        return jsonify({"ok": True, "message": "Enrollment started. Speak for 7 seconds."})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@ui_bp.route("/voice/delete", methods=["DELETE"])
+def voice_delete():
+    try:
+        from modules.voice_id import delete_voice_data
+        ok = delete_voice_data()
+        return jsonify({"ok": ok, "error": None if ok else "No voice data found"})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
 # ── Face Auth ─────────────────────────────────────────────────
 
 @ui_bp.route("/face/status", methods=["GET"])
@@ -1539,6 +1975,144 @@ def face_delete():
         return jsonify({"ok": ok})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
+
+
+# ─────────────────────────────────────────────────────────────
+# Contacts — contacts.json CRUD + CSV/VCF import
+# GET  /contacts               — list all contacts
+# POST /contacts               — add { number, name }
+# DELETE /contacts/<number>    — remove by WA number
+# POST /contacts/import        — multipart file (.csv or .vcf)
+# ─────────────────────────────────────────────────────────────
+
+_CONTACTS_FILE = os.path.join(os.path.dirname(os.path.dirname(__file__)), "contacts.json")
+
+def _load_contacts_file():
+    try:
+        with open(_CONTACTS_FILE) as f:
+            return _json.load(f)
+    except Exception:
+        return {}
+
+def _save_contacts_file(data):
+    with open(_CONTACTS_FILE, "w") as f:
+        _json.dump(data, f, indent=2)
+
+def _reload_wa_contacts():
+    try:
+        from modules.whatsapp_handler import _load_contacts
+        _load_contacts()
+    except Exception:
+        pass
+
+def _normalize_wa_number(raw: str) -> str:
+    digits = re.sub(r'\D', '', raw)
+    return digits + "@c.us"
+
+
+@ui_bp.route("/contacts", methods=["GET"])
+def contacts_get():
+    try:
+        data = _load_contacts_file()
+        contacts = [{"number": k, "name": v} for k, v in data.items()]
+        return jsonify({"ok": True, "contacts": contacts})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@ui_bp.route("/contacts", methods=["POST"])
+def contacts_add():
+    try:
+        body = request.get_json(silent=True) or {}
+        number = body.get("number", "").strip()
+        name   = body.get("name",   "").strip()
+        if not number or not name:
+            return jsonify({"ok": False, "error": "number and name required"}), 400
+        wa_number = _normalize_wa_number(number)
+        data = _load_contacts_file()
+        data[wa_number] = name
+        _save_contacts_file(data)
+        _reload_wa_contacts()
+        return jsonify({"ok": True, "number": wa_number, "name": name})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@ui_bp.route("/contacts/<path:number>", methods=["DELETE"])
+def contacts_delete(number):
+    try:
+        data = _load_contacts_file()
+        if number not in data:
+            return jsonify({"ok": False, "error": "Not found"}), 404
+        del data[number]
+        _save_contacts_file(data)
+        _reload_wa_contacts()
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@ui_bp.route("/contacts/import", methods=["POST"])
+def contacts_import():
+    if "file" not in request.files:
+        return jsonify({"ok": False, "error": "No file provided"}), 400
+    f = request.files["file"]
+    filename = (f.filename or "").lower()
+    content = f.read().decode("utf-8", errors="ignore")
+    imported = {}
+
+    if filename.endswith(".vcf"):
+        current_name = None
+        current_tel  = None
+        for line in content.splitlines():
+            line = line.strip()
+            if line.upper().startswith("FN:"):
+                current_name = line[3:].strip()
+            elif line.upper().startswith("TEL") and ":" in line:
+                tel    = line.split(":", 1)[1].strip()
+                digits = re.sub(r'\D', '', tel)
+                if digits:
+                    current_tel = digits
+            elif line.upper() == "END:VCARD":
+                if current_name and current_tel:
+                    imported[current_tel + "@c.us"] = current_name
+                current_name = None
+                current_tel  = None
+
+    elif filename.endswith(".csv"):
+        import csv, io
+        reader = csv.DictReader(io.StringIO(content))
+        for row in reader:
+            name = (row.get("Name") or "").strip()
+            if not name:
+                first = (row.get("First Name") or "").strip()
+                last  = (row.get("Last Name")  or "").strip()
+                name  = f"{first} {last}".strip()
+            if not name:
+                continue
+            phone = ""
+            for key, val in row.items():
+                if any(k in key.lower() for k in ("phone", "tel", "mobile")):
+                    val = (val or "").strip()
+                    if val:
+                        phone = val
+                        break
+            if not phone:
+                continue
+            digits = re.sub(r'\D', '', phone)
+            if digits:
+                imported[digits + "@c.us"] = name
+    else:
+        return jsonify({"ok": False, "error": "Only .csv and .vcf files supported"}), 400
+
+    if not imported:
+        return jsonify({"ok": False, "error": "No valid contacts found in file"}), 400
+
+    data = _load_contacts_file()
+    data.update(imported)
+    _save_contacts_file(data)
+    _reload_wa_contacts()
+    return jsonify({"ok": True, "imported": len(imported), "total": len(data)})
 
 
 # ── SHELL EXECUTOR ────────────────────────────────────────────────────────────
@@ -1583,3 +2157,1178 @@ def shell_cancel():
         return jsonify({"ok": True})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
+
+
+# ── WhatsApp Logout ───────────────────────────────────────────
+
+@ui_bp.route("/whatsapp/logout", methods=["POST"])
+def whatsapp_logout():
+    try:
+        import requests as _req
+        r = _req.post("http://localhost:3000/logout", timeout=10)
+        data = r.json()
+        if data.get("status") == "logged_out":
+            return jsonify({"ok": True})
+        return jsonify({"ok": False, "error": data.get("message", "Logout failed")})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+# ── Relationships ─────────────────────────────────────────────
+
+@ui_bp.route("/relationships", methods=["GET"])
+def get_relationships():
+    """
+    Returns all people in relationship memory with their facts.
+    Used by RelationshipGraph.jsx D3 force graph.
+    """
+    try:
+        from modules.relationship_memory import list_people, get_person
+        names = list_people()
+        people = []
+        for name in names:
+            if name.replace("+", "").replace(" ", "").isdigit():
+                continue
+            facts = get_person(name)
+            people.append({"name": name, "facts": facts})
+        return jsonify({"ok": True, "people": people, "count": len(people)})
+    except Exception as e:
+        return jsonify({"ok": False, "people": [], "error": str(e)})
+
+
+# ─────────────────────────────────────────────────────────────
+# Remote Node API — Devices widget
+# GET  /nodes/vitals?node=alliednode+2
+# POST /nodes/control  { node, action, value }
+# ─────────────────────────────────────────────────────────────
+
+@ui_bp.route("/nodes/vitals", methods=["GET"])
+def nodes_vitals():
+    node = request.args.get("node", "").strip()
+    if not node:
+        return jsonify({"ok": False, "error": "node required"}), 400
+    try:
+        from modules.remote_node import get_vitals
+        v = get_vitals(node)
+        if "error" in v:
+            return jsonify({"ok": False, "error": v["error"]}), 503
+        return jsonify({"ok": True, "vitals": v})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@ui_bp.route("/nodes/control", methods=["POST"])
+def nodes_control():
+    data   = request.get_json(silent=True) or {}
+    node   = data.get("node", "").strip()
+    action = data.get("action", "").strip()
+    value  = data.get("value", None)
+    if not node or not action:
+        return jsonify({"ok": False, "error": "node and action required"}), 400
+    try:
+        from modules import remote_node as _rn
+
+        # Power actions
+        if action in ("shutdown", "restart", "sleep", "lock"):
+            r = _rn.system_control(node, action)
+            return jsonify({"ok": "error" not in r, **r})
+
+        # Kill process
+        if action == "kill_process":
+            proc = data.get("process", "")
+            r = _rn.system_control(node, "kill_process", process=proc)
+            return jsonify({"ok": "error" not in r, **r})
+
+        # Volume — Windows Core Audio IAudioEndpointVolume (works on Win10/11; waveOutSetVolume is legacy)
+        if action == "volume" and value is not None:
+            import base64
+            pct = max(0, min(100, int(value)))
+            lines = [
+                f"$vol=[float]({pct}/100.0)",
+                'Add-Type -TypeDefinition @"',
+                "using System;",
+                "using System.Runtime.InteropServices;",
+                '[ComImport,Guid("BCDE0395-E52F-467C-8E3D-C4579291692E")]',
+                "class MMDE {}",
+                '[Guid("A95664D2-9614-4F35-A746-DE8DB63617E6"),InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]',
+                "interface IMMDE {",
+                "  int _a();",
+                "  [PreserveSig] int GetDefaultAudioEndpoint(int d,int r,out IMMD p);",
+                "}",
+                '[Guid("D666063F-1587-4E43-81F1-B948E807363F"),InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]',
+                "interface IMMD {",
+                "  [PreserveSig] int Activate(ref Guid id,int ctx,IntPtr ap,[MarshalAs(UnmanagedType.IUnknown)]out object pp);",
+                "}",
+                '[Guid("5CDF2C82-841E-4546-9722-0CF74078229A"),InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]',
+                "interface IAEV {",
+                "  int _a();int _b();int _c();int _d();",
+                "  [PreserveSig] int SetMasterVolumeLevelScalar(float f,Guid g);",
+                "}",
+                "public class VA {",
+                "  public static void Set(float v){",
+                "    var e=(IMMDE)new MMDE();",
+                "    IMMD d;e.GetDefaultAudioEndpoint(0,1,out d);",
+                "    var id=typeof(IAEV).GUID;object o;",
+                "    d.Activate(ref id,23,IntPtr.Zero,out o);",
+                "    ((IAEV)o).SetMasterVolumeLevelScalar(v,Guid.Empty);",
+                "  }",
+                "}",
+                '"@',
+                "[VA]::Set($vol)",
+            ]
+            script = "\n".join(lines)
+            enc = base64.b64encode(script.encode('utf-16-le')).decode()
+            r = _rn.execute(node, f'powershell -EncodedCommand {enc}')
+            return jsonify({"ok": True, "action": action, "value": pct, "node_result": r})
+
+        # Brightness — base64-encoded PS via WMI
+        if action == "brightness" and value is not None:
+            import base64
+            pct = max(0, min(100, int(value)))
+            script = (
+                f'(Get-WmiObject -Namespace root/WMI -Class WmiMonitorBrightnessMethods)'
+                f'.WmiSetBrightness(1,{pct})'
+            )
+            enc = base64.b64encode(script.encode('utf-16-le')).decode()
+            r = _rn.execute(node, f'powershell -EncodedCommand {enc}')
+            return jsonify({"ok": True, "action": action, "value": pct, "node_result": r})
+
+        # Media keys via PowerShell SendKeys
+        _MEDIA_MAP = {
+            "media_play_pause": "{MEDIA_PLAY_PAUSE}",
+            "media_next":       "{MEDIA_NEXT_TRACK}",
+            "media_prev":       "{MEDIA_PREV_TRACK}",
+        }
+        if action in _MEDIA_MAP:
+            key = _MEDIA_MAP[action]
+            ps_cmd = (
+                f'Add-Type -AssemblyName System.Windows.Forms;'
+                f'[System.Windows.Forms.SendKeys]::SendWait("{key}")'
+            )
+            r = _rn.execute(node, f'powershell -c "{ps_cmd}"')
+            return jsonify({"ok": True, "action": action})
+
+        return jsonify({"ok": False, "error": f"unknown action: {action}"}), 400
+
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+# GET /nodes/processes?node=&top=20
+@ui_bp.route("/nodes/processes", methods=["GET"])
+def nodes_processes():
+    node = request.args.get("node", "").strip()
+    top  = min(int(request.args.get("top", 20)), 50)
+    if not node:
+        return jsonify({"ok": False, "error": "node required"}), 400
+    try:
+        from modules import remote_node as _rn
+        r = _rn.get_processes(node, top=top)
+        if "error" in r:
+            return jsonify({"ok": False, "error": r["error"]}), 502
+        return jsonify({"ok": True, "processes": r.get("processes", [])})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+# GET /nodes/screenshot?node=
+@ui_bp.route("/nodes/screenshot", methods=["GET"])
+def nodes_screenshot():
+    node = request.args.get("node", "").strip()
+    if not node:
+        return jsonify({"ok": False, "error": "node required"}), 400
+    try:
+        from modules import remote_node as _rn
+        r = _rn.take_screenshot(node)
+        if "error" in r:
+            return jsonify({"ok": False, "error": r["error"]}), 502
+        return jsonify({"ok": True, "screenshot": r.get("screenshot"),
+                        "width": r.get("width"), "height": r.get("height")})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+# POST /nodes/execute  { node, command }
+@ui_bp.route("/nodes/execute", methods=["POST"])
+def nodes_execute():
+    data    = request.get_json(silent=True) or {}
+    node    = data.get("node", "").strip()
+    command = data.get("command", "").strip()
+    if not node or not command:
+        return jsonify({"ok": False, "error": "node and command required"}), 400
+    try:
+        from modules import remote_node as _rn
+        r = _rn.execute(node, command)
+        if "error" in r:
+            return jsonify({"ok": False, "error": r["error"]}), 502
+        return jsonify({"ok": True, "stdout": r.get("stdout", ""),
+                        "stderr": r.get("stderr", ""), "returncode": r.get("returncode")})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+# POST /nodes/file  { node, dest, content }   (base64 content)
+@ui_bp.route("/nodes/file", methods=["POST"])
+def nodes_file():
+    data    = request.get_json(silent=True) or {}
+    node    = data.get("node", "").strip()
+    dest    = data.get("dest", "").strip()
+    content = data.get("content", "")
+    if not node or not dest or not content:
+        return jsonify({"ok": False, "error": "node, dest, content required"}), 400
+    try:
+        import base64 as _b64
+        from modules import remote_node as _rn
+        r = _rn.upload_bytes(node, dest, _b64.b64decode(content))
+        if "error" in r:
+            return jsonify({"ok": False, "error": r["error"]}), 502
+        return jsonify({"ok": True, **r})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+# POST /nodes/wol  { node }
+@ui_bp.route("/nodes/wol", methods=["POST"])
+def nodes_wol():
+    data = request.get_json(silent=True) or {}
+    node = data.get("node", "").strip()
+    if not node:
+        return jsonify({"ok": False, "error": "node required"}), 400
+    try:
+        from modules import remote_node as _rn
+        r = _rn.wake_on_lan(node)
+        return jsonify({"ok": "error" not in r, **r})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+# =============================================================================
+# PRINT ENGINE — Phase 2
+# =============================================================================
+
+@ui_bp.route("/print/printers", methods=["GET"])
+def print_list_printers():
+    """List all available printers."""
+    try:
+        from modules.print_engine import list_printers
+        return jsonify({"ok": True, "printers": list_printers()})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@ui_bp.route("/print/status", methods=["GET"])
+def print_status():
+    """Get status + queue for the configured/default printer."""
+    try:
+        from modules.print_engine import get_printer_status, get_prefs
+        prefs = get_prefs()
+        printer = request.args.get("printer") or prefs.get("default_printer") or ""
+        status = get_printer_status(printer)
+        return jsonify({"ok": True, **status})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@ui_bp.route("/print/settings", methods=["GET"])
+def print_get_settings():
+    """Return current default print preferences."""
+    try:
+        from modules.print_engine import get_prefs
+        return jsonify({"ok": True, "settings": get_prefs()})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@ui_bp.route("/print/settings", methods=["POST"])
+def print_update_settings():
+    """Update default print preferences."""
+    try:
+        from modules.print_engine import update_prefs
+        data = request.json or {}
+        updated = update_prefs(data)
+        return jsonify({"ok": True, "settings": updated})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@ui_bp.route("/print/job", methods=["POST"])
+def print_job():
+    """
+    Send one or more files to the printer.
+    Body: {files: ["/abs/path/to/file.pdf", ...], overrides: {color_mode, dpi, ...}}
+    Or: {file_paths: [...], overrides: {...}}
+    """
+    try:
+        from modules.print_engine import print_files_batch
+        data = request.json or {}
+        paths = data.get("files") or data.get("file_paths") or []
+        overrides = data.get("overrides") or {}
+        per_file_pages = data.get("per_file_pages") or {}  # {path: "page_spec"}
+        if not paths:
+            return jsonify({"ok": False, "error": "No files specified"}), 400
+        results = print_files_batch(paths, overrides, per_file_pages)
+        success = all(r["success"] for r in results)
+        return jsonify({"ok": success, "results": results})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@ui_bp.route("/print/upload-and-print", methods=["POST"])
+def print_upload_and_print():
+    """
+    Upload file(s) then print them.
+    multipart/form-data: files[] + optional JSON overrides field.
+    """
+    try:
+        from modules.print_engine import print_file, get_prefs
+        files = request.files.getlist("files[]") or request.files.getlist("file")
+        if not files:
+            return jsonify({"ok": False, "error": "No files uploaded"}), 400
+
+        overrides_raw = request.form.get("overrides", "{}")
+        try:
+            import json as _j
+            overrides = _j.loads(overrides_raw)
+        except Exception:
+            overrides = {}
+
+        saved_paths = []
+        for f in files:
+            if not f.filename:
+                continue
+            safe_name = secure_filename(f.filename)
+            dest = os.path.join(SHARED_DIR, f"print_{int(time.time())}_{safe_name}")
+            f.save(dest)
+            saved_paths.append(dest)
+
+        results = []
+        for path in saved_paths:
+            ok, msg = print_file(path, overrides)
+            results.append({"file": os.path.basename(path), "success": ok, "message": msg})
+        success = all(r["success"] for r in results)
+        return jsonify({"ok": success, "results": results})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@ui_bp.route("/print/preview", methods=["POST"])
+def print_preview():
+    """
+    Generate a preview thumbnail for a file.
+    Body: {path: "/abs/path/to/file.pdf"}
+    Returns: {ok, preview: "base64png" | "pdf:N" | "docx:N" | null}
+    """
+    try:
+        from modules.print_engine import generate_preview
+        data = request.json or {}
+        path = data.get("path", "").strip()
+        if not path or not os.path.exists(path):
+            return jsonify({"ok": False, "error": "File not found"}), 404
+        preview = generate_preview(path)
+        # Also include page count in response
+        page_count = 0
+        if preview and isinstance(preview, str) and preview.startswith("pdf:"):
+            try: page_count = int(preview.split(":")[1])
+            except Exception: pass
+        return jsonify({"ok": True, "preview": preview, "page_count": page_count})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@ui_bp.route("/print/page-count", methods=["POST"])
+def print_page_count():
+    """Return page count for a PDF. Body: {path: "..."}"""
+    try:
+        from modules.print_engine import get_pdf_page_count
+        data = request.json or {}
+        path = data.get("path", "").strip()
+        if not path or not os.path.exists(path):
+            return jsonify({"ok": False, "count": 0}), 404
+        count = get_pdf_page_count(path)
+        return jsonify({"ok": True, "count": count})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+# =============================================================================
+# OCR ENGINE — Phase 2 (camera-based document scanning)
+# =============================================================================
+
+_ocr_state = {
+    "enabled": False,
+    "last_text": "",
+    "last_ts": 0,
+    "mode": "idle",  # idle | scanning | done
+}
+
+
+@ui_bp.route("/ocr/status", methods=["GET"])
+def ocr_status():
+    """Return current OCR state."""
+    return jsonify({
+        "ok": True,
+        "enabled": _ocr_state["enabled"],
+        "mode": _ocr_state["mode"],
+        "last_text": _ocr_state["last_text"],
+        "last_ts": _ocr_state["last_ts"],
+    })
+
+
+@ui_bp.route("/ocr/toggle", methods=["POST"])
+def ocr_toggle():
+    """Enable or disable live OCR scanning mode."""
+    try:
+        data = request.json or {}
+        enabled = data.get("enabled", not _ocr_state["enabled"])
+        _ocr_state["enabled"] = bool(enabled)
+        _ocr_state["mode"] = "scanning" if enabled else "idle"
+
+        if enabled:
+            # Announce via speak
+            if _speak_fn:
+                _speak_fn("Camera OCR activated. Show me the document.")
+            # Start background OCR scan
+            threading.Thread(target=_run_ocr_scan, daemon=True).start()
+        else:
+            if _speak_fn:
+                _speak_fn("OCR scanning disabled.")
+
+        return jsonify({"ok": True, "enabled": enabled})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@ui_bp.route("/ocr/scan-image", methods=["POST"])
+def ocr_scan_image():
+    """
+    Scan a base64 image for text (for manual image uploads).
+    Body: {image: "base64...", mime: "image/png"}
+    """
+    try:
+        data = request.json or {}
+        b64 = data.get("image", "")
+        if not b64:
+            return jsonify({"ok": False, "error": "No image data"}), 400
+
+        text = _extract_text_from_b64(b64)
+        _ocr_state["last_text"] = text
+        _ocr_state["last_ts"] = int(time.time())
+        _ocr_state["mode"] = "done"
+
+        # Broadcast to UI
+        try:
+            from modules.ws_bridge import broadcast
+            broadcast({"type": "ocr_result", "text": text, "ts": _ocr_state["last_ts"]})
+        except Exception:
+            pass
+
+        return jsonify({"ok": True, "text": text})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@ui_bp.route("/ocr/save", methods=["POST"])
+def ocr_save():
+    """Save last OCR result to a notepad/text file on Desktop."""
+    try:
+        data = request.json or {}
+        text = data.get("text") or _ocr_state.get("last_text", "")
+        if not text.strip():
+            return jsonify({"ok": False, "error": "No text to save"}), 400
+
+        filename = f"iZACH_OCR_{int(time.time())}.txt"
+        dest = os.path.join(os.path.expanduser("~"), "Desktop", filename)
+        with open(dest, "w", encoding="utf-8") as f:
+            f.write(text)
+
+        if _speak_fn:
+            _speak_fn(f"Saved OCR text to Desktop as {filename}.")
+        return jsonify({"ok": True, "saved_to": dest})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+def _extract_text_from_b64(b64: str) -> str:
+    """Run vision OCR on base64 image. Returns extracted text."""
+    try:
+        from modules.camera_vision import _ask_vision
+        prompt = (
+            "This is a document/page shown to a camera. Extract ALL the text from it exactly as written. "
+            "Preserve formatting — use line breaks between lines. "
+            "Also note any dates, names, subject headings, or deadlines you see."
+        )
+        return _ask_vision(b64, prompt) or ""
+    except Exception as e:
+        return f"[OCR error: {e}]"
+
+
+def _run_ocr_scan():
+    """Background: capture a camera frame and run OCR on it."""
+    try:
+        import time as _t
+        _t.sleep(3)  # give user time to hold document steady
+        from modules.camera_vision import _capture_frame, _frame_to_b64
+        frame = _capture_frame()
+        if frame is None:
+            _ocr_state["mode"] = "idle"
+            _ocr_state["enabled"] = False
+            return
+
+        b64 = _frame_to_b64(frame)
+        if not b64:
+            _ocr_state["mode"] = "idle"
+            _ocr_state["enabled"] = False
+            return
+
+        text = _extract_text_from_b64(b64)
+        _ocr_state["last_text"] = text
+        _ocr_state["last_ts"] = int(_t.time())
+        _ocr_state["mode"] = "done"
+        _ocr_state["enabled"] = False
+
+        if _speak_fn:
+            preview = text[:80].replace("\n", " ") if text else "no text found"
+            _speak_fn(f"Document scanned. I extracted: {preview}…")
+
+        try:
+            from modules.ws_bridge import broadcast
+            broadcast({"type": "ocr_result", "text": text, "ts": _ocr_state["last_ts"]})
+        except Exception:
+            pass
+    except Exception as e:
+        _ocr_state["mode"] = "idle"
+        _ocr_state["enabled"] = False
+
+
+# =============================================================================
+# ── PHASE 3: GOOGLE FIT / FITNESS ENDPOINTS ──────────────────────────────────
+# =============================================================================
+
+@ui_bp.route("/fitness/status", methods=["GET"])
+def fitness_status():
+    try:
+        from modules.fitness_engine import get_auth_status
+        return jsonify(get_auth_status())
+    except Exception as e:
+        return jsonify({"status": "error", "error": str(e)}), 500
+
+
+@ui_bp.route("/fitness/summary", methods=["GET"])
+def fitness_summary():
+    try:
+        from modules.fitness_engine import get_summary
+        return jsonify(get_summary())
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@ui_bp.route("/fitness/auth/start", methods=["GET"])
+def fitness_auth_start():
+    try:
+        from modules.fitness_engine import start_auth_flow
+        return jsonify(start_auth_flow())
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@ui_bp.route("/fitness/auth/complete", methods=["POST"])
+def fitness_auth_complete():
+    data = request.get_json(silent=True) or {}
+    code = data.get("code", "").strip()
+    if not code:
+        return jsonify({"error": "code required"}), 400
+    try:
+        from modules.fitness_engine import complete_auth
+        return jsonify(complete_auth(code))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@ui_bp.route("/fitness/disconnect", methods=["POST"])
+def fitness_disconnect():
+    try:
+        from modules.fitness_engine import disconnect
+        return jsonify(disconnect())
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# =============================================================================
+# ── PHASE 3: LOCATION / PHONE GPS ENDPOINTS ──────────────────────────────────
+# =============================================================================
+
+@ui_bp.route("/location/status", methods=["GET"])
+def location_status():
+    try:
+        from modules.location_engine import get_full_location, is_running
+        data = get_full_location()
+        data["engine_running"] = is_running()
+        return jsonify(data)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@ui_bp.route("/location/toggle", methods=["POST"])
+def location_toggle():
+    """Start or stop background location engine. Body: {enabled: bool}"""
+    data = request.get_json(silent=True) or {}
+    enabled = bool(data.get("enabled", True))
+    try:
+        if enabled:
+            from modules.location_engine import start, is_running
+            if not is_running():
+                start()
+            return jsonify({"ok": True, "running": True})
+        else:
+            from modules.location_engine import stop, is_running
+            stop()
+            return jsonify({"ok": True, "running": False})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@ui_bp.route("/location/phone-ping", methods=["POST"])
+def location_phone_ping():
+    """
+    Receives GPS ping from mobile companion (location_companion.html).
+    Body: {lat, lon, accuracy, timestamp}
+    """
+    data = request.get_json(silent=True) or {}
+    lat  = float(data.get("lat", 0.0))
+    lon  = float(data.get("lon", 0.0))
+    acc  = float(data.get("accuracy", 0.0))
+    if lat == 0.0 and lon == 0.0:
+        return jsonify({"error": "invalid coordinates"}), 400
+    try:
+        from modules.location_engine import update_phone_location, get_phone_location
+        update_phone_location(lat, lon, acc)
+        return jsonify({"received": True, **get_phone_location()})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@ui_bp.route("/location/label-ssid", methods=["POST"])
+def location_label_ssid():
+    """Label a WiFi SSID with a human-readable name (Home, College, Gym…)"""
+    data = request.get_json(silent=True) or {}
+    ssid  = data.get("ssid", "").strip()
+    label = data.get("label", "").strip()
+    if not ssid or not label:
+        return jsonify({"error": "ssid and label required"}), 400
+    try:
+        from modules.location_engine import label_ssid
+        label_ssid(ssid, label)
+        return jsonify({"success": True, "ssid": ssid, "label": label})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@ui_bp.route("/companion", methods=["GET"])
+def location_companion():
+    """Serve the mobile location companion page over HTTP."""
+    base = os.path.dirname(os.path.dirname(__file__))
+    return send_from_directory(base, "location_companion.html")
+
+
+@ui_bp.route("/location/my-ip", methods=["GET"])
+def location_my_ip():
+    """Return PC's local IP so companion page can auto-fill server URL."""
+    import socket
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+    except Exception:
+        ip = "127.0.0.1"
+    return jsonify({"ip": ip, "url": f"http://{ip}:5050"})
+
+
+# =============================================================================
+# ── PHASE 4: SMART HOME ENDPOINTS ────────────────────────────────────────────
+# =============================================================================
+
+@ui_bp.route("/smarthome/status", methods=["GET"])
+def smarthome_status():
+    try:
+        from modules.smart_home_engine import get_all_status
+        return jsonify(get_all_status())
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@ui_bp.route("/smarthome/auth/start", methods=["GET"])
+def smarthome_auth_start():
+    try:
+        from modules.smart_home_engine import start_auth_flow
+        return jsonify(start_auth_flow())
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@ui_bp.route("/smarthome/auth/complete", methods=["POST"])
+def smarthome_auth_complete():
+    data = request.get_json(silent=True) or {}
+    code = data.get("code", "").strip()
+    if not code:
+        return jsonify({"error": "code required"}), 400
+    try:
+        from modules.smart_home_engine import complete_auth
+        return jsonify(complete_auth(code))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@ui_bp.route("/smarthome/auth/disconnect", methods=["POST"])
+def smarthome_auth_disconnect():
+    try:
+        from modules.smart_home_engine import disconnect
+        return jsonify(disconnect())
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@ui_bp.route("/smarthome/devices", methods=["GET"])
+def smarthome_devices():
+    force = request.args.get("force", "false").lower() == "true"
+    try:
+        from modules.smart_home_engine import list_sdm_devices, list_cast_devices
+        return jsonify({
+            "nest_devices": list_sdm_devices(force=force),
+            "cast_devices": list_cast_devices(),
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@ui_bp.route("/smarthome/settings", methods=["GET", "POST"])
+def smarthome_settings():
+    try:
+        from modules.smart_home_engine import get_settings, update_settings
+        if request.method == "POST":
+            data = request.get_json(silent=True) or {}
+            return jsonify(update_settings(data))
+        return jsonify(get_settings())
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@ui_bp.route("/smarthome/ac/temperature", methods=["POST"])
+def smarthome_ac_temperature():
+    """Body: {device_id, temp_c, mode}  — mode: COOL or HEAT"""
+    data = request.get_json(silent=True) or {}
+    device_id = data.get("device_id", "")
+    temp_c    = data.get("temp_c", data.get("temp", 24))
+    mode      = data.get("mode", "COOL").upper()
+    if not device_id:
+        return jsonify({"error": "device_id required"}), 400
+    try:
+        from modules.smart_home_engine import set_temperature
+        return jsonify(set_temperature(device_id, float(temp_c), mode))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@ui_bp.route("/smarthome/ac/mode", methods=["POST"])
+def smarthome_ac_mode():
+    """Body: {device_id, mode}  — mode: COOL | HEAT | HEATCOOL | OFF"""
+    data = request.get_json(silent=True) or {}
+    device_id = data.get("device_id", "")
+    mode      = data.get("mode", "COOL").upper()
+    if not device_id:
+        return jsonify({"error": "device_id required"}), 400
+    try:
+        from modules.smart_home_engine import set_thermostat_mode
+        return jsonify(set_thermostat_mode(device_id, mode))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@ui_bp.route("/smarthome/ac/fan", methods=["POST"])
+def smarthome_ac_fan():
+    """Body: {device_id, duration_sec, action}  — action: start | stop"""
+    data = request.get_json(silent=True) or {}
+    device_id    = data.get("device_id", "")
+    action       = data.get("action", "start").lower()
+    duration_sec = int(data.get("duration_sec", 900))
+    if not device_id:
+        return jsonify({"error": "device_id required"}), 400
+    try:
+        from modules.smart_home_engine import set_fan_timer, stop_fan
+        if action == "stop":
+            return jsonify(stop_fan(device_id))
+        return jsonify(set_fan_timer(device_id, duration_sec))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@ui_bp.route("/smarthome/cast/devices", methods=["GET"])
+def smarthome_cast_devices():
+    try:
+        from modules.smart_home_engine import list_cast_devices
+        return jsonify({"devices": list_cast_devices()})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@ui_bp.route("/smarthome/cast/control", methods=["POST"])
+def smarthome_cast_control():
+    """
+    Body: {action, value, friendly_name}
+    action: play_pause | stop | mute | volume | volume_up | volume_down | cast_url
+    value: (volume 0-100) | (url for cast_url)
+    """
+    data          = request.get_json(silent=True) or {}
+    action        = data.get("action", "")
+    value         = data.get("value")
+    friendly_name = data.get("friendly_name", "")
+    try:
+        from modules.smart_home_engine import (
+            cast_play_pause, cast_stop, cast_mute_toggle,
+            cast_volume, cast_volume_up, cast_volume_down, cast_media_url,
+        )
+        fn = friendly_name
+        if action == "play_pause":
+            return jsonify(cast_play_pause(fn))
+        elif action == "stop":
+            return jsonify(cast_stop(fn))
+        elif action == "mute":
+            return jsonify(cast_mute_toggle(fn))
+        elif action == "volume":
+            return jsonify(cast_volume(float(value or 50) / 100.0, fn))
+        elif action == "volume_up":
+            return jsonify(cast_volume_up(friendly_name=fn))
+        elif action == "volume_down":
+            return jsonify(cast_volume_down(friendly_name=fn))
+        elif action == "cast_url":
+            url   = str(value or "")
+            title = data.get("title", "")
+            ctype = data.get("content_type", "video/mp4")
+            return jsonify(cast_media_url(url, title, ctype, fn))
+        else:
+            return jsonify({"error": f"Unknown action: {action}"}), 400
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@ui_bp.route("/smarthome/command", methods=["POST"])
+def smarthome_command():
+    """Natural-language smart home command. Body: {command, device_id, cast_name}"""
+    data    = request.get_json(silent=True) or {}
+    command = data.get("command", "").strip()
+    if not command:
+        return jsonify({"error": "command required"}), 400
+    context = {k: v for k, v in data.items() if k != "command"}
+    try:
+        from modules.smart_home_engine import execute_voice_command
+        return jsonify(execute_voice_command(command, context))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# =============================================================================
+# ── SAMSUNG TV (local WebSocket) ─────────────────────────────────────────────
+# =============================================================================
+
+@ui_bp.route("/smarthome/samsung/tv/info", methods=["GET"])
+def samsung_tv_info():
+    ip = request.args.get("ip", "")
+    try:
+        from modules.smart_home_engine import samsung_tv_get_info
+        return jsonify(samsung_tv_get_info(ip))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@ui_bp.route("/smarthome/samsung/tv/key", methods=["POST"])
+def samsung_tv_key():
+    """Body: {key, ip}  — e.g. KEY_VOLUMEUP, KEY_MUTE, KEY_POWER"""
+    data = request.get_json(silent=True) or {}
+    key  = data.get("key", "").strip().upper()
+    ip   = data.get("ip", "")
+    if not key:
+        return jsonify({"error": "key required"}), 400
+    try:
+        from modules.smart_home_engine import samsung_tv_send_key
+        return jsonify(samsung_tv_send_key(key, ip))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@ui_bp.route("/smarthome/samsung/tv/control", methods=["POST"])
+def samsung_tv_control():
+    """
+    Body: {action, value, ip}
+    action: power | volume_up | volume_down | mute | channel_up | channel_down |
+            set_channel | key
+    value:  channel number (for set_channel) | key name (for key)
+    """
+    data   = request.get_json(silent=True) or {}
+    action = data.get("action", "")
+    value  = data.get("value")
+    ip     = data.get("ip", "")
+    try:
+        from modules.smart_home_engine import (
+            samsung_tv_power, samsung_tv_volume_up, samsung_tv_volume_down,
+            samsung_tv_mute, samsung_tv_channel_up, samsung_tv_channel_down,
+            samsung_tv_set_channel, samsung_tv_send_key,
+        )
+        if action == "power":          return jsonify(samsung_tv_power(ip))
+        elif action == "volume_up":    return jsonify(samsung_tv_volume_up(ip))
+        elif action == "volume_down":  return jsonify(samsung_tv_volume_down(ip))
+        elif action == "mute":         return jsonify(samsung_tv_mute(ip))
+        elif action == "channel_up":   return jsonify(samsung_tv_channel_up(ip))
+        elif action == "channel_down": return jsonify(samsung_tv_channel_down(ip))
+        elif action == "set_channel":  return jsonify(samsung_tv_set_channel(int(value or 1), ip))
+        elif action == "key":          return jsonify(samsung_tv_send_key(str(value or ""), ip))
+        else:
+            return jsonify({"error": f"Unknown action: {action}"}), 400
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# =============================================================================
+# ── SAMSUNG SMARTTHINGS ───────────────────────────────────────────────────────
+# =============================================================================
+
+@ui_bp.route("/smarthome/smartthings/devices", methods=["GET"])
+def st_devices():
+    try:
+        from modules.smart_home_engine import list_smartthings_devices
+        return jsonify({"devices": list_smartthings_devices()})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@ui_bp.route("/smarthome/smartthings/devices/<device_id>/status", methods=["GET"])
+def st_device_status(device_id):
+    try:
+        from modules.smart_home_engine import get_smartthings_device_status
+        return jsonify(get_smartthings_device_status(device_id))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@ui_bp.route("/smarthome/smartthings/devices/<device_id>/command", methods=["POST"])
+def st_device_command(device_id):
+    """Body: {capability, command, args, component}"""
+    data = request.get_json(silent=True) or {}
+    capability = data.get("capability", "")
+    command    = data.get("command", "")
+    args       = data.get("args", [])
+    component  = data.get("component", "main")
+    if not capability or not command:
+        return jsonify({"error": "capability and command required"}), 400
+    try:
+        from modules.smart_home_engine import smartthings_command
+        return jsonify(smartthings_command(device_id, capability, command, args, component))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@ui_bp.route("/smarthome/smartthings/ac/onoff", methods=["POST"])
+def st_ac_onoff():
+    """Body: {device_id, on: bool}"""
+    data      = request.get_json(silent=True) or {}
+    device_id = data.get("device_id", "")
+    on        = bool(data.get("on", True))
+    if not device_id:
+        return jsonify({"error": "device_id required"}), 400
+    try:
+        from modules.smart_home_engine import st_ac_on, st_ac_off
+        return jsonify(st_ac_on(device_id) if on else st_ac_off(device_id))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@ui_bp.route("/smarthome/smartthings/ac/temperature", methods=["POST"])
+def st_ac_temperature():
+    """Body: {device_id, temp_c, mode}  mode: cool | heat"""
+    data      = request.get_json(silent=True) or {}
+    device_id = data.get("device_id", "")
+    temp_c    = float(data.get("temp_c", data.get("temp", 24)))
+    mode      = data.get("mode", "cool").lower()
+    if not device_id:
+        return jsonify({"error": "device_id required"}), 400
+    try:
+        from modules.smart_home_engine import st_ac_set_temp
+        return jsonify(st_ac_set_temp(device_id, temp_c, mode))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@ui_bp.route("/smarthome/smartthings/ac/mode", methods=["POST"])
+def st_ac_mode():
+    """Body: {device_id, mode}  cool|heat|auto|dry|wind|fanOnly"""
+    data      = request.get_json(silent=True) or {}
+    device_id = data.get("device_id", "")
+    mode      = data.get("mode", "cool").lower()
+    if not device_id:
+        return jsonify({"error": "device_id required"}), 400
+    try:
+        from modules.smart_home_engine import st_ac_set_mode
+        return jsonify(st_ac_set_mode(device_id, mode))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@ui_bp.route("/smarthome/smartthings/ac/fan", methods=["POST"])
+def st_ac_fan():
+    """Body: {device_id, speed}  auto|low|medium|high|turbo"""
+    data      = request.get_json(silent=True) or {}
+    device_id = data.get("device_id", "")
+    speed     = data.get("speed", "auto").lower()
+    if not device_id:
+        return jsonify({"error": "device_id required"}), 400
+    try:
+        from modules.smart_home_engine import st_ac_set_fan_speed
+        return jsonify(st_ac_set_fan_speed(device_id, speed))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# =============================================================================
+# ── SMARTTHINGS TV ENDPOINTS ──────────────────────────────────────────────────
+# =============================================================================
+
+@ui_bp.route("/smarthome/smartthings/tv/control", methods=["POST"])
+def st_tv_control():
+    """
+    Body: {device_id, action, value}
+    action: on | off | volume_up | volume_down | set_volume | mute |
+            channel_up | channel_down | set_channel | play | pause | stop | app
+    value:  volume level (0-100) for set_volume | channel for set_channel | app name for app
+    """
+    data      = request.get_json(silent=True) or {}
+    device_id = data.get("device_id", "")
+    action    = data.get("action", "")
+    value     = data.get("value")
+
+    if not device_id:
+        return jsonify({"error": "device_id required"}), 400
+
+    try:
+        from modules.smart_home_engine import (
+            st_tv_on, st_tv_off, st_tv_volume_up, st_tv_volume_down,
+            st_tv_set_volume, st_tv_mute_toggle, st_tv_mute, st_tv_unmute,
+            st_tv_channel_up, st_tv_channel_down, st_tv_set_channel,
+            st_tv_play, st_tv_pause, st_tv_stop, st_tv_launch_app_by_name,
+        )
+        if action == "on":             return jsonify(st_tv_on(device_id))
+        elif action == "off":          return jsonify(st_tv_off(device_id))
+        elif action == "volume_up":    return jsonify(st_tv_volume_up(device_id))
+        elif action == "volume_down":  return jsonify(st_tv_volume_down(device_id))
+        elif action == "set_volume":   return jsonify(st_tv_set_volume(device_id, int(value or 30)))
+        elif action == "mute":         return jsonify(st_tv_mute_toggle(device_id))
+        elif action == "mute_on":      return jsonify(st_tv_mute(device_id))
+        elif action == "mute_off":     return jsonify(st_tv_unmute(device_id))
+        elif action == "channel_up":   return jsonify(st_tv_channel_up(device_id))
+        elif action == "channel_down": return jsonify(st_tv_channel_down(device_id))
+        elif action == "set_channel":  return jsonify(st_tv_set_channel(device_id, str(value or 1)))
+        elif action == "play":         return jsonify(st_tv_play(device_id))
+        elif action == "pause":        return jsonify(st_tv_pause(device_id))
+        elif action == "stop":         return jsonify(st_tv_stop(device_id))
+        elif action == "app":          return jsonify(st_tv_launch_app_by_name(device_id, str(value or "")))
+        else:
+            return jsonify({"error": f"Unknown action: {action}"}), 400
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@ui_bp.route("/smarthome/smartthings/tv/status", methods=["GET"])
+def st_tv_status_ep():
+    device_id = request.args.get("device_id", "")
+    if not device_id:
+        return jsonify({"error": "device_id required"}), 400
+    try:
+        from modules.smart_home_engine import get_smartthings_device_status
+        return jsonify(get_smartthings_device_status(device_id))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# =============================================================================
+# ── SUBCONSCIOUSNESS (Phase 5A) ───────────────────────────────────────────────
+# =============================================================================
+
+@ui_bp.route("/subconsciousness/status", methods=["GET"])
+def sc_status():
+    """System health snapshot + running state."""
+    try:
+        from modules import subconsciousness as _sc
+        import psutil as _ps
+        bat  = _ps.sensors_battery()
+        vm   = _ps.virtual_memory()
+        disk = _ps.disk_usage("C:\\")
+        return jsonify({
+            "running":       True,
+            "pending_count": len(_sc.get_pending()),
+            "battery": {
+                "percent": bat.percent if bat else None,
+                "plugged": bat.power_plugged if bat else None,
+            },
+            "ram": {
+                "percent":  vm.percent,
+                "used_gb":  round(vm.used  / (1024**3), 1),
+                "total_gb": round(vm.total / (1024**3), 1),
+            },
+            "disk_c": {
+                "free_gb":      round(disk.free / (1024**3), 1),
+                "percent_used": disk.percent,
+            },
+        })
+    except Exception as e:
+        return jsonify({"running": False, "error": str(e)}), 500
+
+
+@ui_bp.route("/subconsciousness/pending", methods=["GET"])
+def sc_pending():
+    """List all pending permission requests."""
+    try:
+        from modules import subconsciousness as _sc
+        return jsonify({"pending": _sc.get_pending()})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@ui_bp.route("/subconsciousness/permit/<action_id>", methods=["POST"])
+def sc_permit(action_id: str):
+    """Grant a pending permission (UI button click)."""
+    try:
+        from modules import subconsciousness as _sc
+        ok = _sc.grant(action_id)
+        return jsonify({"granted": ok})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@ui_bp.route("/subconsciousness/deny/<action_id>", methods=["POST"])
+def sc_deny(action_id: str):
+    """Deny a pending permission (UI button click)."""
+    try:
+        from modules import subconsciousness as _sc
+        ok = _sc.deny(action_id, "Okay, cancelled.")
+        return jsonify({"denied": ok})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@ui_bp.route("/subconsciousness/history", methods=["GET"])
+def sc_history():
+    """All permission entries including resolved."""
+    try:
+        from modules import subconsciousness as _sc
+        return jsonify({"history": _sc.get_all()})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@ui_bp.route("/subconsciousness/clear", methods=["POST"])
+def sc_clear():
+    """Prune resolved entries."""
+    try:
+        from modules import subconsciousness as _sc
+        _sc.clear_resolved()
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500

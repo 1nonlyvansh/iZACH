@@ -7,6 +7,9 @@ import json
 _vision_in_progress = False
 _chain_ref = None  # set by main.py after CommandChain is instantiated; used by ws_bridge
 
+# Populated after each process() call — read by main.py voice_loop for synonym learning
+_last_route_info: dict = {"domain": "chat", "handled": False, "confidence": 0.0}
+
 _NUM_WORDS = {
     "zero": "0", "one": "1", "two": "2", "three": "3", "four": "4",
     "five": "5", "six": "6", "seven": "7", "eight": "8", "nine": "9",
@@ -81,7 +84,7 @@ def _resolve_device_alias(target: str) -> str:
 
 class CommandChain:
 
-    def __init__(self, context_handler, scheduler_handler, ai_handler, raw_ai_handler, speak_func, orchestrator, context_manager, spotify_handler):
+    def __init__(self, context_handler, scheduler_handler, ai_handler, raw_ai_handler, speak_func, orchestrator, context_manager, spotify_handler, agent_orch=None):
         self.context_handler = context_handler
         self.scheduler = scheduler_handler
         self.ai = ai_handler          # with memory — for conversations
@@ -90,7 +93,53 @@ class CommandChain:
         self.orchestrator = orchestrator
         self.ctx_mgr = context_manager
         self.spotify_handler = spotify_handler
-        
+        self.agent_orch = agent_orch  # OrchestratorAgent — intent classifier
+        self._domain_ctx: dict = {}   # last classification result, for logging + fast-path
+
+        # ── Specialized agents ────────────────────────────────────
+        from Agents.whatsapp_agent import WhatsAppAgent
+        self._wa_agent = WhatsAppAgent(
+            speak_fn   = speak_func,
+            raw_ai_fn  = raw_ai_handler,
+        )
+        from Agents.calendar_agent import CalendarAgent
+        self._cal_agent = CalendarAgent(
+            speak_fn   = speak_func,
+            raw_ai_fn  = raw_ai_handler,
+            scheduler  = scheduler_handler,
+        )
+        from Agents.system_agent import SystemAgent
+        self._sys_agent = SystemAgent(
+            speak_fn   = speak_func,
+            raw_ai_fn  = raw_ai_handler,
+        )
+        from Agents.research_agent import ResearchAgent
+        self._res_agent = ResearchAgent(
+            speak_fn   = speak_func,
+            raw_ai_fn  = raw_ai_handler,
+        )
+        from Agents.spotify_agent import SpotifyAgent
+        self._spo_agent = SpotifyAgent(
+            speak_fn        = speak_func,
+            raw_ai_fn       = raw_ai_handler,
+            spotify_handler = spotify_handler,
+        )
+        from Agents.file_agent import FileAgent
+        self._file_agent = FileAgent(
+            speak_fn  = speak_func,
+            raw_ai_fn = raw_ai_handler,
+        )
+        from Agents.memory_agent import MemoryAgent
+        self._mem_agent = MemoryAgent(
+            speak_fn  = speak_func,
+            raw_ai_fn = raw_ai_handler,
+        )
+        from Agents.vision_agent import VisionAgent
+        self._vis_agent = VisionAgent(
+            speak_fn  = speak_func,
+            raw_ai_fn = raw_ai_handler,
+        )
+
         self.task_engine = TaskEngine(self.spotify_handler, self.speak)
         self.router = IntentRouter(self.spotify_handler, self.speak, self.ai, self.task_engine)
 
@@ -100,8 +149,15 @@ class CommandChain:
         self.awaiting_platform_choice = False
         self.pending_song_request = ""
 
+        self.awaiting_app_or_web = False
+        self.pending_open_service = ""
+
         self.awaiting_disambiguation = None  # {"action": "open"|"delete", "matches": [...], "query": str}
         self._pending_install: str | None = None
+
+    def current_domain(self) -> str:
+        """Return domain from the last orchestrator classification ('chat' if unknown)."""
+        return self._domain_ctx.get("domain", "chat")
 
     def _get_crypto_price(self, coin: str) -> str:
         import requests as _req
@@ -152,9 +208,11 @@ Command: "{cmd}"
 
 Rules:
 - intent can be: open_app, play_music, pause, resume, next, switch_device, search, whatsapp, unknown
+- switch_device ONLY when user explicitly says to switch Spotify/music playback to a different speaker or output device (e.g. "switch to TV", "play on my phone", "move to laptop speakers"). Mentioning the word "device" in any other context (e.g. "control my laptop", "laptop device", "feature for device") is NOT switch_device — use unknown instead.
 - Extract app name if intent is open_app
 - Extract song, artist, device, platform if present
 - Include confidence (0 to 1)
+- If the command is a question, conversation, or does not clearly match any intent, use unknown with low confidence
 
 Output format:
 {{"intent":"open_app","app":"...","song":"...","artist":"...","device":"...","platform":"...","confidence":0.0}}
@@ -180,7 +238,7 @@ Output format:
     
     
 
-    def process(self, query):
+    def process(self, query, _sc_bypass: bool = False):
         query = query.lower().strip()
         # Strip filler words at the start
         import re as _re
@@ -188,9 +246,148 @@ Output format:
         # "dot txt" / "dot pdf" etc → ".txt" / ".pdf"
         query = _re.sub(r'\s*\bdot\s+([a-z0-9]{1,5})\b', r'.\1', query)
         query = _re.sub(r'\s+\.([a-z0-9]{1,5})\b', r'.\1', query)
+
+        # ── Subconsciousness permission gate (top-level, pre-split) ──
+        # Dangerous whole-query check before we split into sub-commands.
+        # Bypass flag is set when permission was already granted.
+        if not _sc_bypass:
+            try:
+                from modules import subconsciousness as _sc_mod
+                _is_danger, _danger_desc = _sc_mod.is_dangerous(query)
+                if _is_danger:
+                    _captured_query = query
+
+                    def _permitted_exec():
+                        self.process(_captured_query, _sc_bypass=True)
+
+                    _sc_mod.request_permission(_danger_desc, _permitted_exec)
+                    return  # wait for user to confirm
+            except Exception as _sc_err:
+                logger.debug(f"[SC gate] {_sc_err}")
+
         sub_commands = [c.strip() for c in re.split(r'\b(?:and|then)\b', query) if c.strip()]
         for cmd in sub_commands:
+            _had_this = bool(re.search(r'\bthis\b', cmd))
             resolved_cmd = self._resolve_pronouns(cmd)
+            _this_resolved = _had_this and resolved_cmd != cmd  # "this" was swapped for a topic
+
+            # ── Remote Node fast-path (AlliedNode 2) ─────────────
+            _NODE2_RE = re.compile(
+                r'\b(?:'
+                r'alliednode\s*2'
+                r'|allied\s*node\s*2'
+                r'|allied\s*note\s*2'
+                r'|elite\s*node\s*2'
+                r'|elite\s*note\s*2'
+                r'|alliednote\s*2'
+                r'|allied\s*no\s*2'
+                r')\b',
+                re.IGNORECASE,
+            )
+            if _NODE2_RE.search(resolved_cmd):
+                self._handle_remote_node_command(resolved_cmd)
+                continue
+
+            # ── Gesture Engine control ────────────────────────────────
+            _GE_START = re.compile(
+                r'\b(start|enable|activate|launch|turn\s+on|boot)\b'
+                r'.*\b(gesture|aura)\b',
+                re.IGNORECASE,
+            )
+            _GE_STOP = re.compile(
+                r'\b(stop|disable|deactivate|kill|turn\s+off|end)\b'
+                r'.*\b(gesture|aura)\b',
+                re.IGNORECASE,
+            )
+            if _GE_START.search(resolved_cmd):
+                try:
+                    from modules import gesture_engine as _ge
+                    started = _ge.start()
+                    if started:
+                        self.speak("AURA gesture engine is now online. Show your hand to the camera.")
+                    else:
+                        self.speak("Gesture engine is already running.")
+                except Exception as _ge_err:
+                    self.speak(f"Gesture engine failed to start: {_ge_err}")
+                continue
+            if _GE_STOP.search(resolved_cmd):
+                try:
+                    from modules import gesture_engine as _ge
+                    stopped = _ge.stop()
+                    if stopped:
+                        self.speak("Gesture engine stopped.")
+                    else:
+                        self.speak("Gesture engine is not running.")
+                except Exception as _ge_err:
+                    self.speak(f"Gesture engine error: {_ge_err}")
+                continue
+
+            # ── Synonym learner: pre-route known corrected phrasings ─
+            _synonym_domain = None
+            try:
+                from modules.synonym_learner import match_synonym as _match_syn
+                _synonym_domain = _match_syn(resolved_cmd)
+            except Exception:
+                pass
+
+            # ── Orchestrator: classify intent before routing ───────
+            if self.agent_orch:
+                self._domain_ctx = self.agent_orch.classify(resolved_cmd)
+                # If orchestrator is unsure (chat / low confidence) but synonym
+                # learner has seen this phrasing succeed before, trust the synonym.
+                if _synonym_domain and (
+                    self._domain_ctx["domain"] == "chat"
+                    or self._domain_ctx.get("confidence", 1.0) < 0.55
+                ):
+                    self._domain_ctx["domain"] = _synonym_domain
+                    self._domain_ctx["confidence"] = 0.75  # synthetic confidence
+            else:
+                self._domain_ctx = {"domain": "chat", "confidence": 0.0, "summary": ""}
+                if _synonym_domain:
+                    self._domain_ctx["domain"] = _synonym_domain
+            _domain = self._domain_ctx["domain"]
+
+            # Update route info so voice_loop can track success/failure
+            import modules.command_chain as _self_mod
+            _self_mod._last_route_info = {
+                "domain":     _domain,
+                "handled":    False,  # updated to True if an agent handles it
+                "confidence": float(self._domain_ctx.get("confidence", 0.0)),
+            }
+
+            # Broadcast classification to UI (skips "chat" — no pill for general convo)
+            if _domain != "chat":
+                try:
+                    from modules.ws_bridge import broadcast as _bc
+                    _bc({
+                        "type":       "agent_active",
+                        "domain":     _domain,
+                        "confidence": round(float(self._domain_ctx.get("confidence", 0)), 2),
+                    })
+                except Exception:
+                    pass
+
+            # ── Subconsciousness: permission response intercept ───
+            # If there's a pending permission gate, consume yes/no before
+            # routing to any other handler.
+            try:
+                from modules import subconsciousness as _sc
+                if _sc.get_pending() and _sc.handle_voice_response(resolved_cmd):
+                    import modules.command_chain as _cc_mod
+                    _cc_mod._last_route_info["handled"] = True
+                    continue
+            except Exception:
+                pass
+
+            # Curiosity engine answer intercept — captures reply to iZACH's
+            # own question before any intent routing runs (text UI path).
+            try:
+                from modules.curiosity_engine import is_waiting_for_answer, capture_answer
+                if is_waiting_for_answer():
+                    capture_answer(resolved_cmd)
+                    return
+            except Exception:
+                pass
 
             # Calendar event confirmation (JARVIS-style: "Should I add X?")
             try:
@@ -228,6 +425,95 @@ Output format:
                     self.speak("Okay, skipping installation.")
                     continue
 
+            # ── Agent fast-paths ──────────────────────────────────
+            # Each agent returns True when it handled the command.
+            # We mark _last_route_info["handled"] so the synonym learner in
+            # voice_loop can call record_success() for the right domain.
+
+            def _agent_handled():
+                import modules.command_chain as _m
+                _m._last_route_info["handled"] = True
+
+            if _domain == "whatsapp" and self._wa_agent.handle(resolved_cmd, self._domain_ctx):
+                _agent_handled(); continue
+
+            if _domain == "calendar" and self._cal_agent.handle(resolved_cmd, self._domain_ctx):
+                _agent_handled(); continue
+
+            if _domain == "system" and self._sys_agent.handle(resolved_cmd, self._domain_ctx):
+                _agent_handled(); continue
+
+            if _domain == "research" and self._res_agent.handle(resolved_cmd, self._domain_ctx):
+                _agent_handled(); continue
+
+            if _domain == "spotify" and self._spo_agent.handle(resolved_cmd, self._domain_ctx):
+                _agent_handled(); continue
+
+            if _domain == "file" and self._file_agent.handle(resolved_cmd, self._domain_ctx):
+                _agent_handled(); continue
+
+            if _domain == "memory" and self._mem_agent.handle(resolved_cmd, self._domain_ctx):
+                _agent_handled(); continue
+
+            if _domain == "vision" and self._vis_agent.handle(resolved_cmd, self._domain_ctx):
+                _agent_handled(); continue
+
+            # ── Widget voice commands ─────────────────────────────
+            # "open spotify widget", "show whatsapp and phone widget"
+            # "close all widgets except spotify and whatsapp widgets"
+            _WIDGET_NAME_MAP = {
+                'spotify': 'p-audio', 'music': 'p-audio', 'audio': 'p-audio',
+                'chat': 'p-comm', 'comm': 'p-comm',
+                'whatsapp messages': 'p-msg', 'messages': 'p-msg', 'msg': 'p-msg',
+                'weather': 'p-wx', 'wx': 'p-wx',
+                'phone': 'p-phone', 'android': 'p-phone',
+                'system': 'p-sys', 'sysmon': 'p-sys',
+                'intel': 'p-intel', 'intelligence': 'p-intel',
+                'memory': 'p-mem', 'recall': 'p-mem',
+                'schedule': 'p-sched', 'sched': 'p-sched',
+                'relationship': 'p-rel', 'people': 'p-rel',
+                'feed': 'p-feed', 'activity': 'p-feed',
+                'history': 'p-hist',
+                'clock': 'p-clock', 'world clock': 'p-clock',
+                'fitness': 'p-fit', 'health': 'p-fit', 'steps': 'p-fit',
+                'location': 'p-loc', 'whereami': 'p-loc', 'gps': 'p-loc',
+                'ocr': 'p-ocr', 'scan document': 'p-ocr', 'document scan': 'p-ocr',
+                'printer': 'p-print', 'print': 'p-print',
+                'smart home': 'p-sh', 'home control': 'p-sh', 'iot': 'p-sh',
+                'thermostat': 'p-sh', 'nest': 'p-sh', 'chromecast': 'p-sh',
+            }
+            _has_widget_kw = 'widget' in resolved_cmd or 'panel' in resolved_cmd
+            _close_all_except = ('close all' in resolved_cmd or 'hide all' in resolved_cmd) and 'except' in resolved_cmd
+            _is_widget_cmd = _has_widget_kw and any(v in resolved_cmd for v in ('open', 'show', 'close', 'hide', 'display'))
+
+            if _is_widget_cmd or _close_all_except:
+                _wids = []
+                for _wname, _wid in sorted(_WIDGET_NAME_MAP.items(), key=lambda x: -len(x[0])):
+                    if _wname in resolved_cmd and _wid not in _wids:
+                        _wids.append(_wid)
+                try:
+                    from modules.ws_bridge import broadcast as _bc
+                    if _close_all_except:
+                        _bc({"type": "ui_command", "action": "close_all_except", "ids": _wids})
+                        self.speak("Done.")
+                    elif 'close all' in resolved_cmd or 'hide all' in resolved_cmd:
+                        _bc({"type": "ui_command", "action": "close_all_except", "ids": []})
+                        self.speak("All widgets closed.")
+                    elif ('show all' in resolved_cmd or 'open all' in resolved_cmd):
+                        _bc({"type": "ui_command", "action": "show_all"})
+                        self.speak("Opening all widgets.")
+                    elif ('close' in resolved_cmd or 'hide' in resolved_cmd) and _wids:
+                        _bc({"type": "ui_command", "action": "close_widget", "ids": _wids})
+                        self.speak("Done.")
+                    elif _wids:
+                        _bc({"type": "ui_command", "action": "show_widget", "ids": _wids})
+                        self.speak("Done.")
+                    else:
+                        self.speak("Which widget would you like me to open?")
+                except Exception:
+                    pass
+                continue
+
             # Multi-tab browser command
             _MULTI_TAB_MARKERS = ["one for", "another tab", "first tab", "second tab",
                                    "two tabs", "2 tabs", "3 tabs", "multiple tabs",
@@ -250,6 +536,9 @@ Output format:
                 "open youtube", "open google", "open github", "open gmail", "open reddit",
                 "open instagram", "open linkedin", "open twitter", "open netflix",
                 "open amazon", "open flipkart", "open website", "go to",
+                "open chatgpt", "open chat gpt", "open perplexity", "open claude",
+                "open pinterest", "open google slides", "open slides",
+                "open google colab", "open colab",
                 # search
                 "search on google", "google search", "look up on google",
                 # summarize
@@ -307,6 +596,8 @@ Output format:
             "wifi signal", "signal strength", "wifi strength", "how strong is wifi", "network strength",
             "network devices", "who's on my network", "connected devices", "who is on my network", "devices on network",
             "battery health", "battery wear", "cpu temperature", "cpu temp", "ram usage", "memory usage",
+            "good morning", "good afternoon", "good evening", "daily briefing", "morning briefing", "give me a briefing",
+            "force quit", "force close", "kill process", "end process", "terminate process", "end task",
             ]
             _FILE_FAST_PATH = [
                 "open file", "open my file", "open the file",
@@ -339,6 +630,7 @@ Output format:
 
             _CALENDAR_TRIGGERS = [
                 "cancel my", "cancelled", "cancel the", "remove from calendar", "delete from calendar",
+                "remove all events", "delete all events", "clear my calendar", "clear calendar",
                 "reschedule", "rescheduled", "instead of", "moved to", "change the time",
                 "change time", "now at", "meeting at", "class at", "gym at", "session at",
                 "what's on my calendar", "what's in my calendar", "my schedule", "show my events",
@@ -346,6 +638,70 @@ Output format:
             ]
             if any(t in resolved_cmd for t in _CALENDAR_TRIGGERS):
                 self._handle_calendar_voice_command(resolved_cmd)
+                continue
+
+            # Smart clipboard response
+            try:
+                from modules.clipboard_sync import is_awaiting_clipboard_action, handle_clipboard_response
+                if is_awaiting_clipboard_action():
+                    if handle_clipboard_response(resolved_cmd):
+                        continue
+            except Exception:
+                pass
+
+            # Clipboard history search
+            _CLIP_HIST_TRIGGERS = [
+                "clipboard history", "what did i copy", "what i copied",
+                "show clipboard", "paste the link i copied", "search clipboard",
+                "find in clipboard", "what was i copying",
+            ]
+            if any(t in resolved_cmd for t in _CLIP_HIST_TRIGGERS):
+                try:
+                    from modules.clipboard_sync import get_history, search_history
+                    # Extract search term if present
+                    search_term = ""
+                    for prefix in ["find in clipboard", "search clipboard for", "search clipboard"]:
+                        if prefix in resolved_cmd:
+                            search_term = resolved_cmd.split(prefix, 1)[-1].strip()
+                            break
+                    entries = search_history(search_term) if search_term else get_history()
+                    if not entries:
+                        self.speak("Clipboard history is empty." if not search_term else f"No clipboard entry matching '{search_term}'.")
+                    else:
+                        top = entries[:5]
+                        lines = [f"{i+1}. [{e['ts']}] {e['text'][:60]}" for i, e in enumerate(top)]
+                        self.speak(f"Last {len(top)} clipboard items: " + "; ".join(
+                            f"{e['ts']}: {e['text'][:40]}" for e in top[:3]
+                        ))
+                        try:
+                            from modules.ws_bridge import broadcast
+                            broadcast({"type": "clipboard_history", "entries": top})
+                        except Exception:
+                            pass
+                except Exception as _ce:
+                    print(f"[CLIPBOARD HISTORY] Error: {_ce}")
+                continue
+
+            # Deep research
+            _RESEARCH_TRIGGERS = [
+                "research ", "deep research", "look into ", "investigate ",
+                "find out about ", "what do you know about ",
+                "gather info on ", "give me a report on ",
+                "full report on ", "comprehensive info on ",
+            ]
+            if any(t in resolved_cmd for t in _RESEARCH_TRIGGERS) or _this_resolved:
+                self._handle_deep_research(resolved_cmd)
+                continue
+
+            # WhatsApp group summarizer
+            _GROUP_SUM_TRIGGERS = [
+                "summarize", "catch me up on", "what happened in",
+                "what's going on in", "group update", "group summary",
+            ]
+            _GROUP_WORDS = ["group", "chat", "whatsapp group"]
+            if (any(t in resolved_cmd for t in _GROUP_SUM_TRIGGERS) and
+                    any(w in resolved_cmd for w in _GROUP_WORDS)):
+                self._handle_group_summarize(resolved_cmd)
                 continue
 
             _SHELL_TRIGGERS = [
@@ -360,7 +716,36 @@ Output format:
                 self._handle_shell_command(resolved_cmd)
                 continue
 
-            if "playlist" in resolved_cmd or resolved_cmd.startswith("open ") or any(t in resolved_cmd for t in _SYSTEM_CONTROL_TRIGGERS) or any(m in resolved_cmd for m in _FILE_FAST_PATH + ["screenshot", "capture screen", "take a screenshot", "screen capture", "what am i holding", "what's in my hand", "what do you see", "look at this", "what is this", "identify this", "what's this", "how many calories", "what food is this", "scan this", "describe what you see", "what can you see", "look at camera", "work mode", "focus mode", "gym mode", "idle mode", "switch to work", "switch to focus", "switch to gym", "switch to idle", "click on", "click the", "read the screen", "what's on screen", "read screen", "remember that", "remember this", "what do you remember", "forget that", "reply to", "reply her", "reply him", "what did he say", "what did she say", "bitcoin", "ethereum", "crypto", "btc price", "eth price", "dogecoin", "solana", "crypto rate"]):
+            # ── PHASE 4: SMART HOME VOICE COMMANDS ──────────────────────────
+            _SH_TRIGGERS = [
+                "set ac", "turn on ac", "turn off ac", "ac on", "ac off",
+                "set temperature", "set temp", "cool mode", "heat mode",
+                "set thermostat", "fan on", "fan off", "start fan", "stop fan",
+                "pause tv", "play tv", "resume tv", "stop tv", "mute tv",
+                "volume up", "volume down", "set volume",
+                "cast to tv", "cast video",
+                "smart home",
+            ]
+            if any(t in resolved_cmd for t in _SH_TRIGGERS):
+                try:
+                    from modules.smart_home_engine import execute_voice_command
+                    result = execute_voice_command(resolved_cmd)
+                    if result.get("success"):
+                        self.speak(result.get("message", "Done"))
+                    else:
+                        # Not recognised by engine — fall through to AI
+                        err = result.get("error", "")
+                        if err and err != "Command not recognized":
+                            self.speak(result.get("message", err))
+                        else:
+                            self._classify_and_execute(resolved_cmd)
+                except Exception as _she:
+                    import logging as _l; _l.getLogger("iZACH.Chain").debug(f"[SH] {_she}")
+                    self._classify_and_execute(resolved_cmd)
+                continue
+
+            _kill_route = any(resolved_cmd.startswith(p) for p in ("force quit ", "force close ", "end task ", "kill process ", "terminate process ", "close "))
+            if "playlist" in resolved_cmd or resolved_cmd.startswith("open ") or _kill_route or any(t in resolved_cmd for t in _SYSTEM_CONTROL_TRIGGERS) or any(m in resolved_cmd for m in _FILE_FAST_PATH + ["screenshot", "capture screen", "take a screenshot", "screen capture", "what am i holding", "what's in my hand", "what do you see", "look at this", "what is this", "identify this", "what's this", "how many calories", "what food is this", "scan this", "describe what you see", "what can you see", "look at camera", "work mode", "focus mode", "gym mode", "idle mode", "switch to work", "switch to focus", "switch to gym", "switch to idle", "click on", "click the", "read the screen", "what's on screen", "read screen", "remember that", "remember this", "what do you remember", "forget that", "reply to", "reply her", "reply him", "what did he say", "what did she say", "bitcoin", "ethereum", "crypto", "btc price", "eth price", "dogecoin", "solana", "crypto rate"]):
                 self._classify_and_execute(resolved_cmd)
                 continue
 
@@ -409,6 +794,16 @@ Output format:
                 last_search = self.ctx_mgr.get_context("last_search_query")
                 if last_search:
                     resolved = resolved.replace("that", last_search)
+
+        # "this" → last researched topic  ("who is the teacher in this?")
+        if re.search(r'\bthis\b', query):
+            try:
+                from modules.context_memory import get_context_memory
+                _rt = get_context_memory().get_entity("last_research_topic")
+                if _rt:
+                    resolved = re.sub(r'\bthis\b', _rt, resolved)
+            except Exception:
+                pass
 
         return resolved
 
@@ -540,6 +935,15 @@ Output format:
             _bg(web_automation.login_to_site, announce="Attempting auto login.")
             return
 
+        # ── Restart browser (clear CAPTCHA-flagged session) ────
+        if any(t in cmd for t in ["restart browser", "reset browser", "clear browser session"]):
+            try:
+                web_automation.restart_browser()
+                self.speak("Browser restarted with a fresh session.")
+            except Exception as e:
+                self.speak(f"Could not restart browser: {e}")
+            return
+
         # ── Google search ──────────────────────────────────────
         if any(t in cmd for t in ["search on google", "google search", "look up on google"]):
             query = cmd
@@ -555,12 +959,17 @@ Output format:
         if any(t in cmd for t in ["open youtube", "open google", "open github", "open gmail",
                                    "open reddit", "open instagram", "open linkedin", "open twitter",
                                    "open netflix", "open amazon", "open flipkart",
-                                   "open website", "go to"]):
+                                   "open website", "go to",
+                                   "open chatgpt", "open chat gpt", "open perplexity", "open claude",
+                                   "open pinterest", "open google slides", "open slides",
+                                   "open google colab", "open colab"]):
             target = cmd
             for phrase in sorted(
                 ["go to", "open website", "open youtube", "open google", "open github",
                  "open gmail", "open reddit", "open instagram", "open linkedin",
-                 "open twitter", "open netflix", "open amazon", "open flipkart", "open"],
+                 "open twitter", "open netflix", "open amazon", "open flipkart",
+                 "open pinterest", "open google slides", "open slides",
+                 "open google colab", "open colab", "open"],
                 key=len, reverse=True,
             ):
                 target = target.replace(phrase, "").strip()
@@ -572,6 +981,27 @@ Output format:
             if not target:
                 self.speak("Which website?")
                 return
+            # Check if user explicitly said "app" or "website"
+            wants_app = any(w in cmd for w in ["as app", "the app", "app version", "app"])
+            wants_web = any(w in cmd for w in ["website", "browser", "in chrome", "in browser", "web"])
+            if wants_app and target in web_automation._APP_CAPABLE:
+                from modules.automation import open_app
+                _APP_LAUNCH_NAMES = {
+                    "youtube":   "YouTube",
+                    "github":    "GitHub Desktop",
+                    "instagram": "Instagram",
+                    "pinterest": "Pinterest",
+                }
+                app_name = _APP_LAUNCH_NAMES.get(target, target.title())
+                open_app(app_name)
+                self.speak(f"Opening {app_name} app.")
+                return
+            if not wants_web and target in web_automation._APP_CAPABLE:
+                if web_automation.is_app_installed(target):
+                    self.awaiting_app_or_web = True
+                    self.pending_open_service = target
+                    self.speak(f"Open {target.title()} as app or website?")
+                    return
             _bg(web_automation.open_website, target, announce=f"Opening {target}.")
             return
 
@@ -709,6 +1139,219 @@ Return ONLY the JSON array. No explanation."""
 
         threading.Thread(target=_run, daemon=True).start()
 
+    # ── REMOTE NODE (AlliedNode 2) ──────────────────────────────────
+
+    def _handle_remote_node_command(self, cmd: str):
+        """Route commands targeting AlliedNode 2 over the local network."""
+        import re as _re
+        import threading as _thr
+        from modules import remote_node as _rn
+
+        node_name = "alliednode 2"
+
+        # Strip node reference to get the bare action
+        clean = _re.sub(
+            r'\b(?:in|on|for|to)?\s*(?:'
+            r'alliednode\s*2|allied\s*node\s*2|allied\s*note\s*2'
+            r'|elite\s*node\s*2|elite\s*note\s*2|alliednote\s*2|allied\s*no\s*2'
+            r')\b',
+            '', cmd, flags=_re.IGNORECASE,
+        ).strip()
+
+        # ── Wake-on-LAN (works even when node is OFF) ────────────
+        if any(w in cmd for w in ["turn on", "wake up", "power on", "wake ", "boot up", "switch on"]):
+            r = _rn.wake_on_lan(node_name)
+            if "error" in r:
+                self.speak(f"Wake-on-LAN failed: {r['error']}")
+            else:
+                self.speak("Magic packet sent. AlliedNode 2 should wake up in about 10 seconds.")
+            return
+
+        # ── Install app via winget ────────────────────────────────
+        _inst_m = _re.search(r'\binstall\s+(.+?)(?:\s+(?:in|on)\s+alliednode|$)', clean, _re.IGNORECASE)
+        if _inst_m:
+            app = _inst_m.group(1).strip()
+            if not app:
+                self.speak("What app should I install on AlliedNode 2?")
+                return
+            self.speak(f"Installing {app} on AlliedNode 2 via winget. May take a minute.")
+            def _install(a=app):
+                res = _rn.execute(
+                    node_name,
+                    f'winget install --exact --id "{a}" -h --accept-source-agreements --accept-package-agreements'
+                )
+                if "error" in res:
+                    self.speak(f"Install failed: {res['error']}")
+                elif (res.get("returncode") or 0) == 0:
+                    self.speak(f"{a} installed successfully on AlliedNode 2.")
+                else:
+                    err = (res.get("stderr") or "")[:200]
+                    self.speak(f"Install may have failed. {err}")
+            _thr.Thread(target=_install, daemon=True).start()
+            return
+
+        # ── Screenshot ───────────────────────────────────────────
+        if any(w in cmd for w in ["screenshot", "capture screen", "take screenshot",
+                                   "screen grab", "screengrab", "screen capture"]):
+            self.speak("Taking screenshot on AlliedNode 2.")
+            r = _rn.take_screenshot(node_name)
+            if "error" in r:
+                self.speak(f"Screenshot failed: {r['error']}")
+            else:
+                import base64 as _b64, os as _os
+                from datetime import datetime as _dt
+                screenshots_dir = _os.path.join(_os.path.dirname(__file__), "..", "screenshots")
+                _os.makedirs(screenshots_dir, exist_ok=True)
+                fname = f"an2_{_dt.now().strftime('%Y%m%d_%H%M%S')}.jpg"
+                fpath = _os.path.join(screenshots_dir, fname)
+                with open(fpath, "wb") as f:
+                    f.write(_b64.b64decode(r["screenshot"]))
+                self.speak(f"Screenshot saved as {fname} in the screenshots folder.")
+            return
+
+        # ── Process list ─────────────────────────────────────────
+        if any(w in cmd for w in ["processes", "running processes", "what's running",
+                                   "task manager", "process list", "top processes", "what is running"]):
+            r = _rn.get_processes(node_name, top=5)
+            if "error" in r:
+                self.speak(f"Couldn't get processes: {r['error']}")
+            else:
+                procs = r.get("processes", [])[:5]
+                if not procs:
+                    self.speak("No processes returned from AlliedNode 2.")
+                else:
+                    lines = ["Top processes on AlliedNode 2:"]
+                    for p in procs:
+                        mem = f"{p.get('memory_percent', 0):.1f}%"
+                        lines.append(f"  {p['name']}: RAM {mem}")
+                    self.speak("\n".join(lines))
+            return
+
+        # ── Vitals / status ──────────────────────────────────────
+        if any(w in cmd for w in ["system status", "vitals", "cpu", "ram",
+                                   "memory", "disk", "status", "how is",
+                                   "system health", "how's", "performance"]):
+            v = _rn.get_vitals(node_name)
+            self.speak(_rn.format_vitals(v))
+            return
+
+        # ── Ping / online check ──────────────────────────────────
+        if any(w in cmd for w in ["ping", "online", "reachable", "is it on",
+                                   "is on", "connected", "available"]):
+            r = _rn.ping(node_name)
+            if "error" in r:
+                self.speak(f"AlliedNode 2 is not reachable: {r['error']}")
+            else:
+                self.speak("AlliedNode 2 is online and ready.")
+            return
+
+        # ── Shutdown ─────────────────────────────────────────────
+        if any(w in cmd for w in ["shutdown", "shut down", "turn off", "power off"]):
+            r = _rn.system_control(node_name, "shutdown")
+            self.speak(r.get("status", r.get("error", "Shutdown command sent to AlliedNode 2.")))
+            return
+
+        # ── Restart ──────────────────────────────────────────────
+        if any(w in cmd for w in ["restart", "reboot"]):
+            r = _rn.system_control(node_name, "restart")
+            self.speak(r.get("status", r.get("error", "Restart command sent to AlliedNode 2.")))
+            return
+
+        # ── Sleep ────────────────────────────────────────────────
+        if "sleep" in clean:
+            r = _rn.system_control(node_name, "sleep")
+            self.speak(r.get("status", r.get("error", "AlliedNode 2 is going to sleep.")))
+            return
+
+        # ── Lock ─────────────────────────────────────────────────
+        if "lock" in clean:
+            r = _rn.system_control(node_name, "lock")
+            self.speak(r.get("status", r.get("error", "AlliedNode 2 locked.")))
+            return
+
+        # ── Kill process ─────────────────────────────────────────
+        _kill_m = _re.search(
+            r'\b(?:kill|close|force quit|end)\s+(.+?)(?:\s+(?:in|on)\s+alliednode|$)',
+            cmd, _re.IGNORECASE,
+        )
+        if _kill_m and any(w in cmd for w in ["kill", "force quit", "end process"]):
+            proc = _kill_m.group(1).strip()
+            r = _rn.system_control(node_name, "kill_process", process=proc)
+            if "error" in r:
+                self.speak(f"Couldn't kill {proc}: {r['error']}")
+            elif r.get("count", 0) > 0:
+                self.speak(f"Killed {proc} on AlliedNode 2.")
+            else:
+                self.speak(f"{proc} not found running on AlliedNode 2.")
+            return
+
+        # ── Send file TO AlliedNode 2 ────────────────────────────
+        _send_m = _re.search(
+            r'\b(?:send|transfer|copy)\s+(?:file\s+)?(.+?)\s+to\s+alliednode',
+            cmd, _re.IGNORECASE,
+        )
+        if _send_m:
+            filename = _send_m.group(1).strip()
+            from modules.file_manager import get_file_manager
+            import os as _os
+            fm = get_file_manager()
+            results = fm.smart_find(filename, ai_func=self.ai)
+            if not results:
+                self.speak(f"No file named {filename} found on this PC.")
+                return
+            local_path = results[0]
+            dest = _os.path.join(r"C:\Users\Public\Downloads", _os.path.basename(local_path))
+            self.speak(f"Transferring {_os.path.basename(local_path)} to AlliedNode 2.")
+            def _send(lp=local_path, dp=dest):
+                res = _rn.send_file(node_name, lp, dp)
+                if "error" in res:
+                    self.speak(f"Transfer failed: {res['error']}")
+                else:
+                    self.speak(f"Done. {res.get('size', 0) // 1024} KB sent to AlliedNode 2.")
+            _thr.Thread(target=_send, daemon=True).start()
+            return
+
+        # ── Execute shell command on AlliedNode 2 ───────────────
+        if any(w in cmd for w in ["run command", "execute command", "run script", "run powershell"]):
+            _exec_m = _re.search(
+                r'\b(?:run|execute)\s+(?:command\s+|script\s+)?(.+?)(?:\s+(?:in|on)\s+alliednode|$)',
+                clean, _re.IGNORECASE,
+            )
+            command = _exec_m.group(1).strip() if _exec_m else clean
+            if not command:
+                self.speak("What command should I run on AlliedNode 2?")
+                return
+            self.speak(f"Running on AlliedNode 2.")
+            def _exec(c=command):
+                res = _rn.execute(node_name, c)
+                out = (res.get("stdout") or res.get("error") or "No output.").strip()
+                self.speak(out[:300] if out else "Command completed.")
+            _thr.Thread(target=_exec, daemon=True).start()
+            return
+
+        # ── Open app ─────────────────────────────────────────────
+        if any(w in clean for w in ["open", "launch", "start"]):
+            app = clean
+            for w in ["open", "launch", "start"]:
+                app = app.replace(w, "").strip()
+            app = " ".join(app.split())
+            if not app:
+                self.speak("What would you like me to open on AlliedNode 2?")
+                return
+            r = _rn.open_app(node_name, app)
+            if "error" in r:
+                self.speak(f"Couldn't open {app} on AlliedNode 2: {r['error']}")
+            else:
+                self.speak(f"Opening {app} on AlliedNode 2.")
+            return
+
+        # ── Fallback ─────────────────────────────────────────────
+        self.speak(
+            "Command for AlliedNode 2 not recognized. "
+            "Try: 'open Chrome in AlliedNode 2', 'AlliedNode 2 system status', "
+            "or 'shutdown AlliedNode 2'."
+        )
+
     # ── SHELL EXECUTOR ──────────────────────────────────────────────
     _pending_shell_id: str = None
 
@@ -785,6 +1428,270 @@ Return ONLY the JSON array. No explanation."""
             # Fall back to raw text if LLM fails
             return raw
 
+    def _handle_briefing(self):
+        import json as _j
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
+        IST = ZoneInfo("Asia/Kolkata")
+        now = datetime.now(tz=IST)
+
+        try:
+            with open("api_keys.json") as _f:
+                cfg = _j.load(_f)
+        except Exception:
+            cfg = {}
+
+        def _on(key, default=True):
+            return cfg.get(key, default)
+
+        hour = now.hour
+        if hour < 12:
+            greeting = "Good morning"
+        elif hour < 17:
+            greeting = "Good afternoon"
+        else:
+            greeting = "Good evening"
+
+        parts = []
+
+        if _on("briefing_greeting"):
+            parts.append(f"{greeting}. Today is {now.strftime('%A, %d %B')}.")
+
+        if _on("briefing_weather"):
+            try:
+                from modules.realtime_data import get_weather
+                w = get_weather()
+                if w:
+                    parts.append(w)
+            except Exception:
+                pass
+
+        if _on("briefing_news", False):
+            try:
+                from modules.realtime_data import get_news_headlines
+                news = get_news_headlines()
+                if news:
+                    parts.append(news)
+            except Exception:
+                pass
+
+        if _on("briefing_gold_rate", False):
+            try:
+                from modules.realtime_data import get_gold_rate
+                parts.append(get_gold_rate())
+            except Exception:
+                pass
+
+        if _on("briefing_silver_rate", False):
+            try:
+                from modules.realtime_data import get_silver_rate
+                parts.append(get_silver_rate())
+            except Exception:
+                pass
+
+        if _on("briefing_battery_status"):
+            try:
+                _, bat = system_control.get_battery()
+                parts.append(bat)
+            except Exception:
+                pass
+
+        if _on("briefing_battery_health", False):
+            try:
+                _, bh = system_control.get_battery_health()
+                parts.append(bh)
+            except Exception:
+                pass
+
+        if _on("briefing_ram"):
+            try:
+                _, ram = system_control.get_ram_usage()
+                parts.append(ram)
+            except Exception:
+                pass
+
+        if _on("briefing_events"):
+            try:
+                from modules.calendar_agent import get_today_events
+                events = get_today_events()
+                upcoming = []
+                for e in events:
+                    start = e.get("start", {})
+                    dt_str = start.get("dateTime") or start.get("date")
+                    title = e.get("summary", "Event")
+                    if not dt_str:
+                        continue
+                    try:
+                        if "T" in dt_str:
+                            dt = datetime.fromisoformat(dt_str)
+                            if dt.tzinfo is None:
+                                dt = dt.replace(tzinfo=IST)
+                            if dt > now:
+                                t = dt.strftime("%I:%M %p").lstrip("0")
+                                upcoming.append(f"{title} at {t}")
+                        else:
+                            upcoming.append(title)
+                    except Exception:
+                        pass
+                if upcoming:
+                    if len(upcoming) == 1:
+                        parts.append(f"You have {upcoming[0]} on your schedule today.")
+                    else:
+                        joined = ", ".join(upcoming[:-1]) + f", and {upcoming[-1]}"
+                        parts.append(f"You have {len(upcoming)} events: {joined}.")
+                else:
+                    parts.append("Your calendar is clear today.")
+            except Exception:
+                pass
+
+        if _on("briefing_whatsapp", False):
+            try:
+                from modules.whatsapp_context import get_unread_count
+                count = get_unread_count()
+                if count:
+                    parts.append(f"You have {count} unread WhatsApp message{'s' if count != 1 else ''}.")
+                else:
+                    parts.append("No unread WhatsApp messages.")
+            except Exception:
+                pass
+
+        if not parts:
+            parts.append(f"{greeting}.")
+
+        self.speak(" ".join(parts))
+
+    def _handle_document_command(self, cmd: str):
+        import threading as _thr
+
+        fmt      = "docx" if any(w in cmd for w in ["word", "docx", "doc"]) else "pdf"
+        template = "custom"
+        title    = "iZACH Document"
+
+        if any(w in cmd for w in ["activity report", "today's report", "command report"]):
+            template = "activity_report"
+            title    = "Activity Report"
+        elif any(w in cmd for w in ["weekly", "week"]):
+            template = "weekly_summary"
+            title    = "Weekly Summary"
+        elif any(w in cmd for w in ["letter"]):
+            template = "letter"
+            title    = "Letter"
+
+        # Extract custom content after "about" / "on"
+        import re as _re
+        m = _re.search(r'\b(?:about|on|regarding)\b\s+(.+)', cmd)
+        content = m.group(1).strip() if m else ""
+
+        self.speak(f"Generating {fmt.upper()}. Check shared folder when done.")
+
+        def _run():
+            from modules.document_engine import generate
+            ok, msg, _ = generate(content, fmt, title, template)
+            if not ok:
+                self.speak(msg)
+
+        _thr.Thread(target=_run, daemon=True).start()
+
+    def _handle_network_monitor_command(self, cmd: str):
+        try:
+            from modules.network_monitor import get_devices, get_connections, summary, scan_now, get_alerts
+        except Exception as e:
+            self.speak(f"Network monitor error: {e}")
+            return
+
+        if any(w in cmd for w in ["scan", "refresh", "check"]):
+            self.speak("Scanning network. Give me a moment.")
+            import threading as _thr
+            def _do():
+                devs = scan_now()
+                self.speak(f"Found {len(devs)} device(s) on network.")
+            _thr.Thread(target=_do, daemon=True).start()
+            return
+
+        if any(w in cmd for w in ["connection", "active"]):
+            conns = get_connections()
+            if not conns:
+                self.speak("No active outbound connections.")
+                return
+            top = conns[:5]
+            msg = f"{len(conns)} active connection(s). Top: " + \
+                  ", ".join(f"{c['process']} → {c['remote']}" for c in top)
+            self.speak(msg)
+            return
+
+        if "alert" in cmd:
+            alerts = get_alerts()
+            if not alerts:
+                self.speak("No network alerts.")
+            else:
+                self.speak(f"{len(alerts)} alert(s). Latest: {alerts[-1]['msg']}")
+            return
+
+        # Default: full summary
+        self.speak(summary())
+
+    def _handle_deep_research(self, cmd: str):
+        """Multi-source web research synthesis."""
+        import threading as _thr
+        import re as _re
+        # Strip trigger prefix to get clean topic
+        for prefix in [
+            "deep research on ", "research on ", "research ", "look into ",
+            "investigate ", "find out about ", "give me a report on ",
+            "gather info on ", "full report on ", "comprehensive info on ",
+            "what do you know about ",
+        ]:
+            if cmd.startswith(prefix):
+                topic = cmd[len(prefix):].strip()
+                break
+        else:
+            topic = cmd.strip()
+
+        if not topic:
+            self.speak("What should I research?")
+            return
+
+        # Store so "this" in follow-up resolves back to this topic
+        try:
+            from modules.context_memory import get_context_memory
+            get_context_memory().set_entity("last_research_topic", topic)
+        except Exception:
+            pass
+
+        try:
+            from modules.research_agent import research_async
+            research_async(topic)
+        except Exception as e:
+            self.speak(f"Research module error: {e}")
+
+    def _handle_group_summarize(self, cmd: str):
+        """Summarize a WhatsApp group chat."""
+        import re as _re
+        # Extract group name
+        group_name = cmd
+        for stop in ["summarize", "catch me up on", "what happened in",
+                     "what's going on in", "group update", "group summary",
+                     "group", "chat", "today", "from today", "whatsapp"]:
+            group_name = group_name.replace(stop, " ").strip()
+        group_name = " ".join(group_name.split()).strip()
+
+        hours = 6
+        m = _re.search(r'last\s+(\d+)\s*h', cmd)
+        if m:
+            hours = int(m.group(1))
+        elif "today" in cmd:
+            hours = 12
+
+        if not group_name:
+            self.speak("Which group should I summarize?")
+            return
+
+        try:
+            from modules.wa_group_summarizer import summarize_group_async
+            summarize_group_async(group_name, hours=hours)
+        except Exception as e:
+            self.speak(f"Group summarizer error: {e}")
+
     def _handle_routine_command(self, cmd: str):
         from modules.pattern_learner import (
             confirm_suggestion, reject_suggestion,
@@ -847,6 +1754,26 @@ Return ONLY the JSON array. No explanation."""
         IST = _ZI("Asia/Kolkata")
         today = _dt.now(tz=IST).strftime("%Y-%m-%d")
         today_name = _dt.now(tz=IST).strftime("%A, %d %B %Y")
+
+        # Remove all events
+        if any(w in cmd for w in ["remove all events", "delete all events", "clear my calendar", "clear calendar"]):
+            try:
+                from modules.calendar_agent import get_upcoming_events, cancel_event
+                events = get_upcoming_events(hours=168)
+                if not events:
+                    self.speak("Your calendar is already empty.")
+                    return
+                count = 0
+                for e in events:
+                    try:
+                        cancel_event(e["calendar_event_id"])
+                        count += 1
+                    except Exception:
+                        pass
+                self.speak(f"Removed {count} event{'s' if count != 1 else ''} from your calendar.")
+            except Exception as _e:
+                self.speak(f"Calendar error: {_e}")
+            return
 
         # Read events query
         if any(w in cmd for w in ["what's on my calendar", "my schedule", "show my events", "what events", "upcoming events"]):
@@ -1118,8 +2045,17 @@ Return ONLY JSON."""
         # ── OPEN FILE (with smart subject disambiguation) ──
         _FILE_SUBJECT_HINTS = ["assignment", "notes", "note", "syllabus", "report",
                                 "project", "homework", "lecture", "slides"]
+        # System apps that superficially match file-open triggers — must fall through to app launcher
+        _APP_OPEN_EXCEPTIONS = [
+            "file explorer", "explorer", "notepad", "notepad++", "paint",
+            "calculator", "control panel", "task manager", "wordpad",
+        ]
+        if any(exc in cmd for exc in _APP_OPEN_EXCEPTIONS):
+            return False
         _FILE_OPEN_EXPLICIT = any(w in cmd for w in ["open file", "open my file", "open the file"])
-        _FILE_OPEN_SUBJECT  = "open" in cmd and any(h in cmd for h in _FILE_SUBJECT_HINTS)
+        _FILE_OPEN_SUBJECT  = "open" in cmd and any(
+            re.search(r'\b' + h + r'\b', cmd) for h in _FILE_SUBJECT_HINTS
+        )
 
         if _FILE_OPEN_EXPLICIT or _FILE_OPEN_SUBJECT:
             from modules.response_generator import instant
@@ -1302,6 +2238,35 @@ Return ONLY JSON."""
         if self._resolve_disambiguation(cmd):
             return
 
+        # ── VOICE BIOMETRICS ──
+        _VOICE_ENROLL_TRIGGERS = [
+            "enroll my voice", "enroll voice", "setup voice auth", "set up voice auth",
+            "register my voice", "train my voice", "learn my voice",
+            "voice enrollment", "voice setup", "record my voice",
+        ]
+        if any(t in cmd for t in _VOICE_ENROLL_TRIGGERS):
+            from modules import voice_id
+            voice_id.init(self.speak)
+            voice_id.enroll_voice_async()
+            return
+
+        if any(t in cmd for t in ["delete voice", "remove voice", "forget my voice",
+                                   "clear voice auth", "delete voice data"]):
+            from modules import voice_id
+            ok = voice_id.delete_voice_data()
+            self.speak("Voice data removed." if ok else "No voice data stored.")
+            return
+
+        if any(t in cmd for t in ["is voice enrolled", "voice auth status",
+                                   "voice setup status", "voice status"]):
+            from modules import voice_id
+            if voice_id.is_enrolled():
+                meta = voice_id.get_meta()
+                self.speak(f"Voice enrolled since {meta.get('enrolled_at', 'unknown')}.")
+            else:
+                self.speak("No voice enrolled yet. Say 'enroll my voice' to set up.")
+            return
+
         # ── FACE AUTH ──
         _FACE_TRIGGERS = [
             "enroll my face", "enroll face", "setup face auth", "set up face auth",
@@ -1384,6 +2349,24 @@ Return ONLY JSON."""
         if any(w in cmd for w in ["what date", "today's date", "current date", "aaj kya date"]):
             self.speak(get_current_date())
             return
+
+        # Daily briefing
+        if any(w in cmd for w in ["good morning", "good afternoon", "good evening", "daily briefing", "morning briefing", "give me a briefing"]):
+            self._handle_briefing()
+            return
+
+        # Kill app by name
+        _kill_prefixes = ("force quit ", "force close ", "end task ", "kill process ", "terminate process ", "end process ", "close ")
+        for _kp in _kill_prefixes:
+            if cmd.startswith(_kp):
+                _app_name = cmd[len(_kp):].strip()
+                if not _app_name:
+                    break
+                if _kp == "close " and _app_name.split()[0] in system_control._KILL_SKIP_WORDS:
+                    break
+                _, _msg = system_control.kill_app(_app_name)
+                self.speak(_msg)
+                return
 
         # Playlist must be handled before AI parse
         if "playlist" in cmd:
@@ -1596,6 +2579,73 @@ Return ONLY JSON."""
             self.speak(msg)
             return
 
+        # ── SCHEDULED SHUTDOWN / RESTART ─────────────────────────────────────────
+        _shutdown_pat = re.search(
+            r'(?:shut\s*down|shutdown|turn\s+off|power\s+off)\s+(?:in\s+)?(\d+)\s*(minute|min|hour|hr)s?',
+            cmd, re.IGNORECASE
+        )
+        if _shutdown_pat:
+            n = int(_shutdown_pat.group(1))
+            unit = _shutdown_pat.group(2).lower()
+            secs = n * 3600 if unit.startswith("hour") or unit == "hr" else n * 60
+            _, msg = system_control.schedule_shutdown(secs)
+            self.speak(msg)
+            return
+
+        _restart_pat = re.search(
+            r'(?:restart|reboot)\s+(?:in\s+)?(\d+)\s*(minute|min|hour|hr)s?',
+            cmd, re.IGNORECASE
+        )
+        if _restart_pat:
+            n = int(_restart_pat.group(1))
+            unit = _restart_pat.group(2).lower()
+            secs = n * 3600 if unit.startswith("hour") or unit == "hr" else n * 60
+            _, msg = system_control.schedule_restart(secs)
+            self.speak(msg)
+            return
+
+        if any(w in cmd for w in ["cancel shutdown", "abort shutdown", "cancel restart", "abort restart"]):
+            _, msg = system_control.cancel_shutdown()
+            self.speak(msg)
+            return
+
+        # ── PROCESS PRIORITY ─────────────────────────────────────────────────────
+        _prio_pat = re.search(
+            r'(?:boost|set|change)\s+(.+?)\s+(?:to\s+)?(?:(low|normal|high|realtime)\s+)?priority',
+            cmd, re.IGNORECASE
+        )
+        if _prio_pat:
+            app = _prio_pat.group(1).strip()
+            level = (_prio_pat.group(2) or "high").lower()
+            _, msg = system_control.set_process_priority(app, level)
+            self.speak(msg)
+            return
+
+        # ── DOCUMENT GENERATION ───────────────────────────────────────────────────
+        _DOC_TRIGGERS = [
+            "generate report", "create report", "make report", "write report",
+            "generate pdf", "create pdf", "make pdf", "export pdf",
+            "generate document", "create document", "make document",
+            "weekly summary", "weekly report", "activity report",
+            "generate word", "create word doc", "make word",
+            "write a letter", "draft a letter", "write letter",
+        ]
+        if any(t in cmd for t in _DOC_TRIGGERS):
+            self._handle_document_command(cmd)
+            return
+
+        # ── NETWORK MONITOR ───────────────────────────────────────────────────────
+        _NET_TRIGGERS = [
+            "scan network", "scan my network", "who's on my wifi", "who is on my wifi",
+            "network scan", "devices on wifi", "network connections",
+            "active connections", "what's connected", "network security",
+            "unknown devices", "network alerts", "check network",
+            "who is connected", "check wifi devices",
+        ]
+        if any(t in cmd for t in _NET_TRIGGERS):
+            self._handle_network_monitor_command(cmd)
+            return
+
         # ── FILE MANAGER — handled before AI parse to prevent AI fallback hijack ──
         if self._handle_file_command(cmd):
             return
@@ -1714,8 +2764,10 @@ Return ONLY JSON."""
         if cmd in ["cancel", "nevermind", "stop", "forget it"]:
             self.awaiting_playlist_selection = False
             self.awaiting_platform_choice = False
+            self.awaiting_app_or_web = False
             self.available_playlists = {}
             self.pending_song_request = ""
+            self.pending_open_service = ""
             self.speak("Request cancelled.")
             return
 
@@ -1805,6 +2857,26 @@ Return ONLY JSON."""
                     self.speak(f"Added {name} to queue.")
                 else:
                     self.speak("Song not found.")
+            return
+
+        # ---------------- APP OR WEBSITE CHOICE ----------------
+        if self.awaiting_app_or_web:
+            self.awaiting_app_or_web = False
+            svc = self.pending_open_service
+            self.pending_open_service = ""
+            if any(w in cmd for w in ["app", "application", "store"]):
+                from modules.automation import open_app
+                _APP_LAUNCH_NAMES = {
+                    "youtube":   "YouTube",
+                    "github":    "GitHub Desktop",
+                    "instagram": "Instagram",
+                    "pinterest": "Pinterest",
+                }
+                app_name = _APP_LAUNCH_NAMES.get(svc, svc.title())
+                open_app(app_name)
+                self.speak(f"Opening {app_name} app.")
+            else:
+                _bg(web_automation.open_website, svc, announce=f"Opening {svc} in browser.")
             return
 
         # ---------------- PLATFORM CHOICE ----------------
@@ -1995,6 +3067,43 @@ Return ONLY JSON."""
             self.speak(_status)
             return
 
+        # ── SPOTIFY MOOD PLAY ─────────────────────────────────────────────────────
+        _MOOD_WORDS = {"chill", "relaxing", "lofi", "study", "focus", "energetic",
+                       "workout", "happy", "sad", "party", "sleepy", "morning",
+                       "night", "romantic", "jazz", "classical"}
+        _mood_match = re.search(r'\bplay\s+(?:something\s+|some\s+)?(.+)', cmd, re.IGNORECASE)
+        if _mood_match and cmd.startswith("play "):
+            _mood_query = _mood_match.group(1).strip()
+            for _filler in [" music", " songs", " tracks", " vibes", " playlist"]:
+                _mood_query = _mood_query.replace(_filler, "").strip()
+            if any(w in _mood_query.lower() for w in _MOOD_WORDS) or "something" in cmd:
+                _status = self.spotify_handler.play_mood(_mood_query)
+                self.speak(_status)
+                return
+
+        # ── SPOTIFY SLEEP TIMER ───────────────────────────────────────────────────
+        _sleep_pat = re.search(
+            r'(?:sleep timer|stop music in|pause music in)\s+(?:in\s+)?(\d+)\s*(minute|min|hour|hr)s?',
+            cmd, re.IGNORECASE
+        )
+        if _sleep_pat:
+            _n = int(_sleep_pat.group(1))
+            _unit = _sleep_pat.group(2).lower()
+            _mins = _n * 60 if _unit.startswith("hour") or _unit == "hr" else _n
+            _status = self.spotify_handler.sleep_timer(_mins)
+            self.speak(_status)
+            return
+
+        if any(w in cmd for w in ["cancel sleep timer", "cancel music timer", "stop sleep timer"]):
+            self.speak(self.spotify_handler.cancel_sleep_timer())
+            return
+
+        # ── SPOTIFY RECENTLY PLAYED ───────────────────────────────────────────────
+        if any(w in cmd for w in ["recently played", "what was i listening to", "what did i play",
+                                   "what was playing earlier", "last played on spotify"]):
+            self.speak(self.spotify_handler.get_recently_played())
+            return
+
         if any(w in cmd for w in ["remember that", "remember this", "add to memory", "note that"]):
             from modules.memory import add_memory
             content = cmd
@@ -2031,6 +3140,86 @@ Return ONLY JSON."""
                     self.speak(f"Removed from memory.")
                     return
             self.speak("I couldn't find that in my memory.")
+            return
+
+        # ── WHATSAPP SUMMARIZE ────────────────────────────────────────────────────
+        if any(w in cmd for w in ["summarize my whatsapp", "summarize whatsapp",
+                                   "any new messages on whatsapp", "new whatsapp messages",
+                                   "whatsapp summary", "what's new on whatsapp"]):
+            from modules.whatsapp_handler import ensure_bridge_running
+            ensure_bridge_running()
+            try:
+                import requests as _req
+                from collections import defaultdict as _dd
+                _r = _req.get("http://localhost:3000/messages/history", params={"hours": 12}, timeout=5)
+                _msgs = _r.json().get("messages", [])
+                _unread = [m for m in _msgs if not m.get("fromMe", True) and m.get("text")]
+                if not _unread:
+                    self.speak("No new WhatsApp messages in the last 12 hours.")
+                else:
+                    _by_sender = _dd(list)
+                    for _m in _unread:
+                        _by_sender[_m.get("sender", "Unknown")].append(_m["text"])
+                    _parts = []
+                    for _sender, _texts in _by_sender.items():
+                        if len(_texts) == 1:
+                            _parts.append(f"{_sender}: {_texts[0]}")
+                        else:
+                            _parts.append(f"{_sender} sent {len(_texts)} messages, latest: {_texts[-1]}")
+                    _summary = ". ".join(_parts)
+                    if len(_by_sender) > 2:
+                        _prompt = f"Summarize these WhatsApp messages in 2-3 sentences like JARVIS briefing:\n{_summary}"
+                        self.speak(self._raw_ai(_prompt))
+                    else:
+                        self.speak(f"Messages from {len(_by_sender)} contact{'s' if len(_by_sender) > 1 else ''}. " + _summary)
+            except Exception:
+                self.speak("Could not fetch WhatsApp messages.")
+            return
+
+        # ── WHATSAPP READ FROM CONTACT ────────────────────────────────────────────
+        _read_from_pat = re.search(
+            r'(?:read|show).*whatsapp.*(?:messages?\s+)?(?:from|by)\s+([A-Za-z]+(?:\s+[A-Za-z]+)?)',
+            cmd, re.IGNORECASE
+        )
+        if _read_from_pat or "read my whatsapp messages" in cmd:
+            from modules.whatsapp_handler import ensure_bridge_running
+            ensure_bridge_running()
+            _contact_filter = _read_from_pat.group(1).strip().lower() if _read_from_pat else ""
+            try:
+                import requests as _req
+                _r = _req.get("http://localhost:3000/messages/history", params={"hours": 24}, timeout=5)
+                _msgs = _r.json().get("messages", [])
+                _inbox = [m for m in _msgs if not m.get("fromMe", True) and m.get("text")]
+                if _contact_filter:
+                    _inbox = [m for m in _inbox if _contact_filter in m.get("sender", "").lower()]
+                if not _inbox:
+                    _who = f" from {_contact_filter.title()}" if _contact_filter else ""
+                    self.speak(f"No messages{_who} in the last 24 hours.")
+                else:
+                    for _m in _inbox[-3:]:
+                        self.speak(f"{_m.get('sender', 'Someone')} said: {_m['text']}")
+            except Exception:
+                self.speak("Could not fetch WhatsApp messages.")
+            return
+
+        # ── WHATSAPP SEND TO CONTACT ──────────────────────────────────────────────
+        _send_wa_pat = re.search(
+            r'(?:send\s+(?:a\s+)?(?:whatsapp\s+message|whatsapp|message|wa)\s+to)\s+'
+            r'((?:(?!saying\b|that\b)[A-Za-z]+)(?:\s+(?!saying\b|that\b)[A-Za-z]+)*)'
+            r'\s+(?:(?:saying|that)\s+)?(.+)',
+            cmd, re.IGNORECASE
+        )
+        if _send_wa_pat:
+            from modules.whatsapp_handler import _send_message, ensure_bridge_running, resolve_contact_by_name
+            ensure_bridge_running()
+            _wa_contact = _send_wa_pat.group(1).strip()
+            _wa_text = _send_wa_pat.group(2).strip()
+            _wa_number = resolve_contact_by_name(_wa_contact)
+            if not _wa_number:
+                self.speak(f"I don't have {_wa_contact}'s number. Add them to contacts.json.")
+            else:
+                _ok, _status = _send_message(_wa_number, _wa_text, _wa_contact)
+                self.speak(f"Message sent to {_wa_contact}." if _ok else f"Failed: {_status}")
             return
 
         if _last_whatsapp_message_check(cmd):

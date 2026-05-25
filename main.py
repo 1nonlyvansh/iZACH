@@ -2,6 +2,12 @@ import os
 import sys
 os.environ.setdefault("PYTHONIOENCODING", "utf-8")  # prevent DeepFace emoji crash on Windows
 
+# Suppress TensorFlow / oneDNN noise before any imports trigger TF load
+os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "3")        # hide C++ TF logs
+os.environ.setdefault("TF_ENABLE_ONEDNN_OPTS", "0")       # disable oneDNN ops (eliminates the port.cc warning)
+os.environ.setdefault("ABSL_MIN_LOG_LEVEL", "3")           # suppress absl::InitializeLog warnings
+os.environ.setdefault("GRPC_VERBOSITY", "ERROR")           # suppress gRPC noise
+
 import subprocess
 import threading
 import time
@@ -31,6 +37,7 @@ import modules.performance_guard as performance_guard
 import modules.task_manager as task_manager
 from modules.context_manager import ContextManager
 from modules.whatsapp_handler import init_whatsapp
+from Agents.orchestrator import OrchestratorAgent
 
 
 
@@ -66,9 +73,10 @@ TEMP_AUDIO  = "speech.wav"  # fallback, overridden per call
 # --- 3. GLOBAL OBJECTS ---
 SPEECH_QUEUE = queue.Queue()
 EXIT_SIGNAL  = False
-app          = None
-orchestrator = None
-_speaking    = False
+app              = None
+orchestrator     = None
+agent_orch       = None   # OrchestratorAgent — intent classifier
+_speaking        = False
 
 ai_manager  = AIProvider(os.getenv("GROQ_API_KEY", GROQ_KEY), GEMINI_KEYS)
 spotify_api = SpotifyController()
@@ -225,8 +233,18 @@ def tts_worker():
             text = SPEECH_QUEUE.get(timeout=0.5)
             if text is None:
                 break
+            try:
+                from modules.ws_bridge import broadcast
+                broadcast({"type": "tts_start", "word_count": len(str(text).split())})
+            except Exception:
+                pass
             loop.run_until_complete(generate_and_play(text))
             SPEECH_QUEUE.task_done()
+            try:
+                from modules.ws_bridge import broadcast
+                broadcast({"type": "tts_end"})
+            except Exception:
+                pass
             if app and hasattr(app, 'set_speaking'):
                 app.set_speaking(False)
         except queue.Empty:
@@ -256,6 +274,9 @@ def stop_speech():
 
 # --- 5. CORE FUNCTIONS ---
 
+_last_izach_question: str = ""   # last spoken text if it ended with '?'
+_question_expires_at: float = 0.0
+
 def speak(text, tone: str = "casual"):
     if not text:
         return
@@ -275,6 +296,13 @@ def speak(text, tone: str = "casual"):
         broadcast({"type": "chat", "sender": "iZACH", "text": display_text, "ts": _ts})
     except Exception:
         pass
+    global _last_izach_question, _question_expires_at
+    stripped = display_text.rstrip(" .!,")
+    if stripped.endswith("?"):
+        _last_izach_question = display_text
+        _question_expires_at = time.time() + 120
+    else:
+        _last_izach_question = ""
     try:
         from modules.personality import add_ssml_tone
         toned = add_ssml_tone(display_text, tone)
@@ -321,6 +349,24 @@ def get_ai_response(query):
 
     persona_prefix = state.get_persona_prefix()
     parts.insert(0, persona_prefix + PERSONALITY_PROMPT)
+
+    # Active window + location context — gives JARVIS-level awareness
+    try:
+        from modules.window_watcher import get_active_window
+        win = get_active_window()
+        if win.get("title"):
+            parts.append(f"[CONTEXT] User has '{win['title']}' open in {win['app']}.")
+    except Exception:
+        pass
+
+    try:
+        from modules.location_engine import get_location
+        loc = get_location()
+        loc_str = loc.get("label") or loc.get("city") or ""
+        if loc_str:
+            parts.append(f"[CONTEXT] User location: {loc_str}.")
+    except Exception:
+        pass
 
     if parts:
         full_query = "\n\n".join(parts) + f"\n\nUser: {resolved}{lang_directive}"
@@ -372,6 +418,19 @@ def _init_mic():
 
 def listen():
     global _mic
+
+    # ── Barge-in command queue check ─────────────────────────
+    # If user spoke during TTS playback, that command was captured by
+    # interrupt_engine._voice_monitor_loop. Consume it here first.
+    try:
+        from modules.interrupt_engine import get_interrupt_engine
+        _barge_cmd = get_interrupt_engine().get_barge_in_command()
+        if _barge_cmd:
+            print(f"[BARGE-IN] Executing queued command: {_barge_cmd!r}")
+            return _barge_cmd
+    except Exception:
+        pass
+
     try:
         from modules.ui_api import is_mic_active
         if not is_mic_active():
@@ -410,6 +469,21 @@ def listen():
         except Exception:
             pass
         text = _recognizer.recognize_google(audio, language='en-in').lower()
+
+        # ── Speaker diarization ───────────────────────────────
+        # Filters background/TV audio and optionally tags non-owner speakers.
+        try:
+            from modules.speaker_diarization import identify_speaker, OWNER_KEY as _OWNER_KEY
+            speaker = identify_speaker(audio)   # audio is sr.AudioData
+            if speaker is None:
+                # Too quiet / distant — background audio, ignore
+                return "none"
+            if speaker not in (_OWNER_KEY, "unknown"):
+                # Known non-owner speaker in the room
+                print(f"[DIARIZATION] Speaker: {speaker}")
+                text = f"[{speaker.title()}] {text}"
+        except Exception:
+            pass   # diarization is optional
 
         # Inline wake word check — single pyaudio stream, no conflict
         try:
@@ -462,7 +536,7 @@ def safe_shutdown():
 #               ui=JarvisUI instance (old tkinter mode)
 # ─────────────────────────────────────────────────────────────
 def start_brain(ui=None):
-    global app, orchestrator, chain_engine
+    global app, orchestrator, agent_orch, chain_engine
     app = ui  # None when Electron UI is used
 
     # 1. Background services
@@ -481,7 +555,8 @@ def start_brain(ui=None):
     reminder_engine.start()
 
     # 3. Memory & Chain
-    ctx_mgr = ContextManager()
+    ctx_mgr    = ContextManager()
+    agent_orch = OrchestratorAgent(groq_key=GROQ_KEY) if GROQ_KEY else None
     chain_engine = command_chain.CommandChain(
         context_handler=context_engine,
         scheduler_handler=reminder_engine,
@@ -490,7 +565,8 @@ def start_brain(ui=None):
         speak_func=speak,
         orchestrator=orchestrator,
         context_manager=ctx_mgr,
-        spotify_handler=spotify_api
+        spotify_handler=spotify_api,
+        agent_orch=agent_orch,
     )
     command_chain._chain_ref = chain_engine  # expose to ws_bridge for fill_result + command messages
 
@@ -581,7 +657,30 @@ def start_brain(ui=None):
     print("─" * 38 + "\n")
     # ─────────────────────────────────────────────────────────
 
-    speak("Assistant System Online.")
+    # Defer startup greeting until Electron UI connects to WS bridge
+    def _deferred_greeting():
+        from modules.ws_bridge import _ui_ready_event
+        connected = _ui_ready_event.wait(timeout=120)
+        time.sleep(0.8)  # let React fully mount
+        if connected:
+            speak("Assistant System Online.")
+        else:
+            speak("Assistant System Online.")  # speak anyway after 2-min timeout
+
+    threading.Thread(target=_deferred_greeting, daemon=True).start()
+
+    # Startup briefing (if enabled in settings)
+    try:
+        import json as _bj
+        with open("api_keys.json") as _bf:
+            _bcfg = _bj.load(_bf)
+        if _bcfg.get("briefing_enabled", False):
+            def _startup_briefing():
+                time.sleep(4)
+                chain_engine._handle_briefing()
+            threading.Thread(target=_startup_briefing, daemon=True).start()
+    except Exception:
+        pass
 
     # Phase 3: SmartAlarm + WhatsApp 24h context engine
     try:
@@ -607,6 +706,14 @@ def start_brain(ui=None):
         print(f"[PROACTIVE] Init failed: {_pe}")
 
     try:
+        from modules import subconsciousness as _subcon
+        _subcon.init(speak_fn=speak, chain_fn=chain_engine.process)
+        _subcon.start()
+        print("[SUBCONSCIOUSNESS] Background agent started.")
+    except Exception as _sce:
+        print(f"[SUBCONSCIOUSNESS] Init failed: {_sce}")
+
+    try:
         from modules.pattern_learner import init as _init_patterns, start as _start_patterns
         _init_patterns(speak_fn=speak, chain_fn=chain_engine.process)
         _start_patterns()
@@ -630,7 +737,79 @@ def start_brain(ui=None):
     except Exception as _sle:
         print(f"[SYSLOG] Init failed: {_sle}")
 
+    try:
+        from modules.window_watcher import start as _start_window
+        _start_window(speak_fn=speak)
+    except Exception as _we:
+        print(f"[WINDOW] Init failed: {_we}")
+
+    # Location engine starts on-demand via UI toggle (not auto-started)
+    print("[LOCATION] Engine ready — activate from Location widget in UI.")
+
+    try:
+        from modules.network_monitor import start as _start_network
+        _start_network(speak_fn=speak)
+    except Exception as _ne:
+        print(f"[NETWORK] Init failed: {_ne}")
+
     print("[FACE AUTH] Lazy-loaded — activates on first face command.")
+
+    try:
+        from modules.voice_id import init as _vi_init
+        _vi_init(speak)
+        print("[VOICE ID] Initialized.")
+    except Exception as _vie:
+        print(f"[VOICE ID] Init failed: {_vie}")
+
+    try:
+        from modules.research_agent import init as _ri
+        _ri(speak_fn=speak)
+        print("[RESEARCH] Agent initialized.")
+    except Exception as _rae:
+        print(f"[RESEARCH] Init failed: {_rae}")
+
+    try:
+        from modules.wa_group_summarizer import init as _wgs_init
+        _wgs_init(speak_fn=speak, ai_fn=get_ai_response)
+        print("[GROUP SUM] Summarizer initialized.")
+    except Exception as _wgse:
+        print(f"[GROUP SUM] Init failed: {_wgse}")
+
+    try:
+        from modules.app_preloader import init as _apl_init, start as _apl_start
+        _apl_init(speak_fn=speak)
+        _apl_start()
+        print("[PRELOADER] App pre-loader started.")
+    except Exception as _aple:
+        print(f"[PRELOADER] Init failed: {_aple}")
+
+    try:
+        from modules.clipboard_sync import init as _cs_init
+        _cs_init(speak_fn=speak, chain_fn=chain_engine.process)
+        print("[CLIPBOARD] Smart clipboard initialized.")
+    except Exception as _cse:
+        print(f"[CLIPBOARD] Smart init failed: {_cse}")
+
+    try:
+        from modules.download_monitor import start as _start_dlmon
+        _start_dlmon()
+        print("[DOWNLOAD MONITOR] Started.")
+    except Exception as _dlme:
+        print(f"[DOWNLOAD MONITOR] Init failed: {_dlme}")
+
+    try:
+        from modules.speaker_diarization import init as _sd_init
+        _sd_init(speak_fn=speak)
+        print("[DIARIZATION] Speaker diarization initialized.")
+    except Exception as _sde:
+        print(f"[DIARIZATION] Init failed: {_sde}")
+
+    try:
+        from modules.synonym_learner import stats as _sl_stats
+        _sl = _sl_stats()
+        print(f"[SYNONYM LEARNER] {_sl['total_synonyms']} synonyms across {_sl['domains_learned']} domains.")
+    except Exception as _sle2:
+        print(f"[SYNONYM LEARNER] Init failed: {_sle2}")
 
     # Prune old command history per retention setting
     try:
@@ -680,18 +859,9 @@ def start_brain(ui=None):
     from modules.ws_bridge import start_ws_bridge
     start_ws_bridge()
 
-    # Launch Electron UI
-    import subprocess
-    ui_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "izach-ui")
-    subprocess.Popen(
-        ["cmd", "/c", "npm", "run", "electron:dev"],
-        cwd=ui_path,
-        creationflags=subprocess.CREATE_NEW_CONSOLE
-    )
-    print("[UI] Electron UI launching...")
-
     # 11. Voice loop
     def voice_loop():
+        global _last_izach_question, _question_expires_at
         # Wait for mic to finish calibrating before starting
         while _mic is None and not EXIT_SIGNAL:
             time.sleep(0.2)
@@ -738,9 +908,24 @@ def start_brain(ui=None):
                     _ce_record()
                     if is_waiting_for_answer():
                         capture_answer(query)
+                        _last_izach_question = ""  # clear any parallel question flag
                         continue
                 except Exception:
                     pass
+
+                # General conversational question intercept — if iZACH's last
+                # spoken text ended with '?', route reply back to AI with context.
+                if _last_izach_question and time.time() < _question_expires_at:
+                    _ctx = _last_izach_question
+                    _last_izach_question = ""
+                    _question_expires_at = 0.0
+                    try:
+                        followup = get_ai_response(f"[Context: iZACH asked: \"{_ctx}\"]\nUser reply: {query}")
+                        if followup:
+                            speak(followup)
+                    except Exception:
+                        pass
+                    continue
 
                 # WhatsApp draft approval intercept — if iZACH just spoke a
                 # draft reply, treat the next input as approve/reject/revise.
@@ -755,11 +940,25 @@ def start_brain(ui=None):
                 _t0 = time.time()
                 try:
                     chain_engine.process(query)
-                    _status = "fail" if "unknown" in query.lower() else "success"
+                    _status = "success"
                 except Exception as _e:
                     _status = "fail"
                     raise
                 finally:
+                    # ── Synonym learning hooks ────────────────────────────
+                    try:
+                        from modules.synonym_learner import record_failure, record_success
+                        from modules.command_chain import _last_route_info
+                        _domain   = _last_route_info.get("domain", "chat")
+                        _handled  = _last_route_info.get("handled", False)
+                        _conf     = _last_route_info.get("confidence", 0.0)
+                        if _status == "success" and _handled and _domain != "chat":
+                            record_success(query, _domain)
+                        elif _domain == "chat" and _conf < 0.5:
+                            record_failure(query, "chat")
+                            _status = "fail"
+                    except Exception:
+                        pass
                     try:
                         from modules.command_logger import log_command
                         log_command("voice", query, "", round(time.time() - _t0, 3), _status)
