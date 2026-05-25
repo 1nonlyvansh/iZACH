@@ -3332,3 +3332,251 @@ def sc_clear():
         return jsonify({"ok": True})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+# =============================================================================
+# ── INSTAGRAM (Phase 5B) ──────────────────────────────────────────────────────
+# =============================================================================
+
+@ui_bp.route("/instagram/status", methods=["GET"])
+def ig_status():
+    try:
+        from modules.instagram_engine import auth_status, rate_status
+        s = auth_status()
+        s["rate"] = rate_status()
+        return jsonify(s)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@ui_bp.route("/instagram/auth/start", methods=["GET"])
+def ig_auth_start():
+    try:
+        from modules.instagram_engine import start_auth_flow
+        return jsonify(start_auth_flow())
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@ui_bp.route("/instagram/auth/complete", methods=["POST"])
+def ig_auth_complete():
+    data = request.get_json(silent=True) or {}
+    code = data.get("code", "").strip()
+    if not code:
+        return jsonify({"error": "code required"}), 400
+    try:
+        from modules.instagram_engine import complete_auth
+        return jsonify(complete_auth(code))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@ui_bp.route("/instagram/auth/disconnect", methods=["POST"])
+def ig_auth_disconnect():
+    try:
+        from modules.instagram_engine import disconnect
+        return jsonify(disconnect())
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@ui_bp.route("/instagram/profile", methods=["GET"])
+def ig_profile():
+    try:
+        from modules.instagram_engine import get_profile
+        return jsonify(get_profile())
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@ui_bp.route("/instagram/settings", methods=["GET"])
+def ig_settings_get():
+    try:
+        from modules.instagram_engine import get_settings
+        return jsonify(get_settings())
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@ui_bp.route("/instagram/settings", methods=["POST"])
+def ig_settings_post():
+    data = request.get_json(silent=True) or {}
+    try:
+        from modules.instagram_engine import update_settings
+        return jsonify(update_settings(data))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@ui_bp.route("/instagram/inbox", methods=["GET"])
+def ig_inbox():
+    limit = int(request.args.get("limit", 20))
+    try:
+        from modules.instagram_engine import get_inbox
+        return jsonify(get_inbox(limit=limit))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@ui_bp.route("/instagram/thread/<thread_id>", methods=["GET"])
+def ig_thread(thread_id: str):
+    try:
+        from modules.instagram_engine import get_thread_messages
+        return jsonify(get_thread_messages(thread_id))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@ui_bp.route("/instagram/reply", methods=["POST"])
+def ig_reply():
+    """Body: {thread_id, message}"""
+    data      = request.get_json(silent=True) or {}
+    thread_id = data.get("thread_id", "")
+    message   = data.get("message", "").strip()
+    if not thread_id or not message:
+        return jsonify({"error": "thread_id and message required"}), 400
+    try:
+        from modules.instagram_engine import send_dm
+        return jsonify(send_dm(thread_id, message))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@ui_bp.route("/instagram/auto_reply", methods=["POST"])
+def ig_auto_reply_toggle():
+    """Body: {enabled: bool}"""
+    data    = request.get_json(silent=True) or {}
+    enabled = bool(data.get("enabled", False))
+    try:
+        from modules.instagram_engine import update_settings, _ensure_bg_services
+        update_settings({"auto_reply_enabled": enabled})
+        if enabled:
+            _ensure_bg_services()
+        return jsonify({"ok": True, "auto_reply_enabled": enabled})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@ui_bp.route("/instagram/posts", methods=["GET"])
+def ig_posts():
+    limit = int(request.args.get("limit", 12))
+    try:
+        from modules.instagram_engine import get_recent_posts
+        return jsonify(get_recent_posts(limit=limit))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@ui_bp.route("/instagram/post/insights/<media_id>", methods=["GET"])
+def ig_post_insights(media_id: str):
+    try:
+        from modules.instagram_engine import get_post_insights
+        return jsonify(get_post_insights(media_id))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@ui_bp.route("/instagram/post/photo", methods=["POST"])
+def ig_post_photo():
+    """Body: {image_url, caption}"""
+    data      = request.get_json(silent=True) or {}
+    image_url = data.get("image_url", "").strip()
+    caption   = data.get("caption", "").strip()
+    if not image_url:
+        return jsonify({"error": "image_url required (must be public URL)"}), 400
+    try:
+        from modules.instagram_engine import post_photo
+        return jsonify(post_photo(image_url, caption))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@ui_bp.route("/instagram/post/reel", methods=["POST"])
+def ig_post_reel():
+    """Body: {video_url, caption, cover_url, share_to_feed}"""
+    data          = request.get_json(silent=True) or {}
+    video_url     = data.get("video_url", "").strip()
+    caption       = data.get("caption", "").strip()
+    cover_url     = data.get("cover_url", "").strip()
+    share_to_feed = bool(data.get("share_to_feed", True))
+    if not video_url:
+        return jsonify({"error": "video_url required (must be public URL)"}), 400
+    try:
+        from modules.instagram_engine import post_reel
+        return jsonify(post_reel(video_url, caption, cover_url, share_to_feed))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@ui_bp.route("/instagram/post/video", methods=["POST"])
+def ig_post_video():
+    """Body: {video_url, caption}"""
+    data      = request.get_json(silent=True) or {}
+    video_url = data.get("video_url", "").strip()
+    caption   = data.get("caption", "").strip()
+    if not video_url:
+        return jsonify({"error": "video_url required"}), 400
+    try:
+        from modules.instagram_engine import post_video
+        return jsonify(post_video(video_url, caption))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@ui_bp.route("/instagram/caption/generate", methods=["POST"])
+def ig_caption_gen():
+    """Body: {context, style, hashtag_count}"""
+    data          = request.get_json(silent=True) or {}
+    context       = data.get("context", "").strip()
+    style         = data.get("style", "casual")
+    hashtag_count = int(data.get("hashtag_count", 10))
+    if not context:
+        return jsonify({"error": "context required"}), 400
+    try:
+        from modules.instagram_engine import generate_caption
+        caption = generate_caption(context, style, hashtag_count)
+        return jsonify({"caption": caption})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@ui_bp.route("/instagram/followers/check", methods=["GET"])
+def ig_followers_check():
+    try:
+        from modules.instagram_engine import check_follower_change
+        return jsonify(check_follower_change())
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@ui_bp.route("/instagram/comments/<media_id>", methods=["GET"])
+def ig_comments(media_id: str):
+    try:
+        from modules.instagram_engine import get_comments
+        return jsonify(get_comments(media_id))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@ui_bp.route("/instagram/comments/reply", methods=["POST"])
+def ig_comment_reply():
+    """Body: {comment_id, message}"""
+    data       = request.get_json(silent=True) or {}
+    comment_id = data.get("comment_id", "")
+    message    = data.get("message", "").strip()
+    if not comment_id or not message:
+        return jsonify({"error": "comment_id and message required"}), 400
+    try:
+        from modules.instagram_engine import reply_to_comment
+        return jsonify(reply_to_comment(comment_id, message))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@ui_bp.route("/instagram/insights", methods=["GET"])
+def ig_insights():
+    try:
+        from modules.instagram_engine import get_insights
+        return jsonify(get_insights())
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500

@@ -688,6 +688,39 @@ body.tb-autohide.tb-reveal #device-bar { opacity:0.5; pointer-events:all; }
 .sh-cmd-inp   { flex:1; background:rgba(0,0,0,0.25); border:1px solid rgba(0,148,255,0.2); border-radius:4px; color:rgba(0,148,255,0.85); font-size:8px; padding:3px 6px; outline:none; }
 .sh-msg       { font-size:8px; color:rgba(0,200,83,0.8); min-height:12px; margin-top:3px; text-align:center; }
 
+/* ── INSTAGRAM WIDGET ── */
+#p-ig  { left:80px; top:80px; width:360px; height:600px; }
+.ig-stat-row  { display:flex; gap:6px; margin-bottom:10px; }
+.ig-stat-box  { flex:1; background:rgba(195,42,163,0.06); border:1px solid rgba(195,42,163,0.18); border-radius:6px; padding:8px; text-align:center; }
+.ig-stat-val  { font-size:18px; font-family:'JetBrains Mono',monospace; color:rgba(255,80,200,0.9); line-height:1; }
+.ig-stat-lbl  { font-size:6px; color:rgba(195,42,163,0.45); letter-spacing:.12em; text-transform:uppercase; margin-top:3px; }
+.ig-stat-delta{ font-size:7px; margin-top:2px; }
+.ig-btn       { background:rgba(195,42,163,0.10); border:1px solid rgba(195,42,163,0.25); border-radius:4px; color:rgba(255,80,200,0.85); font-size:8px; padding:4px 8px; cursor:pointer; letter-spacing:.07em; transition:all .2s; }
+.ig-btn:hover { background:rgba(195,42,163,0.22); color:#ff50cc; }
+.ig-btn.active{ background:rgba(195,42,163,0.28); border-color:rgba(255,80,200,0.5); color:#ff50cc; }
+.ig-btn.danger{ border-color:rgba(255,61,61,0.3); color:rgba(255,90,90,0.8); }
+.ig-btn.danger:hover{ background:rgba(255,61,61,0.12); }
+.ig-inp       { width:100%; background:rgba(0,0,0,0.25); border:1px solid rgba(195,42,163,0.2); border-radius:4px; color:rgba(255,80,200,0.85); font-size:8px; padding:4px 8px; outline:none; box-sizing:border-box; }
+.ig-inp::placeholder{ color:rgba(195,42,163,0.35); }
+.ig-row       { display:flex; gap:4px; margin-top:4px; }
+.ig-dm-card   { background:rgba(195,42,163,0.04); border:1px solid rgba(195,42,163,0.1); border-radius:6px; padding:7px 10px; margin-bottom:5px; cursor:pointer; transition:background .15s; }
+.ig-dm-card:hover{ background:rgba(195,42,163,0.09); }
+.ig-dm-name   { font-size:9px; color:rgba(255,80,200,0.85); font-weight:600; }
+.ig-dm-preview{ font-size:7px; color:rgba(195,42,163,0.55); margin-top:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.ig-dm-time   { font-size:6px; color:rgba(195,42,163,0.35); float:right; }
+.ig-post-grid { display:grid; grid-template-columns:1fr 1fr 1fr; gap:4px; margin-top:4px; }
+.ig-post-thumb{ aspect-ratio:1; background:rgba(195,42,163,0.08); border:1px solid rgba(195,42,163,0.12); border-radius:4px; overflow:hidden; cursor:pointer; }
+.ig-post-thumb img{ width:100%; height:100%; object-fit:cover; }
+.ig-tab-bar   { display:flex; gap:3px; margin-bottom:8px; }
+.ig-tab       { flex:1; background:rgba(195,42,163,0.06); border:1px solid rgba(195,42,163,0.12); border-radius:4px; color:rgba(195,42,163,0.55); font-size:7px; padding:4px; cursor:pointer; letter-spacing:.08em; text-align:center; transition:all .2s; }
+.ig-tab.active{ background:rgba(195,42,163,0.2); border-color:rgba(255,80,200,0.4); color:#ff50cc; }
+.ig-msg       { font-size:8px; min-height:12px; margin-top:3px; text-align:center; }
+.ig-msg.ok    { color:rgba(0,200,83,0.8); }
+.ig-msg.err   { color:rgba(255,61,61,0.8); }
+.ig-style-sel { background:rgba(0,0,0,0.25); border:1px solid rgba(195,42,163,0.2); border-radius:4px; color:rgba(255,80,200,0.8); font-size:8px; padding:3px 5px; outline:none; }
+.ig-auth-area { padding:8px; background:rgba(195,42,163,0.04); border-radius:5px; border:1px dashed rgba(195,42,163,0.2); }
+.ig-auth-url  { font-size:7px; color:rgba(195,42,163,0.55); word-break:break-all; margin:4px 0; max-height:50px; overflow-y:auto; }
+
 /* ── SUBCONSCIOUSNESS WIDGET ── */
 #p-sc { left:760px; top:80px; width:310px; height:500px; }
 .sc-health-grid { display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-bottom:10px; }
@@ -1154,6 +1187,9 @@ body.spotlight-mode .pnl:not(.spotlighted) {
   <button class="wp-btn" id="wpb-sc" onclick="togWgt('p-sc')" title="SUBCONSCIOUSNESS" style="position:relative;">
     <span class="wp-ic">⟁</span><span class="wp-lbl">SUBCON</span>
     <span class="sc-perm-badge" id="sc-perm-badge">0</span>
+  </button>
+  <button class="wp-btn" id="wpb-ig" onclick="togWgt('p-ig')" title="INSTAGRAM">
+    <span class="wp-ic">◎</span><span class="wp-lbl">INSTAGRAM</span>
   </button>
 </div>
 
@@ -2358,6 +2394,177 @@ body.spotlight-mode .pnl:not(.spotlighted) {
   <div class="rh"></div>
 </div>
 
+<!-- ══════════════════ INSTAGRAM PANEL ══════════════════ -->
+<div id="p-ig" class="pnl">
+  <div class="cb cb-tl"></div><div class="cb cb-tr"></div><div class="cb cb-bl"></div><div class="cb cb-br"></div>
+  <div class="ph">
+    <span class="ph-id">23 · INSTAGRAM</span>
+    <span class="ph-sub" id="ig-ph-sub">NOT CONNECTED</span>
+  </div>
+  <div class="pb">
+
+    <!-- Auth section (shown when not connected) -->
+    <div id="ig-auth-section">
+      <div class="ig-auth-area">
+        <div style="font-size:8px;color:rgba(255,80,200,0.7);margin-bottom:8px;letter-spacing:.07em;">CONNECT INSTAGRAM</div>
+
+        <div style="font-size:7px;color:rgba(195,42,163,0.5);margin-bottom:6px;">Requires Facebook App credentials. Create app at developers.facebook.com → add Instagram Graph API product.</div>
+
+        <input class="ig-inp" id="ig-app-id-inp" placeholder="Facebook App ID" style="margin-bottom:4px;">
+        <input class="ig-inp" id="ig-app-secret-inp" type="password" placeholder="App Secret" style="margin-bottom:4px;">
+        <div class="ig-row">
+          <button class="ig-btn" style="flex:1;" onclick="igSaveCredentials()">SAVE</button>
+          <button class="ig-btn" style="flex:1;" onclick="igStartAuth()">START AUTH</button>
+        </div>
+        <div id="ig-auth-url-area" style="display:none;margin-top:6px;">
+          <div style="font-size:7px;color:rgba(255,80,200,0.6);margin-bottom:4px;">Open this URL in your browser, then paste the redirect URL below:</div>
+          <div class="ig-auth-url" id="ig-auth-url-text"></div>
+          <input class="ig-inp" id="ig-code-inp" placeholder="Paste full redirect URL or code from URL" style="margin-top:4px;margin-bottom:4px;">
+          <button class="ig-btn" style="width:100%;" onclick="igCompleteAuth()">COMPLETE AUTH</button>
+        </div>
+        <div class="ig-msg" id="ig-auth-msg"></div>
+      </div>
+    </div>
+
+    <!-- Connected section -->
+    <div id="ig-connected-section" style="display:none;">
+
+      <!-- Stats row -->
+      <div class="ig-stat-row">
+        <div class="ig-stat-box">
+          <div class="ig-stat-val" id="ig-followers">--</div>
+          <div class="ig-stat-lbl">FOLLOWERS</div>
+          <div class="ig-stat-delta" id="ig-followers-delta"></div>
+        </div>
+        <div class="ig-stat-box">
+          <div class="ig-stat-val" id="ig-following">--</div>
+          <div class="ig-stat-lbl">FOLLOWING</div>
+        </div>
+        <div class="ig-stat-box">
+          <div class="ig-stat-val" id="ig-posts">--</div>
+          <div class="ig-stat-lbl">POSTS</div>
+        </div>
+      </div>
+
+      <!-- Tab bar -->
+      <div class="ig-tab-bar">
+        <div class="ig-tab active" id="ig-tab-inbox"   onclick="igSwitchTab('inbox')">INBOX</div>
+        <div class="ig-tab"        id="ig-tab-post"    onclick="igSwitchTab('post')">POST</div>
+        <div class="ig-tab"        id="ig-tab-feed"    onclick="igSwitchTab('feed')">FEED</div>
+        <div class="ig-tab"        id="ig-tab-settings" onclick="igSwitchTab('settings')">SETTINGS</div>
+      </div>
+
+      <!-- ── INBOX TAB ── -->
+      <div id="ig-pane-inbox">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+          <span style="font-size:7px;color:rgba(195,42,163,0.45);letter-spacing:.1em;">DM INBOX</span>
+          <div style="display:flex;gap:5px;align-items:center;">
+            <span style="font-size:7px;color:rgba(195,42,163,0.45);">AUTO-REPLY</span>
+            <div id="ig-auto-toggle" onclick="igToggleAutoReply()"
+              style="width:28px;height:14px;border-radius:7px;background:rgba(195,42,163,0.15);border:1px solid rgba(195,42,163,0.25);cursor:pointer;position:relative;transition:all .25s;">
+              <div id="ig-auto-knob"
+                style="width:10px;height:10px;border-radius:50%;background:rgba(195,42,163,0.5);position:absolute;top:1px;left:2px;transition:all .25s;"></div>
+            </div>
+          </div>
+        </div>
+        <div id="ig-inbox-list" style="max-height:200px;overflow-y:auto;">
+          <div style="font-size:8px;color:rgba(195,42,163,0.3);text-align:center;padding:12px;">Loading inbox…</div>
+        </div>
+        <!-- Reply box (shown when thread selected) -->
+        <div id="ig-reply-box" style="display:none;margin-top:6px;">
+          <div style="font-size:7px;color:rgba(255,80,200,0.6);margin-bottom:4px;" id="ig-reply-to-label">Reply to:</div>
+          <textarea class="ig-inp" id="ig-reply-text" rows="2" placeholder="Type your reply…" style="resize:none;"></textarea>
+          <div class="ig-row" style="margin-top:4px;">
+            <button class="ig-btn" style="flex:1;" onclick="igSendReply()">SEND ↑</button>
+            <button class="ig-btn ig-btn danger" style="flex:1;" onclick="igCloseReply()">CANCEL</button>
+          </div>
+        </div>
+        <div class="ig-msg" id="ig-inbox-msg"></div>
+      </div>
+
+      <!-- ── POST TAB ── -->
+      <div id="ig-pane-post" style="display:none;">
+        <div style="font-size:7px;color:rgba(195,42,163,0.45);letter-spacing:.1em;margin-bottom:6px;">CREATE POST</div>
+
+        <!-- Type selector -->
+        <div class="ig-row" style="margin-bottom:6px;">
+          <button class="ig-btn active" id="ig-type-photo" onclick="igSetPostType('photo')">PHOTO</button>
+          <button class="ig-btn" id="ig-type-reel"  onclick="igSetPostType('reel')">REEL</button>
+          <button class="ig-btn" id="ig-type-video" onclick="igSetPostType('video')">VIDEO</button>
+        </div>
+
+        <input class="ig-inp" id="ig-media-url" placeholder="Public media URL (image/video)" style="margin-bottom:4px;">
+
+        <!-- Caption area -->
+        <textarea class="ig-inp" id="ig-caption-text" rows="3" placeholder="Caption with hashtags…" style="resize:none;margin-bottom:4px;"></textarea>
+
+        <!-- AI caption generator -->
+        <div style="font-size:7px;color:rgba(195,42,163,0.45);margin-bottom:3px;letter-spacing:.08em;">AI CAPTION GENERATOR</div>
+        <input class="ig-inp" id="ig-caption-ctx" placeholder="Describe your post (e.g. sunset at Goa beach)" style="margin-bottom:3px;">
+        <div class="ig-row" style="margin-bottom:6px;">
+          <select class="ig-style-sel" id="ig-caption-style">
+            <option value="casual">Casual</option>
+            <option value="professional">Professional</option>
+            <option value="funny">Funny</option>
+            <option value="inspirational">Inspirational</option>
+            <option value="minimal">Minimal</option>
+          </select>
+          <input class="ig-inp" id="ig-hashtag-count" type="number" value="10" min="0" max="30" style="width:50px;flex:none;">
+          <button class="ig-btn" style="flex:1;" onclick="igGenerateCaption()">⚡ GENERATE</button>
+        </div>
+
+        <button class="ig-btn" style="width:100%;padding:6px;" onclick="igPublish()">⬆ PUBLISH</button>
+        <div class="ig-msg" id="ig-post-msg"></div>
+      </div>
+
+      <!-- ── FEED TAB ── -->
+      <div id="ig-pane-feed" style="display:none;">
+        <div style="font-size:7px;color:rgba(195,42,163,0.45);letter-spacing:.1em;margin-bottom:6px;">RECENT POSTS</div>
+        <div class="ig-post-grid" id="ig-post-grid">
+          <div style="grid-column:1/-1;font-size:8px;color:rgba(195,42,163,0.3);text-align:center;padding:12px;">Loading…</div>
+        </div>
+      </div>
+
+      <!-- ── SETTINGS TAB ── -->
+      <div id="ig-pane-settings" style="display:none;">
+        <div style="font-size:7px;color:rgba(195,42,163,0.45);letter-spacing:.1em;margin-bottom:6px;">SETTINGS</div>
+
+        <div style="font-size:7px;color:rgba(195,42,163,0.45);margin-bottom:2px;">Auto-reply persona prompt</div>
+        <textarea class="ig-inp" id="ig-persona-inp" rows="3" style="resize:none;margin-bottom:6px;"></textarea>
+
+        <div style="display:flex;gap:6px;margin-bottom:4px;">
+          <div style="flex:1;">
+            <div style="font-size:7px;color:rgba(195,42,163,0.45);margin-bottom:2px;">Reply delay min (s)</div>
+            <input class="ig-inp" id="ig-delay-min" type="number" value="3" min="1" max="60">
+          </div>
+          <div style="flex:1;">
+            <div style="font-size:7px;color:rgba(195,42,163,0.45);margin-bottom:2px;">Reply delay max (s)</div>
+            <input class="ig-inp" id="ig-delay-max" type="number" value="12" min="1" max="120">
+          </div>
+          <div style="flex:1;">
+            <div style="font-size:7px;color:rgba(195,42,163,0.45);margin-bottom:2px;">Posts/day limit</div>
+            <input class="ig-inp" id="ig-post-limit" type="number" value="50" min="1" max="50">
+          </div>
+        </div>
+
+        <div style="display:flex;gap:4px;margin-top:6px;">
+          <button class="ig-btn" style="flex:1;" onclick="igSaveSettings()">SAVE SETTINGS</button>
+          <button class="ig-btn ig-btn danger" onclick="igDisconnect()">DISCONNECT</button>
+        </div>
+
+        <!-- Token status -->
+        <div style="margin-top:8px;padding:6px;background:rgba(195,42,163,0.04);border-radius:4px;border:1px solid rgba(195,42,163,0.1);">
+          <div style="font-size:7px;color:rgba(195,42,163,0.4);letter-spacing:.08em;">TOKEN STATUS</div>
+          <div style="font-size:8px;color:rgba(255,80,200,0.7);margin-top:2px;" id="ig-token-info">--</div>
+        </div>
+        <div class="ig-msg" id="ig-settings-msg"></div>
+      </div>
+
+    </div>
+  </div>
+  <div class="rh"></div>
+</div>
+
 <!-- ══════════════════ SUBCONSCIOUSNESS PANEL ══════════════════ -->
 <div id="p-sc" class="pnl">
   <div class="cb cb-tl"></div><div class="cb cb-tr"></div><div class="cb cb-bl"></div><div class="cb cb-br"></div>
@@ -2575,7 +2782,7 @@ tick(); setInterval(tick,1000);
 // STATE MACHINE
 // ════════════════════════════════════════════════════
 let camStream=null;
-const allWgts=['p-comm','p-audio','p-sched','p-sys','p-intel','p-mem','p-msg','p-wx','p-rel','p-feed','p-hist','p-clock','p-phone','p-devices','p-agents','p-gesture','p-ocr','p-print','p-fit','p-loc','p-sh','p-sc'];
+const allWgts=['p-comm','p-audio','p-sched','p-sys','p-intel','p-mem','p-msg','p-wx','p-rel','p-feed','p-hist','p-clock','p-phone','p-devices','p-agents','p-gesture','p-ocr','p-print','p-fit','p-loc','p-sh','p-sc','p-ig'];
 const dkMap={'p-comm':'dk-comm','p-audio':'dk-aud','p-sched':'dk-sch','p-sys':'dk-sys','p-intel':'dk-int','p-mem':'dk-mem','p-msg':'dk-msg','p-wx':'dk-wx','p-rel':'dk-rel','p-feed':'dk-feed','p-hist':'dk-hist','p-clock':'dk-clk','p-phone':'dk-phone','p-devices':'dk-devices','p-agents':'dk-agents'};
 
 function slideScreens(show){
@@ -2660,6 +2867,7 @@ const wpMap={
   'p-ocr':'wpb-ocr','p-print':'wpb-print','p-fit':'wpb-fit','p-loc':'wpb-loc',
   'p-sh':'wpb-sh',
   'p-sc':'wpb-sc',
+  'p-ig':'wpb-ig',
 };
 function togWgt(id){
   const el=document.getElementById(id); if(!el)return;
@@ -4882,6 +5090,338 @@ async function shSaveSettings() {
 
 // Load smart home data when panel opens
 document.getElementById('wpb-sh')?.addEventListener('click', () => { shRefresh(); });
+
+
+// ════════════════════════════════════════════════════
+// INSTAGRAM PANEL (Phase 5B)
+// ════════════════════════════════════════════════════
+
+let _igCurrentTab    = 'inbox';
+let _igAutoReply     = false;
+let _igSelectedThread = null;   // {id, name}
+let _igPostType      = 'photo';
+
+// ── helpers ─────────────────────────────────────────
+function _igMsg(elId, text, ok = true) {
+  const el = document.getElementById(elId);
+  if (!el) return;
+  el.textContent = text;
+  el.className   = 'ig-msg ' + (ok ? 'ok' : 'err');
+  if (text) setTimeout(() => { if (el) el.textContent = ''; }, 4000);
+}
+
+// ── auth ─────────────────────────────────────────────
+async function igRefreshStatus() {
+  try {
+    const r = await fetch(`${API}/instagram/status`).then(x => x.json()).catch(() => ({}));
+    const connected = r.connected;
+
+    document.getElementById('ig-auth-section').style.display      = connected ? 'none' : '';
+    document.getElementById('ig-connected-section').style.display  = connected ? '' : 'none';
+    document.getElementById('ig-ph-sub').textContent = connected
+      ? `@${r.username || '?'}  ·  ${r.token_days_left || 0}d left`
+      : 'NOT CONNECTED';
+
+    if (connected) {
+      _igAutoReply = r.auto_reply_enabled;
+      _igUpdateAutoToggle();
+      igLoadProfile();
+    }
+  } catch(e) {}
+}
+
+async function igSaveCredentials() {
+  const appId  = document.getElementById('ig-app-id-inp')?.value.trim();
+  const secret = document.getElementById('ig-app-secret-inp')?.value.trim();
+  if (!appId || !secret) { _igMsg('ig-auth-msg', 'App ID and secret required.', false); return; }
+  await fetch(`${API}/instagram/settings`, {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({app_id: appId, app_secret: secret}),
+  }).catch(() => {});
+  _igMsg('ig-auth-msg', 'Credentials saved.');
+}
+
+async function igStartAuth() {
+  const r = await fetch(`${API}/instagram/auth/start`).then(x => x.json()).catch(() => ({}));
+  if (r.auth_url) {
+    document.getElementById('ig-auth-url-text').textContent = r.auth_url;
+    document.getElementById('ig-auth-url-area').style.display = '';
+    // Try to open in default browser via iZACH command endpoint
+    try { await fetch(`${API}/command`, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({command:`open ${r.auth_url}`})}); } catch(e) {}
+    _igMsg('ig-auth-msg', 'URL generated — open in browser, then paste the redirect URL below.');
+  } else {
+    _igMsg('ig-auth-msg', r.error || 'Failed.', false);
+  }
+}
+
+async function igCompleteAuth() {
+  let raw = document.getElementById('ig-code-inp')?.value.trim() || '';
+  // Accept full redirect URL — extract code param
+  const match = raw.match(/[?&]code=([^&]+)/);
+  const code  = match ? match[1] : raw;
+  if (!code) { _igMsg('ig-auth-msg', 'Paste the redirect URL or code.', false); return; }
+
+  _igMsg('ig-auth-msg', 'Exchanging code…');
+  const r = await fetch(`${API}/instagram/auth/complete`, {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({code}),
+  }).then(x => x.json()).catch(() => ({}));
+
+  if (r.ok) {
+    _igMsg('ig-auth-msg', `Connected as @${r.username}! ${r.expires_in_days}d token.`);
+    setTimeout(igRefreshStatus, 800);
+  } else {
+    _igMsg('ig-auth-msg', r.error || 'Auth failed.', false);
+  }
+}
+
+async function igDisconnect() {
+  await fetch(`${API}/instagram/auth/disconnect`, {method:'POST'}).catch(() => {});
+  igRefreshStatus();
+}
+
+// ── profile ──────────────────────────────────────────
+async function igLoadProfile() {
+  const r = await fetch(`${API}/instagram/profile`).then(x => x.json()).catch(() => ({}));
+  if (r.error) return;
+  document.getElementById('ig-followers').textContent = _fmtNum(r.followers_count);
+  document.getElementById('ig-following').textContent = _fmtNum(r.follows_count);
+  document.getElementById('ig-posts').textContent     = _fmtNum(r.media_count);
+
+  const delta = r.follower_delta || 0;
+  const deltaEl = document.getElementById('ig-followers-delta');
+  if (deltaEl && delta !== 0) {
+    deltaEl.textContent = (delta > 0 ? '▲ +' : '▼ ') + delta;
+    deltaEl.style.color = delta > 0 ? '#00c853' : '#ff5252';
+  }
+}
+
+function _fmtNum(n) {
+  if (!n && n !== 0) return '--';
+  if (n >= 1000000) return (n/1000000).toFixed(1) + 'M';
+  if (n >= 1000)    return (n/1000).toFixed(1) + 'K';
+  return String(n);
+}
+
+// ── tabs ─────────────────────────────────────────────
+function igSwitchTab(tab) {
+  _igCurrentTab = tab;
+  ['inbox','post','feed','settings'].forEach(t => {
+    document.getElementById(`ig-tab-${t}`)?.classList.toggle('active', t === tab);
+    const pane = document.getElementById(`ig-pane-${t}`);
+    if (pane) pane.style.display = t === tab ? '' : 'none';
+  });
+  if (tab === 'inbox')    igLoadInbox();
+  if (tab === 'feed')     igLoadFeed();
+  if (tab === 'settings') igLoadSettings();
+}
+
+// ── inbox ─────────────────────────────────────────────
+async function igLoadInbox() {
+  const list = document.getElementById('ig-inbox-list');
+  if (!list) return;
+  list.innerHTML = '<div style="font-size:8px;color:rgba(195,42,163,0.3);text-align:center;padding:12px;">Loading…</div>';
+
+  const r = await fetch(`${API}/instagram/inbox?limit=15`).then(x => x.json()).catch(() => ({}));
+  const threads = (r.data || []);
+
+  if (!threads.length) {
+    list.innerHTML = '<div style="font-size:8px;color:rgba(195,42,163,0.3);text-align:center;padding:12px;">Inbox empty</div>';
+    return;
+  }
+
+  list.innerHTML = threads.map(t => {
+    const msgs     = (t.messages?.data || []);
+    const last     = msgs[msgs.length - 1] || {};
+    const preview  = (last.message || '').slice(0, 55) || '(attachment)';
+    const sender   = (last.from?.name || t.id || '?');
+    const time     = last.created_time ? new Date(last.created_time).toLocaleTimeString() : '';
+    return `<div class="ig-dm-card" onclick="igOpenThread('${t.id}','${sender.replace(/'/g,"\\'")}')">
+      <span class="ig-dm-time">${time}</span>
+      <div class="ig-dm-name">${sender}</div>
+      <div class="ig-dm-preview">${preview}</div>
+    </div>`;
+  }).join('');
+}
+
+function igOpenThread(threadId, senderName) {
+  _igSelectedThread = {id: threadId, name: senderName};
+  document.getElementById('ig-reply-box').style.display = '';
+  document.getElementById('ig-reply-to-label').textContent = `Reply to ${senderName}:`;
+  document.getElementById('ig-reply-text')?.focus();
+}
+
+function igCloseReply() {
+  _igSelectedThread = null;
+  document.getElementById('ig-reply-box').style.display = 'none';
+  document.getElementById('ig-reply-text').value = '';
+}
+
+async function igSendReply() {
+  if (!_igSelectedThread) return;
+  const msg = document.getElementById('ig-reply-text')?.value.trim();
+  if (!msg) { _igMsg('ig-inbox-msg', 'Type a message first.', false); return; }
+
+  _igMsg('ig-inbox-msg', 'Sending…');
+  const r = await fetch(`${API}/instagram/reply`, {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({thread_id: _igSelectedThread.id, message: msg}),
+  }).then(x => x.json()).catch(() => ({}));
+
+  if (r.ok) {
+    _igMsg('ig-inbox-msg', 'Sent ✓');
+    igCloseReply();
+    setTimeout(igLoadInbox, 800);
+  } else {
+    _igMsg('ig-inbox-msg', r.error || 'Send failed.', false);
+  }
+}
+
+// ── auto-reply toggle ─────────────────────────────────
+async function igToggleAutoReply() {
+  _igAutoReply = !_igAutoReply;
+  _igUpdateAutoToggle();
+  await fetch(`${API}/instagram/auto_reply`, {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({enabled: _igAutoReply}),
+  }).catch(() => {});
+}
+
+function _igUpdateAutoToggle() {
+  const tog  = document.getElementById('ig-auto-toggle');
+  const knob = document.getElementById('ig-auto-knob');
+  if (!tog || !knob) return;
+  if (_igAutoReply) {
+    tog.style.background  = 'rgba(195,42,163,0.35)';
+    tog.style.borderColor = 'rgba(255,80,200,0.5)';
+    knob.style.left       = '15px';
+    knob.style.background = '#ff50cc';
+  } else {
+    tog.style.background  = 'rgba(195,42,163,0.15)';
+    tog.style.borderColor = 'rgba(195,42,163,0.25)';
+    knob.style.left       = '2px';
+    knob.style.background = 'rgba(195,42,163,0.5)';
+  }
+}
+
+// ── post ─────────────────────────────────────────────
+function igSetPostType(type) {
+  _igPostType = type;
+  ['photo','reel','video'].forEach(t => {
+    document.getElementById(`ig-type-${t}`)?.classList.toggle('active', t === type);
+  });
+}
+
+async function igGenerateCaption() {
+  const ctx   = document.getElementById('ig-caption-ctx')?.value.trim();
+  const style = document.getElementById('ig-caption-style')?.value || 'casual';
+  const count = parseInt(document.getElementById('ig-hashtag-count')?.value || '10');
+  if (!ctx) { _igMsg('ig-post-msg', 'Describe your post first.', false); return; }
+
+  _igMsg('ig-post-msg', 'Generating…');
+  const r = await fetch(`${API}/instagram/caption/generate`, {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({context: ctx, style, hashtag_count: count}),
+  }).then(x => x.json()).catch(() => ({}));
+
+  if (r.caption) {
+    document.getElementById('ig-caption-text').value = r.caption;
+    _igMsg('ig-post-msg', 'Caption generated ✓');
+  } else {
+    _igMsg('ig-post-msg', r.error || 'Generation failed.', false);
+  }
+}
+
+async function igPublish() {
+  const mediaUrl = document.getElementById('ig-media-url')?.value.trim();
+  const caption  = document.getElementById('ig-caption-text')?.value.trim();
+  if (!mediaUrl) { _igMsg('ig-post-msg', 'Media URL required.', false); return; }
+
+  _igMsg('ig-post-msg', `Publishing ${_igPostType}… (may take a moment)`);
+
+  const endpoints = {photo: '/instagram/post/photo', reel: '/instagram/post/reel', video: '/instagram/post/video'};
+  const bodyKeys  = {photo: {image_url: mediaUrl, caption}, reel: {video_url: mediaUrl, caption, share_to_feed: true}, video: {video_url: mediaUrl, caption}};
+
+  const r = await fetch(`${API}${endpoints[_igPostType]}`, {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify(bodyKeys[_igPostType]),
+  }).then(x => x.json()).catch(() => ({}));
+
+  if (r.ok) {
+    _igMsg('ig-post-msg', `${_igPostType.charAt(0).toUpperCase() + _igPostType.slice(1)} published! ID: ${r.media_id}`);
+    document.getElementById('ig-media-url').value = '';
+    document.getElementById('ig-caption-text').value = '';
+    setTimeout(igLoadProfile, 2000);
+  } else {
+    _igMsg('ig-post-msg', r.error || 'Publish failed.', false);
+  }
+}
+
+// ── feed ─────────────────────────────────────────────
+async function igLoadFeed() {
+  const grid = document.getElementById('ig-post-grid');
+  if (!grid) return;
+  grid.innerHTML = '<div style="grid-column:1/-1;font-size:8px;color:rgba(195,42,163,0.3);text-align:center;padding:12px;">Loading…</div>';
+
+  const r = await fetch(`${API}/instagram/posts?limit=9`).then(x => x.json()).catch(() => ({}));
+  const posts = (r.data || []);
+
+  if (!posts.length) {
+    grid.innerHTML = '<div style="grid-column:1/-1;font-size:8px;color:rgba(195,42,163,0.3);text-align:center;padding:12px;">No posts yet</div>';
+    return;
+  }
+
+  grid.innerHTML = posts.map(p => {
+    const thumb = p.thumbnail_url || p.media_url || '';
+    const likes = p.like_count || 0;
+    const cmts  = p.comments_count || 0;
+    const icon  = p.media_type === 'VIDEO' || p.media_type === 'REELS' ? '▶' : '';
+    return `<div class="ig-post-thumb" onclick="window.open('${p.permalink}','_blank')" title="${(p.caption||'').slice(0,80)}">
+      ${thumb ? `<img src="${thumb}" loading="lazy">` : `<div style="display:flex;align-items:center;justify-content:center;height:100%;font-size:7px;color:rgba(195,42,163,0.4);">${icon}${p.media_type||'?'}</div>`}
+      <div style="font-size:6px;color:rgba(255,80,200,0.7);text-align:center;padding:1px;">♥${likes} ✿${cmts}</div>
+    </div>`;
+  }).join('');
+}
+
+// ── settings ─────────────────────────────────────────
+async function igLoadSettings() {
+  const r = await fetch(`${API}/instagram/settings`).then(x => x.json()).catch(() => ({}));
+  if (document.getElementById('ig-persona-inp'))
+    document.getElementById('ig-persona-inp').value = r.auto_reply_persona || '';
+  if (document.getElementById('ig-delay-min'))
+    document.getElementById('ig-delay-min').value = r.reply_delay_min ?? 3;
+  if (document.getElementById('ig-delay-max'))
+    document.getElementById('ig-delay-max').value = r.reply_delay_max ?? 12;
+  if (document.getElementById('ig-post-limit'))
+    document.getElementById('ig-post-limit').value = r.daily_post_limit ?? 50;
+
+  const statusR = await fetch(`${API}/instagram/status`).then(x => x.json()).catch(() => ({}));
+  const info = document.getElementById('ig-token-info');
+  if (info) {
+    info.textContent = statusR.connected
+      ? `Connected · ${statusR.token_days_left}d remaining · @${statusR.username}`
+      : (statusR.error || 'Not connected');
+  }
+}
+
+async function igSaveSettings() {
+  const persona  = document.getElementById('ig-persona-inp')?.value.trim();
+  const delayMin = parseInt(document.getElementById('ig-delay-min')?.value || '3');
+  const delayMax = parseInt(document.getElementById('ig-delay-max')?.value || '12');
+  const limit    = parseInt(document.getElementById('ig-post-limit')?.value || '50');
+
+  const r = await fetch(`${API}/instagram/settings`, {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({auto_reply_persona: persona, reply_delay_min: delayMin, reply_delay_max: delayMax, daily_post_limit: limit}),
+  }).then(x => x.json()).catch(() => ({}));
+
+  _igMsg('ig-settings-msg', r.ok ? 'Settings saved.' : (r.error || 'Save failed.'), r.ok);
+}
+
+// ── panel lifecycle ───────────────────────────────────
+document.getElementById('wpb-ig')?.addEventListener('click', () => {
+  igRefreshStatus();
+});
 
 
 // ════════════════════════════════════════════════════

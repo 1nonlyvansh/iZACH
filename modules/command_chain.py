@@ -481,6 +481,7 @@ Output format:
                 'printer': 'p-print', 'print': 'p-print',
                 'smart home': 'p-sh', 'home control': 'p-sh', 'iot': 'p-sh',
                 'thermostat': 'p-sh', 'nest': 'p-sh', 'chromecast': 'p-sh',
+                'instagram': 'p-ig', 'dms': 'p-ig', 'instagram inbox': 'p-ig',
             }
             _has_widget_kw = 'widget' in resolved_cmd or 'panel' in resolved_cmd
             _close_all_except = ('close all' in resolved_cmd or 'hide all' in resolved_cmd) and 'except' in resolved_cmd
@@ -733,7 +734,6 @@ Output format:
                     if result.get("success"):
                         self.speak(result.get("message", "Done"))
                     else:
-                        # Not recognised by engine — fall through to AI
                         err = result.get("error", "")
                         if err and err != "Command not recognized":
                             self.speak(result.get("message", err))
@@ -741,6 +741,31 @@ Output format:
                             self._classify_and_execute(resolved_cmd)
                 except Exception as _she:
                     import logging as _l; _l.getLogger("iZACH.Chain").debug(f"[SH] {_she}")
+                    self._classify_and_execute(resolved_cmd)
+                continue
+
+            # ── PHASE 5B: INSTAGRAM VOICE COMMANDS ──────────────────────────
+            _IG_TRIGGERS = [
+                "instagram", "my followers", "follower count", "how many followers",
+                "check dms", "instagram inbox", "instagram messages",
+                "post to instagram", "instagram post", "post a photo",
+                "auto reply", "enable auto reply", "disable auto reply",
+                "stop auto reply", "start auto reply",
+            ]
+            if any(t in resolved_cmd for t in _IG_TRIGGERS):
+                try:
+                    from modules.instagram_engine import execute_voice_command as _ig_cmd
+                    result = _ig_cmd(resolved_cmd)
+                    if result.get("success"):
+                        self.speak(result.get("message", "Done"))
+                    else:
+                        msg = result.get("message", "")
+                        if msg and msg != "Command not recognized for Instagram.":
+                            self.speak(msg)
+                        else:
+                            self._classify_and_execute(resolved_cmd)
+                except Exception as _ige:
+                    import logging as _l; _l.getLogger("iZACH.Chain").debug(f"[IG] {_ige}")
                     self._classify_and_execute(resolved_cmd)
                 continue
 
