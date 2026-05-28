@@ -27,6 +27,7 @@ ENROLL_FRAMES  = 5
 VERIFY_TIMEOUT = 8.0
 
 _speak_func = None
+_enrolling  = False   # voice_loop checks this to pause mic during face enrollment
 
 
 def init(speak_fn):
@@ -43,8 +44,8 @@ def _broadcast(state: str):
     try:
         from modules.ws_bridge import broadcast
         broadcast({"type": "face_verify", "state": state})
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"[FaceAuth] Broadcast failed ({state}): {e}")
 
 
 def is_enrolled() -> bool:
@@ -59,7 +60,11 @@ def is_enrolled() -> bool:
 def _grab_rgb():
     """Open camera, grab one RGB frame, release immediately."""
     import cv2
-    cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+    try:
+        from modules.camera_vision import _cam_device_index as _idx
+    except Exception:
+        _idx = 0
+    cap = cv2.VideoCapture(_idx, cv2.CAP_DSHOW)
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
     cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
@@ -170,15 +175,51 @@ def _reap(p):
 
 def enroll_owner(callback=None):
     """Non-blocking. dlib runs in subprocess and is freed on completion."""
+    global _enrolling
+    if _enrolling:
+        logger.info("[FaceAuth] Enrollment already in progress.")
+        return
+    _enrolling = True
+
     def _monitor():
+        global _enrolling
+        try:
+            _do_enroll()
+        finally:
+            _enrolling = False
+
+    def _do_enroll():
+        logger.info("[FaceAuth] Enrollment started — spawning subprocess.")
         _broadcast("enrolling")
+        # Release any active camera stream in the main process so the
+        # subprocess can open the camera. Windows allows only one process
+        # to hold a camera handle at a time.
+        try:
+            from modules import camera_vision as _cv_mod
+            with _cv_mod._stream_lock:
+                if _cv_mod._stream_cap is not None:
+                    _cv_mod._stream_cap.release()
+                    _cv_mod._stream_cap = None
+                    logger.info("[FaceAuth] Released main-process camera stream.")
+        except Exception as _rel_err:
+            logger.debug(f"[FaceAuth] Could not release stream: {_rel_err}")
+
         _speak("Look directly at the camera. Stay still — capturing your face now.")
-        p, q = _spawn_process(_enroll_worker, (FACE_DATA_FILE,))
+        try:
+            p, q = _spawn_process(_enroll_worker, (FACE_DATA_FILE,))
+        except Exception as _spawn_err:
+            logger.error(f"[FaceAuth] Subprocess spawn failed: {_spawn_err}")
+            _broadcast("failed")
+            _speak("Could not start face enrollment subprocess.")
+            if callback:
+                callback(False)
+            return
 
         while True:
             try:
                 event, value = q.get(timeout=30)
             except Exception:
+                logger.warning("[FaceAuth] Enrollment timed out waiting for subprocess.")
                 _broadcast("failed")
                 _speak("Face enrollment timed out.")
                 p.terminate()

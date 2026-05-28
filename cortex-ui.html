@@ -60,31 +60,43 @@ body.cam-mode #chud { opacity:1; }
 #scr-speak { transform:translateX(100%); }
 
 /* ── IDLE screen ── */
-.idle-layout { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:22px; height:100%; }
-.idle-orb { position:relative; display:flex; align-items:center; justify-content:center; width:220px; height:220px; }
+.idle-layout { position:relative; width:100%; height:100%; }
+.idle-orb { position:absolute; top:calc(50% - 110px); left:calc(50% - 110px); display:flex; align-items:center; justify-content:center; width:220px; height:220px; }
 .iring { position:absolute; border-radius:50%; border:1px solid; }
-#ir3 { border-color:rgba(0,148,255,0.1); width:100%; height:100%; border-style:dashed; animation:rspin 36s linear infinite reverse; }
-#ir2 { border-color:rgba(0,148,255,0.50); width:70%; height:70%; animation:rspin 22s linear infinite; }
-#ir1 { border-color:rgba(0,148,255,0.5); width:44%; height:44%; animation:ringp 3s ease-in-out infinite; }
-.idot { position:absolute; border-radius:50%; width:10px; height:10px; background:var(--c); box-shadow:0 0 10px var(--c),0 0 26px rgba(0,148,255,0.45); }
-#iclk { text-align:center; }
-#ict  { font-size:54px; color:rgba(0,148,255,0.78); font-weight:300; letter-spacing:.07em; }
-#icd  { font-size:9px; letter-spacing:.5em; color:rgba(0,148,255,0.52); margin-top:7px; }
-#idle-vitals { font-size:9px; letter-spacing:.32em; color:rgba(0,148,255,0.45); display:flex; gap:10px; align-items:center; }
+#ir3 { border-color:var(--orb-dim,rgba(0,148,255,0.1)); width:100%; height:100%; border-style:dashed; animation:rspin 36s linear infinite reverse; transition:border-color 0.6s; }
+#ir2 { border-color:var(--orb-mid,rgba(0,148,255,0.50)); width:70%; height:70%; animation:rspin 22s linear infinite; transition:border-color 0.6s; }
+#ir1 { border-color:var(--orb-bright,rgba(0,148,255,0.5)); width:44%; height:44%; animation:ringp 3s ease-in-out infinite; transition:border-color 0.6s; }
+.idot { position:absolute; border-radius:50%; width:10px; height:10px; background:var(--orb-c,var(--c)); box-shadow:0 0 10px var(--orb-c,var(--c)),0 0 26px var(--orb-glow,rgba(0,148,255,0.45)); transition:background 0.6s, box-shadow 0.6s; }
+/* Time — bottom left */
+#ict  { position:absolute; bottom:32px; left:32px; font-size:54px; color:rgba(0,148,255,0.78); font-weight:300; letter-spacing:.07em; line-height:1; }
+/* Day + Date — bottom right */
+#icd  { position:absolute; bottom:38px; right:32px; font-size:9px; letter-spacing:.5em; color:rgba(0,148,255,0.52); text-align:right; }
+/* CPU/RAM/GPU — top center */
+#idle-vitals { position:absolute; top:44px; left:50%; transform:translateX(-50%); font-size:9px; letter-spacing:.32em; color:rgba(0,148,255,0.45); display:flex; gap:10px; align-items:center; white-space:nowrap; }
 .iv-sep { color:rgba(0,148,255,0.50); }
-#ics  { font-size:8px; letter-spacing:.45em; color:rgba(0,148,255,0.55); }
-#idle-conn-status { display:flex; gap:6px; align-items:center; font-size:7px; letter-spacing:.22em; color:rgba(0,148,255,0.65); margin-top:-8px; }
+/* WA/Phone — just below vitals */
+#idle-conn-status { position:absolute; top:68px; left:50%; transform:translateX(-50%); display:flex; gap:6px; align-items:center; font-size:7px; letter-spacing:.22em; color:rgba(0,148,255,0.65); white-space:nowrap; }
+#ics  { display:none; }
 .ics-dot { width:5px; height:5px; border-radius:50%; background:rgba(0,148,255,0.15); display:inline-block; flex-shrink:0; }
 .ics-dot.on { background:#00c853; box-shadow:0 0 5px #00c853; }
 .ics-sep { color:rgba(0,148,255,0.38); }
 
+/* ── Idle wallpaper layers ── */
+#scr-idle { overflow:hidden; } /* keep position:absolute from .screen — do NOT override */
+#idle-wp  { position:absolute; inset:0; background-size:cover; background-position:center; background-repeat:no-repeat; opacity:0; transition:opacity 0.6s; z-index:0; }
+#idle-wp.active { opacity:1; }
+#idle-vignette { position:absolute; inset:0; pointer-events:none; opacity:0; transition:opacity 0.6s; z-index:1;
+  background:radial-gradient(ellipse at center, transparent 25%, rgba(1,8,20,0.55) 65%, rgba(1,8,20,0.92) 100%); }
+#idle-vignette.active { opacity:1; }
+#ruler { position:absolute; top:0; left:0; right:0; height:20px; display:flex; align-items:flex-end; pointer-events:none; z-index:2; }
+.idle-layout { position:relative; width:100%; height:100%; z-index:2; }
+
 /* Top ruler tick bar (idle screen) */
-#ruler { position:absolute; top:0; left:0; right:0; height:20px; display:flex; align-items:flex-end; pointer-events:none; }
 #ruler canvas { width:100%; height:100%; }
 
 /* ── SPEAK screen ── */
 .speak-orb { position:relative; display:flex; align-items:center; justify-content:center; width:510px; height:510px; }
-#sring  { position:absolute; border-radius:50%; width:100%; height:100%; border:1px solid var(--c); box-shadow:0 0 35px rgba(0,148,255,0.3),0 0 90px rgba(0,148,255,0.12),inset 0 0 60px rgba(0,148,255,0.04); animation:ringp 2s ease-in-out infinite; }
+#sring  { position:absolute; border-radius:50%; width:100%; height:100%; border:1px solid var(--orb-c,var(--c)); box-shadow:0 0 35px var(--orb-glow30,rgba(0,148,255,0.3)),0 0 90px var(--orb-glow12,rgba(0,148,255,0.12)),inset 0 0 60px var(--orb-glow04,rgba(0,148,255,0.04)); animation:ringp 2s ease-in-out infinite; transition:border-color 0.6s, box-shadow 0.6s; }
 #sring2 { position:absolute; border-radius:50%; width:73%; height:73%; border:1px solid rgba(0,148,255,0.22); animation:rspin 14s linear infinite; }
 #sring3 { position:absolute; border-radius:50%; width:88%; height:88%; border:1px dashed rgba(0,148,255,0.12); animation:rspin 32s linear infinite reverse; }
 #stsv   { position:absolute; width:100%; height:100%; pointer-events:none; }
@@ -344,7 +356,7 @@ body.cam-mode #chud { opacity:1; }
 /* ── TASKBAR (MacOS-style pill dock) ── */
 #taskbar { position:fixed; bottom:18px; left:50%; z-index:9000; user-select:none; touch-action:none; transition:opacity 0.3s ease; }
 #tb-inner { display:flex; align-items:center; gap:2px; padding:8px 16px; background:rgba(1,4,18,0.9); border:1px solid rgba(0,148,255,0.18); border-radius:20px; backdrop-filter:blur(16px); box-shadow:0 4px 32px rgba(0,0,0,0.7),0 0 20px rgba(0,148,255,0.07); }
-.tb-btn { width:auto; min-width:44px; height:auto; padding:7px 8px; border:none; background:transparent; color:rgba(0,148,255,0.45); cursor:pointer; border-radius:12px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px; transition:all .15s; flex-shrink:0; }
+.tb-btn { width:auto; min-width:44px; height:auto; padding:7px 8px; border:none; background:transparent; color:rgba(0,148,255,0.45); cursor:pointer; border-radius:12px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px; transition:transform .12s cubic-bezier(0.34,1.56,0.64,1), background .15s, color .15s, box-shadow .15s; flex-shrink:0; transform-origin:bottom center; }
 .tb-btn:hover, .tb-btn.on { background:rgba(0,148,255,0.1); color:var(--c); box-shadow:0 0 10px rgba(0,148,255,0.2); }
 .tb-ic { font-size:16px; line-height:1; display:block; }
 .tb-lbl { font-size:6px; letter-spacing:.18em; line-height:1; color:rgba(0,148,255,0.35); display:block; font-family:'Courier New',monospace; }
@@ -352,14 +364,62 @@ body.cam-mode #chud { opacity:1; }
 .tb-sep { width:1px; height:36px; background:rgba(0,148,255,0.1); margin:0 3px; flex-shrink:0; }
 #tb-resize { position:absolute; right:-14px; top:50%; transform:translateY(-50%); width:14px; height:36px; cursor:ew-resize; display:flex; align-items:center; justify-content:center; color:rgba(0,148,255,0.50); font-size:10px; }
 
-/* Widget picker */
-#widget-picker { position:fixed; bottom:78px; left:50%; transform:translateX(-50%) translateY(8px); display:flex; gap:2px; padding:8px 14px; background:rgba(1,4,18,0.92); border:1px solid rgba(0,148,255,0.15); border-radius:18px; backdrop-filter:blur(14px); z-index:8999; opacity:0; pointer-events:none; transition:opacity .2s, transform .2s; }
+/* ── Widget Picker (tabbed) ── */
+#widget-picker {
+  position:fixed; bottom:80px; left:50%;
+  transform:translateX(-50%) translateY(12px);
+  width:360px;   /* JS overrides this with taskbar's actual rendered width */
+  min-width:260px; max-width:900px;
+  background:rgba(1,5,20,0.96);
+  border:1px solid rgba(0,148,255,0.18);
+  border-radius:16px;
+  backdrop-filter:blur(20px);
+  -webkit-backdrop-filter:blur(20px);
+  box-shadow:0 -4px 40px rgba(0,0,0,0.7),0 0 0 1px rgba(0,148,255,0.05) inset,0 0 24px rgba(0,148,255,0.06);
+  z-index:8999; opacity:0; pointer-events:none;
+  transition:opacity .22s, transform .22s;
+  overflow:hidden;
+}
 #widget-picker.open { opacity:1; pointer-events:all; transform:translateX(-50%) translateY(0); }
-.wp-btn { width:auto; min-width:42px; padding:6px 7px; border:none; background:transparent; color:rgba(0,148,255,0.45); cursor:pointer; border-radius:10px; display:flex; flex-direction:column; align-items:center; gap:4px; transition:all .12s; }
-.wp-btn:hover, .wp-btn.on { background:rgba(0,148,255,0.1); color:var(--c); }
-.wp-ic { font-size:14px; line-height:1; display:block; }
-.wp-lbl { font-size:5.5px; letter-spacing:.15em; color:rgba(0,148,255,0.35); font-family:'Courier New',monospace; display:block; line-height:1; white-space:nowrap; }
-.wp-btn:hover .wp-lbl, .wp-btn.on .wp-lbl { color:rgba(0,148,255,0.7); }
+/* Tab bar */
+.wp-tabs { display:flex; border-bottom:1px solid rgba(0,148,255,0.09); padding:0 6px; }
+.wp-tab {
+  flex:1; padding:8px 4px; font-size:6px; letter-spacing:.3em;
+  color:rgba(0,148,255,0.38); background:none; border:none; cursor:pointer;
+  font-family:'Share Tech Mono','Courier New',monospace;
+  border-bottom:1px solid transparent; margin-bottom:-1px;
+  transition:color .12s, border-color .12s;
+}
+.wp-tab:hover { color:rgba(0,148,255,0.65); }
+.wp-tab.active { color:var(--c); border-bottom-color:var(--c); }
+/* Tab panels */
+.wp-panel { display:none; padding:10px 10px 12px; }
+.wp-panel.active { display:grid; grid-template-columns:repeat(auto-fill,minmax(52px,1fr)); gap:4px; }
+/* Buttons */
+.wp-btn {
+  padding:8px 4px; border:none;
+  background:rgba(0,148,255,0.03);
+  border:1px solid rgba(0,148,255,0.07);
+  color:rgba(0,148,255,0.45); cursor:pointer;
+  border-radius:10px; display:flex; flex-direction:column;
+  align-items:center; gap:4px; transition:all .14s;
+}
+.wp-btn:hover {
+  background:rgba(0,148,255,0.12);
+  border-color:rgba(0,148,255,0.35);
+  color:var(--c);
+  transform:translateY(-2px);
+  box-shadow:0 4px 12px rgba(0,148,255,0.15);
+}
+.wp-btn.on {
+  background:rgba(0,148,255,0.14);
+  border-color:rgba(0,148,255,0.45);
+  color:var(--c);
+  box-shadow:0 0 8px rgba(0,148,255,0.2);
+}
+.wp-ic { font-size:15px; line-height:1; display:block; }
+.wp-lbl { font-size:5px; letter-spacing:.12em; color:rgba(0,148,255,0.32); font-family:'Share Tech Mono','Courier New',monospace; display:block; line-height:1; white-space:nowrap; text-transform:uppercase; }
+.wp-btn:hover .wp-lbl, .wp-btn.on .wp-lbl { color:rgba(0,148,255,0.65); }
 
 /* Device bar — sits ABOVE taskbar, custom upward-opening dropdowns */
 #device-bar { position:fixed; bottom:96px; left:50%; transform:translateX(-50%); display:flex; gap:8px; align-items:center; z-index:8998; opacity:0.45; transition:opacity .2s; }
@@ -392,7 +452,7 @@ body.cam-mode #chud { opacity:1; }
 /* ── Animations ── */
 @keyframes rspin    { from{transform:rotate(0)} to{transform:rotate(360deg)} }
 @keyframes aspin    { from{transform:rotate(0)} to{transform:rotate(360deg)} }
-@keyframes ringp    { 0%,100%{box-shadow:0 0 35px rgba(0,148,255,0.3),0 0 90px rgba(0,148,255,0.12),inset 0 0 60px rgba(0,148,255,0.04)} 50%{box-shadow:0 0 55px rgba(0,148,255,0.42),0 0 130px rgba(0,148,255,0.18),inset 0 0 80px rgba(0,148,255,0.06)} }
+@keyframes ringp    { 0%,100%{box-shadow:0 0 35px var(--orb-glow30,rgba(0,148,255,0.3)),0 0 90px var(--orb-glow12,rgba(0,148,255,0.12)),inset 0 0 60px var(--orb-glow04,rgba(0,148,255,0.04))} 50%{box-shadow:0 0 55px var(--orb-glow42,rgba(0,148,255,0.42)),0 0 130px var(--orb-glow18,rgba(0,148,255,0.18)),inset 0 0 80px var(--orb-glow06,rgba(0,148,255,0.06))} }
 @keyframes dblink   { 0%,100%{opacity:1} 50%{opacity:0.2} }
 @keyframes blink    { 0%,100%{opacity:1} 50%{opacity:0} }
 @keyframes vizB     { 0%,100%{transform:scaleY(0.1);opacity:0.2} 50%{transform:scaleY(1);opacity:0.75} }
@@ -461,7 +521,7 @@ body.cam-mode #chud { opacity:1; }
 
 /* ── SETTINGS PAGE ── */
 #settings-page {
-  position:fixed; inset:0; z-index:10001;
+  position:fixed; inset:0; z-index:10003;
   background:rgba(1,4,18,0.98);
   display:flex; flex-direction:column;
   opacity:0; pointer-events:none;
@@ -526,6 +586,27 @@ body.cam-mode #chud { opacity:1; }
 .sp-add-inp:focus { border-color:rgba(0,148,255,0.38); }
 .sp-add-btn { background:rgba(0,148,255,0.05); border:1px solid rgba(0,148,255,0.16); color:rgba(0,148,255,0.55); font-family:'Courier New',monospace; font-size:8.5px; letter-spacing:.2em; padding:6px 14px; cursor:pointer; transition:all .12s; white-space:nowrap; }
 .sp-add-btn:hover { border-color:rgba(0,148,255,0.45); color:var(--c); background:rgba(0,148,255,0.1); }
+
+/* ── Smart Memory ── */
+.sm-cat-btn { background:rgba(0,148,255,0.05); border:1px solid rgba(0,148,255,0.15); border-radius:3px; color:rgba(0,148,255,0.5); font-family:'Share Tech Mono',monospace; font-size:8.5px; letter-spacing:.12em; padding:4px 8px; cursor:pointer; transition:all .12s; }
+.sm-cat-btn.active { background:rgba(0,148,255,0.14); border-color:rgba(0,148,255,0.38); color:rgba(0,200,255,0.9); }
+.sm-card { border:1px solid rgba(0,148,255,0.1); border-radius:4px; padding:10px 12px; margin-bottom:8px; background:rgba(0,148,255,0.03); position:relative; }
+.sm-card:hover { border-color:rgba(0,148,255,0.22); background:rgba(0,148,255,0.06); }
+.sm-card-content { font-size:10.5px; color:var(--th); line-height:1.65; word-break:break-word; margin-bottom:6px; }
+.sm-card-meta { display:flex; align-items:center; gap:8px; }
+.sm-badge { font-size:7.5px; letter-spacing:.18em; padding:2px 6px; border-radius:2px; font-family:'Share Tech Mono'; }
+.sm-badge.profile { background:rgba(0,148,255,0.1); color:rgba(0,180,255,0.7); border:1px solid rgba(0,148,255,0.2); }
+.sm-badge.instruction { background:rgba(255,180,0,0.08); color:rgba(255,195,40,0.75); border:1px solid rgba(255,180,0,0.2); }
+.sm-badge.automation { background:rgba(0,200,83,0.08); color:rgba(0,220,100,0.75); border:1px solid rgba(0,200,83,0.2); }
+.sm-card-ts { font-size:7.5px; color:rgba(0,148,255,0.35); font-family:'Share Tech Mono'; flex:1; }
+.sm-card-actions { display:flex; gap:5px; }
+.sm-btn { background:transparent; border:1px solid rgba(0,148,255,0.15); border-radius:2px; color:rgba(0,148,255,0.5); font-family:'Share Tech Mono'; font-size:8px; padding:2px 7px; cursor:pointer; transition:all .1s; }
+.sm-btn:hover { border-color:rgba(0,148,255,0.38); color:rgba(0,200,255,0.85); }
+.sm-btn.del:hover { border-color:rgba(255,50,50,0.4); color:rgba(255,80,80,0.8); }
+.sm-toggle { width:28px; height:14px; border-radius:7px; background:rgba(0,148,255,0.12); border:1px solid rgba(0,148,255,0.2); cursor:pointer; position:relative; transition:background .15s; flex-shrink:0; }
+.sm-toggle.on { background:rgba(0,200,83,0.25); border-color:rgba(0,200,83,0.4); }
+.sm-toggle::after { content:''; position:absolute; top:2px; left:2px; width:8px; height:8px; border-radius:50%; background:rgba(0,148,255,0.5); transition:left .15s, background .15s; }
+.sm-toggle.on::after { left:16px; background:rgba(0,220,100,0.9); }
 
 /* Settings page font overrides — match old UI */
 #settings-page { font-family:'JetBrains Mono','Courier New',monospace; }
@@ -603,27 +684,6 @@ body.cam-mode #chud { opacity:1; }
 .brief-item { padding:5px 0; border-bottom:1px solid rgba(0,148,255,0.04); }
 .brief-item:last-child { border-bottom:none; }
 
-/* Ollama section */
-.ollama-stat-grid { display:grid; grid-template-columns:1fr 1fr; gap:6px 16px; margin:8px 0 12px; }
-.ollama-stat { display:flex; flex-direction:column; gap:2px; }
-.ollama-stat-label { font-size:7px; letter-spacing:.32em; color:rgba(0,148,255,0.3); }
-.ollama-stat-val   { font-size:10px; color:rgba(0,148,255,0.85); letter-spacing:.06em; }
-.ollama-stat-val.highlight { color:var(--c); text-shadow:0 0 8px rgba(0,148,255,0.4); }
-.ollama-badge { display:inline-flex; align-items:center; gap:6px; padding:5px 10px; background:rgba(0,148,255,0.04); border:1px solid rgba(0,148,255,0.12); margin-bottom:12px; }
-.ollama-badge-dot { width:6px; height:6px; border-radius:50%; flex-shrink:0; }
-.ollama-badge-dot.custom { background:var(--c); box-shadow:0 0 6px var(--c); }
-.ollama-badge-dot.base   { background:rgba(0,148,255,0.2); }
-.ollama-badge-text { font-size:9px; letter-spacing:.12em; color:rgba(0,148,255,0.75); }
-.ollama-progress-wrap { margin-bottom:12px; }
-.ollama-progress-labels { display:flex; justify-content:space-between; margin-bottom:4px; }
-.ollama-progress-lbl  { font-size:7px; letter-spacing:.28em; color:rgba(0,148,255,0.32); }
-.ollama-progress-val  { font-size:8px; color:rgba(0,148,255,0.6); }
-.ollama-track { height:3px; background:rgba(0,148,255,0.08); border-radius:2px; overflow:hidden; }
-.ollama-fill  { height:100%; border-radius:2px; transition:width 0.5s ease; }
-.ollama-hint  { font-size:7.5px; color:rgba(0,148,255,0.55); margin-top:4px; letter-spacing:.06em; }
-.ollama-btn-row { display:flex; gap:8px; margin-top:4px; }
-.ollama-msg { font-size:8px; color:rgba(0,148,255,0.5); letter-spacing:.1em; margin-top:8px; min-height:14px; }
-
 /* ── FONT VISIBILITY ── */
 body { color:var(--th); }
 
@@ -647,6 +707,16 @@ body.tb-autohide.tb-reveal #device-bar { opacity:0.5; pointer-events:all; }
 
 /* ── DEVICES WIDGET ── */
 #p-devices { right:20px; top:120px; width:250px; }
+
+/* ── CALL LOG WIDGET ── */
+.call-row { padding:5px 10px; border-bottom:1px solid rgba(255,60,60,0.06); font-size:8px; }
+.call-row .call-who { color:#6ab8d0; font-family:'Share Tech Mono',monospace; letter-spacing:.08em; }
+.call-row .call-tag { display:inline-block; padding:1px 5px; border-radius:2px; font-size:6px; letter-spacing:.12em; margin-left:5px; }
+.call-row .call-ts  { color:rgba(0,148,255,0.4); font-size:7px; float:right; }
+.call-row .call-act { color:rgba(255,160,80,0.6); font-size:7px; }
+.call-row .call-cb  { margin-top:3px; display:flex; gap:4px; }
+.call-row .call-cb button { padding:1px 6px; border-radius:2px; border:1px solid rgba(0,148,255,0.25); background:rgba(0,148,255,0.06); color:rgba(0,148,255,0.6); font-size:6px; cursor:pointer; font-family:inherit; letter-spacing:.08em; }
+.call-esc { background:rgba(255,30,30,0.08) !important; border-left:2px solid rgba(255,30,30,0.4) !important; }
 
 /* ── OCR + PRINT WIDGETS ── */
 #p-ocr   { left:80px; top:80px; width:290px; height:380px; }
@@ -830,35 +900,6 @@ body.tb-autohide.tb-reveal #device-bar { opacity:0.5; pointer-events:all; }
 .agt-log-row .agt-log-ts { color:rgba(0,148,255,0.2); white-space:nowrap; }
 .agt-log-row .agt-log-name { color:rgba(0,148,255,0.5); }
 @keyframes agentPulse { 0%,100%{box-shadow:0 0 5px rgba(0,148,255,0.5)} 50%{box-shadow:0 0 12px rgba(0,148,255,0.9)} }
-/* ── GESTURE ENGINE PANEL ── */
-#ge-dot { animation:none; }
-#ge-dot.active { animation:dblink 1s infinite; background:#00c853; box-shadow:0 0 6px #00c853; }
-.ge-chip { font-size:7px; letter-spacing:.15em; color:rgba(0,148,255,0.45); background:rgba(0,148,255,0.05); border:1px solid rgba(0,148,255,0.1); padding:3px 6px; border-radius:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-#ge-toggle.on { background:rgba(0,148,255,0.18); border-color:rgba(0,148,255,0.5); }
-#ge-toggle.on #ge-toggle-knob { left:21px; background:#0094ff; box-shadow:0 0 6px rgba(0,148,255,0.7); }
-#ge-status-txt.on { color:#0094ff; }
-/* Gesture grab cursor feedback */
-body.gesture-grabbing * { cursor:grabbing !important; }
-/* Gesture HUD — floating pill */
-#gesture-hud {
-  position:fixed; top:56px; left:50%; transform:translateX(-50%);
-  display:flex; align-items:center; gap:8px;
-  background:rgba(0,4,18,0.88); backdrop-filter:blur(10px);
-  border:1px solid rgba(0,148,255,0.35);
-  box-shadow:0 0 16px rgba(0,148,255,0.15);
-  padding:5px 16px; border-radius:20px;
-  font-size:10px; letter-spacing:.28em; color:rgba(0,148,255,0.85);
-  z-index:9100; pointer-events:none;
-  opacity:0; transition:opacity 0.18s ease;
-}
-#gesture-hud.show { opacity:1; }
-#gesture-hud-hand { font-size:7px; letter-spacing:.3em; color:rgba(0,148,255,0.4); }
-/* Grabbed panel glow */
-.pnl.gesture-grabbed {
-  border-color:rgba(0,148,255,0.7) !important;
-  box-shadow:0 0 28px rgba(0,148,255,0.3), 0 0 8px rgba(0,148,255,0.2) inset !important;
-  transition:none !important;
-}
 /* Step 8 — Panel spotlight / focus mode */
 body.spotlight-mode .pnl:not(.spotlighted) {
   opacity:0.15 !important;
@@ -872,6 +913,162 @@ body.spotlight-mode .pnl:not(.spotlighted) {
   transition:box-shadow 0.35s ease, border-color 0.35s ease !important;
   z-index:100 !important;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   FORGE-PARITY ADDITIONS — match cortex cyan/dark Share-Tech-Mono theme
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ─── Voice Enrollment Wizard Overlay ────────────────────────────────── */
+#ve-overlay {
+  position:fixed; inset:0; z-index:9000;
+  background:rgba(0,8,18,0.92); backdrop-filter:blur(6px);
+  display:none; align-items:center; justify-content:center;
+}
+#ve-overlay.show { display:flex; }
+#ve-card {
+  background:linear-gradient(135deg,#001428,#002a4a);
+  border:1px solid rgba(0,148,255,0.45);
+  border-radius:6px; padding:26px 30px; width:480px;
+  box-shadow:0 0 50px rgba(0,148,255,0.3), inset 0 0 30px rgba(0,148,255,0.06);
+  font-family:'Share Tech Mono',monospace;
+  position:relative;
+}
+#ve-card::before,#ve-card::after { content:""; position:absolute; width:14px; height:14px; border:1px solid rgba(0,229,255,0.75); }
+#ve-card::before { top:-1px; left:-1px; border-right:none; border-bottom:none; }
+#ve-card::after  { bottom:-1px; right:-1px; border-left:none; border-top:none; }
+#ve-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:18px; padding-bottom:10px; border-bottom:1px solid rgba(0,148,255,0.15); }
+#ve-title { color:#00e5ff; font-size:11px; letter-spacing:.3em; }
+#ve-cancel { background:none; border:none; color:rgba(0,148,255,0.5); font-size:14px; cursor:pointer; }
+#ve-cancel:hover { color:#ff3d3d; }
+#ve-steps { display:flex; align-items:center; gap:6px; margin:14px 0 22px; }
+.ve-step-dot {
+  width:30px; height:30px; border-radius:50%;
+  border:1.5px solid rgba(0,148,255,0.3);
+  display:flex; align-items:center; justify-content:center;
+  color:rgba(0,148,255,0.4); font-size:10px;
+  transition:all .3s;
+}
+.ve-step-dot.active { border-color:#00e5ff; color:#00e5ff; background:rgba(0,229,255,0.1); box-shadow:0 0 10px rgba(0,229,255,0.3); }
+.ve-step-dot.done   { border-color:#1db954; color:#1db954; background:rgba(29,185,84,0.1); }
+.ve-step-line { flex:1; height:1px; background:rgba(0,148,255,0.15); }
+.ve-step-line.done { background:#1db954; }
+#ve-body {
+  background:rgba(0,148,255,0.03);
+  border:1px solid rgba(0,148,255,0.12);
+  border-radius:5px; padding:22px 18px; min-height:130px;
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  text-align:center; gap:14px;
+}
+#ve-phase-lbl { color:rgba(0,148,255,0.5); font-size:9px; letter-spacing:.2em; }
+#ve-phrase   { color:#c8e8f0; font-family:'JetBrains Mono','Courier New',monospace; font-size:13px; line-height:1.6; max-width:380px; }
+#ve-countdown {
+  width:44px; height:44px; border-radius:50%;
+  border:2px solid #00e5ff; display:flex; align-items:center; justify-content:center;
+  color:#00e5ff; font-size:17px;
+  box-shadow:0 0 14px rgba(0,229,255,0.35);
+}
+#ve-rec-line { display:flex; align-items:center; gap:10px; color:#ff3d3d; font-size:11px; }
+.ve-rec-dot { width:10px; height:10px; border-radius:50%; background:#ff3d3d; box-shadow:0 0 9px #ff3d3d; animation:statusPulseRed 0.8s infinite; }
+
+/* ─── Toast Notifications ────────────────────────────────────────────── */
+#toast-container {
+  position:fixed; top:18px; right:18px; z-index:9500;
+  display:flex; flex-direction:column; gap:8px;
+  pointer-events:none;
+}
+.toast {
+  background:rgba(0,8,18,0.95); border:1px solid rgba(0,148,255,0.4);
+  border-radius:4px; padding:10px 14px; min-width:240px; max-width:340px;
+  color:#c8e8f0; font-family:'Share Tech Mono',monospace; font-size:9px;
+  letter-spacing:.1em; box-shadow:0 4px 18px rgba(0,0,0,0.5), inset 0 0 12px rgba(0,148,255,0.06);
+  pointer-events:auto; cursor:pointer;
+  animation:toastIn .25s ease;
+  display:flex; gap:10px; align-items:flex-start;
+}
+.toast.error   { border-color:rgba(255,61,61,0.45); }
+.toast.success { border-color:rgba(29,185,84,0.45); }
+.toast.warn    { border-color:rgba(255,179,0,0.45); }
+.toast-icon { color:#00e5ff; font-size:11px; flex-shrink:0; }
+.toast.error .toast-icon   { color:#ff3d3d; }
+.toast.success .toast-icon { color:#1db954; }
+.toast.warn .toast-icon    { color:#ffb300; }
+.toast-body { flex:1; }
+.toast-title { color:#00e5ff; font-size:8px; letter-spacing:.2em; margin-bottom:3px; }
+.toast.error .toast-title   { color:#ff3d3d; }
+.toast.success .toast-title { color:#1db954; }
+.toast.warn .toast-title    { color:#ffb300; }
+.toast-text { line-height:1.4; color:rgba(200,232,240,0.85); }
+@keyframes toastIn { from { opacity:0; transform:translateX(20px); } to { opacity:1; transform:translateX(0); } }
+@keyframes toastOut { to { opacity:0; transform:translateX(20px); } }
+.toast.out { animation:toastOut .25s ease forwards; }
+
+/* ─── Shell Confirm Overlay ──────────────────────────────────────────── */
+#shell-confirm {
+  position:fixed; inset:0; z-index:9100;
+  background:rgba(8,0,0,0.88); backdrop-filter:blur(4px);
+  display:none; align-items:center; justify-content:center;
+}
+#shell-confirm.show { display:flex; }
+#shell-confirm-card {
+  background:linear-gradient(135deg,#1a0000,#280014);
+  border:1.5px solid rgba(255,61,61,0.55);
+  border-radius:6px; padding:22px 26px; width:480px;
+  box-shadow:0 0 40px rgba(255,61,61,0.3);
+  font-family:'Share Tech Mono',monospace;
+}
+#shell-confirm-title { color:#ff3d3d; font-size:11px; letter-spacing:.3em; margin-bottom:14px; }
+#shell-confirm-cmd {
+  background:#000814; border:1px solid rgba(255,61,61,0.3);
+  border-radius:4px; padding:10px 12px;
+  color:#ffb380; font-family:'JetBrains Mono','Courier New',monospace; font-size:11px;
+  word-break:break-all; margin-bottom:14px;
+  max-height:160px; overflow:auto;
+}
+#shell-confirm-msg { color:rgba(255,180,128,0.7); font-size:9px; letter-spacing:.1em; margin-bottom:18px; line-height:1.5; }
+#shell-confirm-btns { display:flex; gap:8px; justify-content:flex-end; }
+.shell-btn { padding:7px 18px; background:none; border:1px solid; border-radius:3px; font-family:'Share Tech Mono',monospace; font-size:9px; letter-spacing:.2em; cursor:pointer; }
+.shell-btn.allow { color:#ff3d3d; border-color:rgba(255,61,61,0.55); background:rgba(255,61,61,0.08); }
+.shell-btn.allow:hover { background:rgba(255,61,61,0.18); }
+.shell-btn.deny  { color:rgba(0,148,255,0.7); border-color:rgba(0,148,255,0.35); }
+.shell-btn.deny:hover { background:rgba(0,148,255,0.1); }
+
+/* ─── Chat Copy Buttons ──────────────────────────────────────────────── */
+.cm { position:relative; }
+.cm-copy {
+  position:absolute; top:-4px; right:-4px;
+  background:rgba(0,8,18,0.92); border:1px solid rgba(0,148,255,0.35);
+  border-radius:3px; padding:2px 6px;
+  color:rgba(0,229,255,0.7); font-family:'Share Tech Mono',monospace;
+  font-size:7px; letter-spacing:.15em;
+  cursor:pointer; opacity:0; transition:opacity .15s, color .15s;
+}
+.cm:hover .cm-copy { opacity:1; }
+.cm-copy:hover { color:#00f0ff; border-color:rgba(0,229,255,0.7); }
+.cm-copy.copied { color:#1db954; border-color:rgba(29,185,84,0.6); }
+
+/* ─── Suggestion Chips on empty chat ─────────────────────────────────── */
+#chat-suggestions {
+  display:none; padding:10px 12px;
+  flex-wrap:wrap; gap:6px;
+}
+#chat-suggestions.show { display:flex; }
+.chip {
+  background:rgba(0,148,255,0.06); border:1px solid rgba(0,148,255,0.18);
+  border-radius:14px; padding:5px 11px;
+  color:rgba(0,229,255,0.7); font-family:'Share Tech Mono',monospace;
+  font-size:8px; letter-spacing:.12em;
+  cursor:pointer; transition:all .15s;
+}
+.chip:hover { background:rgba(0,148,255,0.18); color:#00f0ff; border-color:rgba(0,229,255,0.55); }
+
+/* ─── Live Mic Waveform on Idle Orb ──────────────────────────────────── */
+#mic-wave-canvas {
+  position:absolute; top:0; left:0; width:100%; height:100%;
+  pointer-events:none; opacity:0; transition:opacity .35s;
+}
+#mic-wave-canvas.active { opacity:1; }
+.idle-orb { cursor:grab; user-select:none; }
+.idle-orb.dragging { cursor:grabbing; }
 </style>
 </head>
 <body>
@@ -919,21 +1116,11 @@ body.spotlight-mode .pnl:not(.spotlighted) {
 
   <!-- IDLE -->
   <div class="screen" id="scr-idle">
+    <div id="idle-wp"></div>
+    <div id="idle-vignette"></div>
     <div id="ruler"><canvas id="ruler-c"></canvas></div>
     <div class="idle-layout">
-      <!-- Clock above orb -->
-      <div id="iclk">
-        <div id="ict">00:00:00</div>
-        <div id="icd">FRIDAY · 22 MAY 2026</div>
-      </div>
-      <!-- Steady neural orb — no crosshair, no corner brackets -->
-      <div class="idle-orb">
-        <div class="iring" id="ir3"></div>
-        <div class="iring" id="ir2"></div>
-        <div class="iring" id="ir1"></div>
-        <div class="idot"></div>
-      </div>
-      <!-- Vitals single line below orb -->
+      <!-- CPU/RAM/GPU — top center -->
       <div id="idle-vitals">
         <span id="iv-cpu">CPU · 0%</span>
         <span class="iv-sep">·</span>
@@ -941,12 +1128,23 @@ body.spotlight-mode .pnl:not(.spotlighted) {
         <span class="iv-sep">·</span>
         <span id="iv-gpu">GPU · 0%</span>
       </div>
-      <div id="ics">NEURAL INTERFACE · READY</div>
+      <!-- WA/Phone status — below vitals, top center -->
       <div id="idle-conn-status">
         <span class="ics-dot" id="ics-wa"></span><span>WA</span>
         <span class="ics-sep">·</span>
         <span class="ics-dot" id="ics-phone"></span><span>PHONE</span>
       </div>
+      <!-- Orb — center -->
+      <div class="idle-orb">
+        <div class="iring" id="ir3"></div>
+        <div class="iring" id="ir2"></div>
+        <div class="iring" id="ir1"></div>
+        <div class="idot"></div>
+      </div>
+      <!-- Time — bottom left (12hr) -->
+      <div id="ict">12:00:00 AM</div>
+      <!-- Day + Date — bottom right -->
+      <div id="icd">FRIDAY · 22 MAY 2026</div>
     </div>
   </div>
 
@@ -1059,9 +1257,44 @@ body.spotlight-mode .pnl:not(.spotlighted) {
 <div id="p-msg" class="pnl">
   <div class="cb cb-tl"></div><div class="cb cb-tr"></div><div class="cb cb-bl"></div><div class="cb cb-br"></div>
   <div class="ph"><span class="ph-id">07 · MSG</span><span class="ph-cat"><div class="ph-dot"></div>WHATSAPP<span class="ph-min">—</span></span></div>
-  <div class="pnl-body" id="p-msg-body">
+
+  <!-- WA status header -->
+  <div id="wa-status-bar" style="display:flex;align-items:center;gap:8px;padding:6px 12px;border-bottom:1px solid rgba(0,148,255,0.08);">
+    <div id="wa-status-dot" style="width:7px;height:7px;border-radius:50%;background:rgba(255,80,80,0.7);box-shadow:0 0 6px rgba(255,80,80,0.5);"></div>
+    <span id="wa-status-txt" style="font-size:8px;letter-spacing:.18em;color:rgba(0,148,255,0.65);font-family:'Share Tech Mono',monospace;">DISCONNECTED</span>
+  </div>
+
+  <!-- QR — shown only when disconnected and a QR is available -->
+  <div id="wa-qr-state" style="display:none;flex-direction:column;align-items:center;padding:14px;gap:8px;">
+    <div id="wa-qr-box" style="background:#fff;padding:8px;border-radius:4px;border:1px solid rgba(0,148,255,0.3);">
+      <img id="wa-qr-img" src="" alt="" style="display:block;width:160px;height:160px;">
+    </div>
+    <div style="font-size:8px;letter-spacing:.2em;color:rgba(0,148,255,0.6);text-align:center;">SCAN IN WHATSAPP →<br>LINKED DEVICES</div>
+  </div>
+
+  <!-- Tabs -->
+  <div id="wa-tabs" style="display:flex;border-bottom:1px solid rgba(0,148,255,0.10);background:rgba(0,10,25,0.4);">
+    <button id="wa-tab-inbox" onclick="waTab('inbox')" style="flex:1;padding:5px 0;background:rgba(0,148,255,0.10);border:none;border-bottom:2px solid #0094ff;color:#6ab0e0;font-family:'Share Tech Mono',monospace;font-size:8px;letter-spacing:.18em;cursor:pointer;transition:all .15s;">INBOX</button>
+    <button id="wa-tab-dnd"   onclick="waTab('dnd')"   style="flex:1;padding:5px 0;background:transparent;border:none;border-bottom:2px solid transparent;color:rgba(0,148,255,0.35);font-family:'Share Tech Mono',monospace;font-size:8px;letter-spacing:.18em;cursor:pointer;transition:all .15s;">⛔ DND LOG</button>
+  </div>
+
+  <!-- INBOX tab -->
+  <div id="wa-pane-inbox" class="pnl-body" style="display:flex;flex-direction:column;overflow-y:auto;">
     <div data-placeholder style="padding:20px 14px;color:rgba(0,148,255,0.3);font-size:9px;letter-spacing:.2em;line-height:2;">WHATSAPP MESSAGES APPEAR<br>HERE WHEN RECEIVED</div>
   </div>
+
+  <!-- DND LOG tab -->
+  <div id="wa-pane-dnd" style="display:none;flex-direction:column;overflow-y:auto;height:100%;">
+    <!-- DND log header -->
+    <div style="padding:6px 12px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid rgba(255,60,60,0.12);">
+      <span style="font-size:8px;letter-spacing:.18em;color:rgba(255,100,100,0.7);font-family:'Share Tech Mono',monospace;">DND CONTACT LOG</span>
+      <button onclick="dndLogRefresh()" style="padding:2px 8px;background:transparent;border:1px solid rgba(0,148,255,0.2);border-radius:3px;color:rgba(0,148,255,0.5);font-size:7px;letter-spacing:.12em;cursor:pointer;font-family:inherit;">↻ REFRESH</button>
+    </div>
+    <div id="wa-dnd-log-body" style="flex:1;overflow-y:auto;">
+      <div data-dnd-placeholder style="padding:20px 14px;color:rgba(255,100,100,0.25);font-size:9px;letter-spacing:.2em;line-height:2;text-align:center;">NO DND ALERTS YET<br>ENABLE DND TO START TRACKING</div>
+    </div>
+  </div>
+
   <div class="rh"></div>
 </div>
 
@@ -1069,13 +1302,13 @@ body.spotlight-mode .pnl:not(.spotlighted) {
   <div class="cb cb-tl"></div><div class="cb cb-tr"></div><div class="cb cb-bl"></div><div class="cb cb-br"></div>
   <div class="ph"><span class="ph-id">08 · WEATHER</span><span class="ph-cat"><div class="ph-dot"></div>REALTIME<span class="ph-min">—</span></span></div>
   <div class="pnl-body">
-    <div class="wx-main"><div class="wx-tw"><div class="wx-tmp">29</div><div class="wx-unit">°C</div></div><div><div class="wx-desc">Partly Cloudy</div><div class="wx-city">NEW DELHI · IND</div></div></div>
+    <div class="wx-main"><div class="wx-tw"><div class="wx-tmp" id="wx-temp">--</div><div class="wx-unit">°C</div></div><div><div class="wx-desc" id="wx-desc">Loading…</div><div class="wx-city" id="wx-city">— · —</div></div></div>
     <div class="wx-div"></div>
     <div class="wx-grid">
-      <div><div class="wx-ik">HUMIDITY</div><div class="wx-iv">68%</div></div>
-      <div><div class="wx-ik">UV INDEX</div><div class="wx-iv">High (7)</div></div>
-      <div><div class="wx-ik">WIND</div><div class="wx-iv">14 km/h NW</div></div>
-      <div><div class="wx-ik">FEELS LIKE</div><div class="wx-iv">32°C</div></div>
+      <div><div class="wx-ik">HUMIDITY</div><div class="wx-iv" id="wx-humidity">--%</div></div>
+      <div><div class="wx-ik">UV INDEX</div><div class="wx-iv" id="wx-uv">--</div></div>
+      <div><div class="wx-ik">WIND</div><div class="wx-iv" id="wx-wind">-- km/h</div></div>
+      <div><div class="wx-ik">FEELS LIKE</div><div class="wx-iv" id="wx-feels">--°C</div></div>
     </div>
   </div>
   <div class="rh"></div>
@@ -1120,10 +1353,61 @@ body.spotlight-mode .pnl:not(.spotlighted) {
 <!-- TOASTS -->
 <div id="toasts"></div>
 
-<!-- GESTURE HUD — floating pill, appears briefly on any gesture -->
-<div id="gesture-hud">
-  <span id="gesture-hud-hand"></span>
-  <span id="gesture-hud-text"></span>
+<!-- DND STATUS BAR — shows when DND is active -->
+<div id="dnd-bar" style="display:none;position:fixed;top:0;left:0;right:0;z-index:4000;
+  background:rgba(200,40,40,0.92);color:#fff;font-size:10px;letter-spacing:0.12em;
+  text-align:center;padding:4px 8px;font-family:'JetBrains Mono',monospace;
+  border-bottom:1px solid rgba(255,100,100,0.5);">
+  ⛔ &nbsp;DO NOT DISTURB ACTIVE — MIC PAUSED &nbsp;|&nbsp;
+  <span id="dnd-bar-reason"></span>
+  &nbsp;·&nbsp; <span id="dnd-bar-count">0</span> queued alert(s)
+  &nbsp;·&nbsp; <span style="cursor:pointer;text-decoration:underline;" onclick="toggleDND()">TURN OFF</span>
+</div>
+
+<!-- DND ALERT OVERLAY — shown when new alert arrives during DND -->
+<div id="dnd-alert-overlay" style="display:none;position:fixed;bottom:90px;right:18px;
+  z-index:5000;background:rgba(1,5,20,0.97);border:1px solid rgba(255,60,60,0.55);
+  border-radius:10px;min-width:260px;max-width:320px;padding:14px 16px;
+  font-family:'JetBrains Mono',monospace;font-size:11px;color:#e8b4b4;
+  box-shadow:0 4px 24px rgba(200,40,40,0.25);">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+    <span style="color:#ff6060;font-size:12px;letter-spacing:0.1em;" id="dnd-alert-title">⛔ DND ALERT</span>
+    <span style="cursor:pointer;opacity:0.6;font-size:14px;" onclick="dismissDNDAlert()">✕</span>
+  </div>
+  <div id="dnd-alert-body" style="margin-bottom:12px;color:#c8c8e0;line-height:1.5;"></div>
+  <div style="display:flex;gap:8px;">
+    <button onclick="handleDNDAlert()" style="flex:1;padding:6px;border-radius:6px;
+      background:rgba(0,148,255,0.2);border:1px solid rgba(0,148,255,0.5);
+      color:#6ab0e0;font-size:10px;cursor:pointer;letter-spacing:0.1em;
+      font-family:inherit;">HANDLE</button>
+    <button onclick="busyDNDAlert()" style="flex:1;padding:6px;border-radius:6px;
+      background:rgba(200,40,40,0.2);border:1px solid rgba(200,40,40,0.5);
+      color:#ff8080;font-size:10px;cursor:pointer;letter-spacing:0.1em;
+      font-family:inherit;">I'M BUSY</button>
+    <button onclick="dismissDNDAlert()" style="flex:1;padding:6px;border-radius:6px;
+      background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.15);
+      color:#888;font-size:10px;cursor:pointer;letter-spacing:0.1em;
+      font-family:inherit;">DISMISS</button>
+  </div>
+</div>
+
+<!-- DND QUEUE PANEL — shows after DND off -->
+<div id="dnd-queue-panel" style="display:none;position:fixed;top:50%;left:50%;
+  transform:translate(-50%,-50%);z-index:6000;
+  background:rgba(1,5,20,0.98);border:1px solid rgba(0,148,255,0.3);
+  border-radius:12px;width:380px;max-height:70vh;overflow-y:auto;
+  font-family:'JetBrains Mono',monospace;font-size:11px;color:#6ab0e0;
+  box-shadow:0 8px 40px rgba(0,0,0,0.7);padding:18px;">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+    <span style="color:#a8d8ff;font-size:13px;letter-spacing:0.1em;">⛔ DND SUMMARY</span>
+    <span style="cursor:pointer;opacity:0.6;" onclick="closeDNDQueue()">✕</span>
+  </div>
+  <div id="dnd-queue-list"></div>
+  <button onclick="closeDNDQueue()" style="width:100%;margin-top:12px;padding:8px;
+    border-radius:6px;background:rgba(0,148,255,0.1);border:1px solid rgba(0,148,255,0.3);
+    color:#6ab0e0;font-size:10px;cursor:pointer;font-family:inherit;letter-spacing:0.1em;">
+    CLOSE &amp; CLEAR
+  </button>
 </div>
 
 <!-- TASKBAR (MacOS pill dock) -->
@@ -1143,11 +1427,14 @@ body.spotlight-mode .pnl:not(.spotlighted) {
       <span class="tb-ic">◈</span><span class="tb-lbl">PERF</span>
     </button>
     <div class="tb-sep"></div>
-    <button class="tb-btn" id="tb-optics"   onclick="setMode('cam')"             title="OPTICS ON/OFF">
+    <button class="tb-btn" id="tb-optics"   onclick="toggleOptics()"             title="OPTICS ON/OFF">
       <span class="tb-ic">⊡</span><span class="tb-lbl">OPTICS</span>
     </button>
     <button class="tb-btn" id="tb-mic"      onclick="toggleListen()"             title="MIC ON/OFF">
       <span class="tb-ic">⬤</span><span class="tb-lbl">MIC</span>
+    </button>
+    <button class="tb-btn" id="tb-dnd"      onclick="toggleDND()"                title="DO NOT DISTURB">
+      <span class="tb-ic">🌙</span><span class="tb-lbl">DND</span>
     </button>
     <div class="tb-sep"></div>
     <button class="tb-btn" id="tb-settings" onclick="openSettings('settings')"   title="SETTINGS">
@@ -1157,81 +1444,67 @@ body.spotlight-mode .pnl:not(.spotlighted) {
   <div id="tb-resize" title="Drag to resize">⋮</div>
 </div>
 
-<!-- WIDGET PICKER — horizontal overlay above taskbar -->
+<!-- WIDGET PICKER — categorized tabbed panel above taskbar -->
 <div id="widget-picker">
-  <button class="wp-btn" id="wpb-comm"  onclick="togWgt('p-comm')"  title="CHAT">
-    <span class="wp-ic">▤</span><span class="wp-lbl">CHAT</span>
-  </button>
-  <button class="wp-btn" id="wpb-audio" onclick="togWgt('p-audio')" title="AUDIO">
-    <span class="wp-ic">♪</span><span class="wp-lbl">AUDIO</span>
-  </button>
-  <button class="wp-btn" id="wpb-sched" onclick="togWgt('p-sched')" title="SCHEDULE">
-    <span class="wp-ic">▦</span><span class="wp-lbl">SCHED</span>
-  </button>
-  <button class="wp-btn" id="wpb-sys"   onclick="togWgt('p-sys')"   title="SYSTEM">
-    <span class="wp-ic">⊞</span><span class="wp-lbl">SYSTEM</span>
-  </button>
-  <button class="wp-btn" id="wpb-intel" onclick="togWgt('p-intel')" title="INTEL">
-    <span class="wp-ic">◫</span><span class="wp-lbl">INTEL</span>
-  </button>
-  <button class="wp-btn" id="wpb-mem"   onclick="togWgt('p-mem')"   title="MEMORY">
-    <span class="wp-ic">◧</span><span class="wp-lbl">MEMORY</span>
-  </button>
-  <button class="wp-btn" id="wpb-msg"   onclick="togWgt('p-msg')"   title="MESSAGES">
-    <span class="wp-ic">▣</span><span class="wp-lbl">MSG</span>
-  </button>
-  <button class="wp-btn" id="wpb-wx"    onclick="togWgt('p-wx')"    title="WEATHER">
-    <span class="wp-ic">◭</span><span class="wp-lbl">WEATHER</span>
-  </button>
-  <button class="wp-btn" id="wpb-rel"   onclick="togWgt('p-rel')"   title="RELATIONS">
-    <span class="wp-ic">⬡</span><span class="wp-lbl">PEOPLE</span>
-  </button>
-  <button class="wp-btn" id="wpb-feed"  onclick="togWgt('p-feed')"  title="FEED">
-    <span class="wp-ic">≡</span><span class="wp-lbl">FEED</span>
-  </button>
-  <button class="wp-btn" id="wpb-hist"  onclick="togWgt('p-hist')"  title="HISTORY">
-    <span class="wp-ic">↻</span><span class="wp-lbl">HISTORY</span>
-  </button>
-  <button class="wp-btn" id="wpb-clock" onclick="togWgt('p-clock')" title="CLOCK">
-    <span class="wp-ic">◷</span><span class="wp-lbl">CLOCK</span>
-  </button>
-  <button class="wp-btn" id="wpb-phone" onclick="togWgt('p-phone')" title="PHONE">
-    <span class="wp-ic">⧉</span><span class="wp-lbl">PHONE</span>
-  </button>
-  <button class="wp-btn" id="wpb-devices" onclick="togWgt('p-devices')" title="DEVICES">
-    <span class="wp-ic">⬡</span><span class="wp-lbl">DEVICES</span>
-  </button>
-  <button class="wp-btn" id="wpb-agents" onclick="togWgt('p-agents')" title="AGENTS">
-    <span class="wp-ic">⟁</span><span class="wp-lbl">AGENTS</span>
-  </button>
-  <button class="wp-btn" id="wpb-gesture" onclick="togWgt('p-gesture')" title="GESTURE ENGINE">
-    <span class="wp-ic">✊</span><span class="wp-lbl">GESTURE</span>
-  </button>
-  <button class="wp-btn" id="wpb-ocr" onclick="togWgt('p-ocr')" title="DOCUMENT OCR">
-    <span class="wp-ic">⊡</span><span class="wp-lbl">OCR</span>
-  </button>
-  <button class="wp-btn" id="wpb-print" onclick="togWgt('p-print')" title="PRINTER">
-    <span class="wp-ic">⎙</span><span class="wp-lbl">PRINT</span>
-  </button>
-  <button class="wp-btn" id="wpb-fit" onclick="togWgt('p-fit')" title="FITNESS">
-    <span class="wp-ic">⬡</span><span class="wp-lbl">FITNESS</span>
-  </button>
-  <button class="wp-btn" id="wpb-loc" onclick="togWgt('p-loc')" title="LOCATION">
-    <span class="wp-ic">◎</span><span class="wp-lbl">LOCATION</span>
-  </button>
-  <button class="wp-btn" id="wpb-sh" onclick="togWgt('p-sh')" title="SMART HOME">
-    <span class="wp-ic">⌂</span><span class="wp-lbl">SMART HOME</span>
-  </button>
-  <button class="wp-btn" id="wpb-sc" onclick="togWgt('p-sc')" title="SUBCONSCIOUSNESS" style="position:relative;">
-    <span class="wp-ic">⟁</span><span class="wp-lbl">SUBCON</span>
-    <span class="sc-perm-badge" id="sc-perm-badge">0</span>
-  </button>
-  <button class="wp-btn" id="wpb-ig" onclick="togWgt('p-ig')" title="INSTAGRAM">
-    <span class="wp-ic">◎</span><span class="wp-lbl">INSTAGRAM</span>
-  </button>
-  <button class="wp-btn" id="wpb-news" onclick="togWgt('p-news')" title="NEWS">
-    <span class="wp-ic">≡</span><span class="wp-lbl">NEWS</span>
-  </button>
+  <!-- Category tab bar -->
+  <div class="wp-tabs">
+    <button class="wp-tab active" data-wptab="core"       onclick="wpSwitchTab('core')">CORE</button>
+    <button class="wp-tab"        data-wptab="social"     onclick="wpSwitchTab('social')">SOCIAL</button>
+    <button class="wp-tab"        data-wptab="devices"    onclick="wpSwitchTab('devices')">DEVICES</button>
+    <button class="wp-tab"        data-wptab="info"       onclick="wpSwitchTab('info')">INFO</button>
+    <button class="wp-tab"        data-wptab="tools"      onclick="wpSwitchTab('tools')">TOOLS</button>
+    <button class="wp-tab"        data-wptab="ai"         onclick="wpSwitchTab('ai')">AI</button>
+  </div>
+
+  <!-- CORE: Chat, Audio, Schedule, System, Intel, Memory, History, Feed -->
+  <div class="wp-panel active" id="wppan-core">
+    <button class="wp-btn" id="wpb-comm"  onclick="togWgt('p-comm')"  title="Chat"><span class="wp-ic">▤</span><span class="wp-lbl">CHAT</span></button>
+    <button class="wp-btn" id="wpb-audio" onclick="togWgt('p-audio')" title="Audio"><span class="wp-ic">♪</span><span class="wp-lbl">AUDIO</span></button>
+    <button class="wp-btn" id="wpb-sched" onclick="togWgt('p-sched')" title="Schedule"><span class="wp-ic">▦</span><span class="wp-lbl">SCHED</span></button>
+    <button class="wp-btn" id="wpb-sys"   onclick="togWgt('p-sys')"   title="System"><span class="wp-ic">⊞</span><span class="wp-lbl">SYSTEM</span></button>
+    <button class="wp-btn" id="wpb-intel" onclick="togWgt('p-intel')" title="Intel"><span class="wp-ic">◫</span><span class="wp-lbl">INTEL</span></button>
+    <button class="wp-btn" id="wpb-mem"   onclick="togWgt('p-mem')"   title="Memory"><span class="wp-ic">◧</span><span class="wp-lbl">MEMORY</span></button>
+    <button class="wp-btn" id="wpb-hist"  onclick="togWgt('p-hist')"  title="History"><span class="wp-ic">↻</span><span class="wp-lbl">HISTORY</span></button>
+    <button class="wp-btn" id="wpb-feed"  onclick="togWgt('p-feed')"  title="Feed"><span class="wp-ic">≡</span><span class="wp-lbl">FEED</span></button>
+  </div>
+
+  <!-- SOCIAL: WhatsApp messages, Instagram -->
+  <div class="wp-panel" id="wppan-social">
+    <button class="wp-btn" id="wpb-msg"   onclick="togWgt('p-msg')"   title="WhatsApp Messages"><span class="wp-ic">💬</span><span class="wp-lbl">WA MSG</span></button>
+    <button class="wp-btn" id="wpb-ig"    onclick="togWgt('p-ig')"    title="Instagram"><span class="wp-ic">📸</span><span class="wp-lbl">INSTA</span></button>
+  </div>
+
+  <!-- DEVICES: Phone connection, AlliedNode devices -->
+  <div class="wp-panel" id="wppan-devices">
+    <button class="wp-btn" id="wpb-phone"   onclick="togWgt('p-phone')"   title="Phone Connection"><span class="wp-ic">📱</span><span class="wp-lbl">PHONE</span></button>
+    <button class="wp-btn" id="wpb-devices" onclick="togWgt('p-devices')" title="Network Devices"><span class="wp-ic">🖧</span><span class="wp-lbl">DEVICES</span></button>
+  </div>
+
+  <!-- INFO: Clock, Weather, News -->
+  <div class="wp-panel" id="wppan-info">
+    <button class="wp-btn" id="wpb-clock" onclick="togWgt('p-clock')" title="World Clock"><span class="wp-ic">◷</span><span class="wp-lbl">CLOCK</span></button>
+    <button class="wp-btn" id="wpb-wx"    onclick="togWgt('p-wx')"    title="Weather"><span class="wp-ic">◭</span><span class="wp-lbl">WEATHER</span></button>
+    <button class="wp-btn" id="wpb-news"  onclick="togWgt('p-news')"  title="Live News"><span class="wp-ic">📰</span><span class="wp-lbl">NEWS</span></button>
+  </div>
+
+  <!-- TOOLS: OCR, Print, Fitness, Location, Smart Home -->
+  <div class="wp-panel" id="wppan-tools">
+    <button class="wp-btn" id="wpb-ocr"   onclick="togWgt('p-ocr')"   title="Document OCR"><span class="wp-ic">⊡</span><span class="wp-lbl">OCR</span></button>
+    <button class="wp-btn" id="wpb-print" onclick="togWgt('p-print')" title="Printer"><span class="wp-ic">⎙</span><span class="wp-lbl">PRINT</span></button>
+    <button class="wp-btn" id="wpb-fit"   onclick="togWgt('p-fit')"   title="Fitness"><span class="wp-ic">🏃</span><span class="wp-lbl">FITNESS</span></button>
+    <button class="wp-btn" id="wpb-loc"   onclick="togWgt('p-loc')"   title="Location"><span class="wp-ic">◎</span><span class="wp-lbl">LOCATION</span></button>
+    <button class="wp-btn" id="wpb-sh"    onclick="togWgt('p-sh')"    title="Smart Home"><span class="wp-ic">⌂</span><span class="wp-lbl">SMART HOME</span></button>
+  </div>
+
+  <!-- AI: Subconsciousness, Agents -->
+  <div class="wp-panel" id="wppan-ai">
+    <button class="wp-btn" id="wpb-sc" onclick="togWgt('p-sc')" title="Subconsciousness" style="position:relative;">
+      <span class="wp-ic">⟁</span><span class="wp-lbl">SUBCON</span>
+      <span class="sc-perm-badge" id="sc-perm-badge">0</span>
+    </button>
+    <button class="wp-btn" id="wpb-agents" onclick="togWgt('p-agents')" title="Agents"><span class="wp-ic">🤖</span><span class="wp-lbl">AGENTS</span></button>
+  </div>
+  <!-- NEWS widget removed — iZACH speaks live news on demand via voice cmd "tell me the news" -->
 </div>
 
 <!-- DEVICE BAR — mic + camera selectors (custom upward dropdowns) -->
@@ -1252,6 +1525,11 @@ body.spotlight-mode .pnl:not(.spotlighted) {
     </button>
     <div class="dev-picker" id="dev-picker-cam"></div>
   </div>
+  <button class="dev-btn" onclick="loadCamDevices(true); showToast('Rescanning cameras…','info','OPTICS')"
+          title="Force rescan cameras (use after plugging USB webcam)"
+          style="padding:4px 8px;min-width:0;">
+    <span class="dev-ic">⟳</span>
+  </button>
 </div>
 
 <!-- SETTINGS PAGE (full-screen overlay) -->
@@ -1267,19 +1545,168 @@ body.spotlight-mode .pnl:not(.spotlighted) {
     <button class="sp-tab" data-tab="contacts" onclick="switchSettingsTab('contacts')">CONTACTS</button>
     <button class="sp-tab" data-tab="security" onclick="switchSettingsTab('security')">SECURITY</button>
     <button class="sp-tab" data-tab="commands" onclick="switchSettingsTab('commands')">COMMANDS</button>
+    <button class="sp-tab" data-tab="links"    onclick="switchSettingsTab('links')">CUSTOM LINKS</button>
   </div>
   <div class="sp-body">
 
     <!-- ── MEMORY TAB ── -->
     <div class="sp-panel active" id="sptab-memory">
+
+      <!-- Smart Memory section -->
+      <div style="padding:10px 12px 0;">
+        <!-- Search + action row -->
+        <div style="display:flex;gap:6px;align-items:center;margin-bottom:8px;">
+          <input id="sm-search" placeholder="🔍  Search memories…"
+            style="flex:1;background:rgba(0,148,255,0.06);border:1px solid rgba(0,148,255,0.18);
+                   border-radius:3px;padding:5px 9px;color:rgba(0,200,255,0.85);font-family:'Share Tech Mono';
+                   font-size:10px;outline:none;"
+            oninput="smFilter(this.value)">
+          <button onclick="smOpenImport()" title="Import from ChatGPT/Claude"
+            style="background:rgba(0,148,255,0.08);border:1px solid rgba(0,148,255,0.22);border-radius:3px;
+                   color:rgba(0,148,255,0.75);font-family:'Share Tech Mono';font-size:9px;padding:5px 8px;cursor:pointer;">
+            IMPORT
+          </button>
+          <button onclick="smExport()" title="Export all memories"
+            style="background:rgba(0,148,255,0.08);border:1px solid rgba(0,148,255,0.22);border-radius:3px;
+                   color:rgba(0,148,255,0.75);font-family:'Share Tech Mono';font-size:9px;padding:5px 8px;cursor:pointer;">
+            EXPORT
+          </button>
+          <button onclick="smObsidianSync()" title="Sync to Obsidian vault"
+            style="background:rgba(120,80,255,0.1);border:1px solid rgba(120,80,255,0.28);border-radius:3px;
+                   color:rgba(160,120,255,0.85);font-family:'Share Tech Mono';font-size:9px;padding:5px 8px;cursor:pointer;">
+            ⟁ OBS
+          </button>
+        </div>
+
+        <!-- Category filter tabs -->
+        <div style="display:flex;gap:4px;margin-bottom:10px;">
+          <button class="sm-cat-btn active" data-cat="" onclick="smSetCat(this,'')">ALL</button>
+          <button class="sm-cat-btn" data-cat="profile" onclick="smSetCat(this,'profile')">👤 PROFILE</button>
+          <button class="sm-cat-btn" data-cat="instruction" onclick="smSetCat(this,'instruction')">📋 RULES</button>
+          <button class="sm-cat-btn" data-cat="automation" onclick="smSetCat(this,'automation')">⏰ AUTOMATIONS</button>
+        </div>
+
+        <!-- Add new memory row -->
+        <div style="display:flex;gap:6px;margin-bottom:10px;align-items:flex-start;">
+          <select id="sm-add-cat"
+            style="background:rgba(0,148,255,0.06);border:1px solid rgba(0,148,255,0.18);border-radius:3px;
+                   color:rgba(0,200,255,0.75);font-family:'Share Tech Mono';font-size:9px;padding:5px 6px;">
+            <option value="profile">Profile</option>
+            <option value="instruction">Instruction</option>
+            <option value="automation">Automation</option>
+          </select>
+          <textarea id="sm-add-content" rows="2" placeholder="e.g. Vansh's favorite singer is Kanye West"
+            style="flex:1;background:rgba(0,148,255,0.06);border:1px solid rgba(0,148,255,0.18);border-radius:3px;
+                   color:rgba(0,200,255,0.85);font-family:'Share Tech Mono';font-size:10px;padding:5px 9px;
+                   resize:none;outline:none;"></textarea>
+          <button onclick="smAddMemory()"
+            style="background:rgba(0,148,255,0.12);border:1px solid rgba(0,148,255,0.3);border-radius:3px;
+                   color:rgba(0,200,255,0.9);font-family:'Share Tech Mono';font-size:9px;padding:5px 10px;cursor:pointer;">
+            + ADD
+          </button>
+        </div>
+        <span id="sm-msg" style="font-size:8px;color:rgba(0,200,255,0.6);font-family:'Share Tech Mono';letter-spacing:.1em;"></span>
+      </div>
+
+      <!-- Smart memory list -->
+      <div id="sm-list" style="overflow-y:auto;max-height:280px;padding:0 12px 4px;">
+        <div style="color:rgba(0,148,255,0.3);font-size:9px;font-family:'Share Tech Mono';text-align:center;padding:20px 0;">
+          LOADING AI MEMORIES...
+        </div>
+      </div>
+
+      <!-- Divider -->
+      <div style="border-top:1px solid rgba(0,148,255,0.1);margin:8px 0 4px;"></div>
+      <div style="padding:0 12px 4px;font-size:9px;font-family:'Share Tech Mono';letter-spacing:.2em;color:rgba(0,148,255,0.4);">
+        QUICK FACTS
+      </div>
+
+      <!-- Existing key/value memory (QUICK FACTS) -->
       <div class="sp-add-form" style="border-top:none;border-bottom:1px solid rgba(0,148,255,0.07);">
-        <input class="sp-add-inp" id="sp-mem-key" placeholder="Key" style="width:160px;">
+        <input class="sp-add-inp" id="sp-mem-key" placeholder="Key" style="width:130px;">
         <input class="sp-add-inp" id="sp-mem-val" placeholder="Value" style="flex:1;">
         <button class="sp-add-btn" onclick="addMemoryEntry()">+ ADD</button>
         <span class="sp-save-msg" id="sp-mem-msg"></span>
       </div>
       <div class="sp-list-wrap" id="sp-mem-list">
         <div class="sp-empty">LOADING MEMORY...</div>
+      </div>
+
+    </div>
+
+    <!-- Import modal -->
+    <div id="sm-import-modal" style="display:none;position:fixed;inset:0;z-index:9000;
+         background:rgba(1,8,20,0.88);align-items:center;justify-content:center;">
+      <div style="background:#0a1628;border:1px solid rgba(0,148,255,0.28);border-radius:6px;
+                  width:500px;max-width:90vw;padding:24px;font-family:'Share Tech Mono';">
+        <div style="font-size:13px;color:rgba(0,200,255,0.9);letter-spacing:.15em;margin-bottom:4px;">
+          IMPORT MEMORY
+        </div>
+        <div style="font-size:9px;color:rgba(0,148,255,0.55);margin-bottom:14px;">
+          Paste exported memories from ChatGPT, Claude, or any AI system.
+        </div>
+
+        <!-- Copy prompt helper -->
+        <div style="background:rgba(0,148,255,0.05);border:1px solid rgba(0,148,255,0.15);
+                    border-radius:4px;padding:10px 12px;margin-bottom:12px;position:relative;">
+          <div style="font-size:8px;color:rgba(0,148,255,0.5);margin-bottom:6px;letter-spacing:.12em;">
+            ① COPY THIS INTO YOUR OTHER AI
+          </div>
+          <div id="sm-export-prompt" style="font-size:9px;color:rgba(0,200,255,0.7);line-height:1.6;max-height:80px;overflow-y:auto;">
+            Export all of my stored memories and any context you've learned about me from past conversations. Preserve my words verbatim where possible, especially instructions and preferences. Format as a bullet list grouped by: Profile, Instructions, Automations.
+          </div>
+          <button onclick="smCopyExportPrompt()"
+            style="position:absolute;top:8px;right:8px;background:rgba(0,148,255,0.1);
+                   border:1px solid rgba(0,148,255,0.22);border-radius:3px;color:rgba(0,148,255,0.75);
+                   font-family:'Share Tech Mono';font-size:8px;padding:3px 7px;cursor:pointer;">
+            COPY
+          </button>
+        </div>
+
+        <div style="font-size:8px;color:rgba(0,148,255,0.5);margin-bottom:6px;letter-spacing:.12em;">
+          ② PASTE RESULTS BELOW
+        </div>
+        <textarea id="sm-import-text" rows="8" placeholder="Paste your memory export here…"
+          style="width:100%;background:rgba(0,148,255,0.04);border:1px solid rgba(0,148,255,0.18);
+                 border-radius:3px;color:rgba(0,200,255,0.85);font-family:'Share Tech Mono';
+                 font-size:10px;padding:9px 11px;resize:none;outline:none;box-sizing:border-box;">
+        </textarea>
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px;">
+          <button onclick="smCloseImport()"
+            style="background:transparent;border:1px solid rgba(0,148,255,0.22);border-radius:3px;
+                   color:rgba(0,148,255,0.6);font-family:'Share Tech Mono';font-size:10px;
+                   padding:7px 16px;cursor:pointer;">CANCEL</button>
+          <button onclick="smDoImport()"
+            style="background:rgba(0,148,255,0.14);border:1px solid rgba(0,148,255,0.35);border-radius:3px;
+                   color:rgba(0,200,255,0.9);font-family:'Share Tech Mono';font-size:10px;
+                   padding:7px 16px;cursor:pointer;">ADD TO MEMORY</button>
+        </div>
+        <div id="sm-import-msg" style="font-size:9px;color:rgba(0,200,83,0.8);margin-top:8px;font-family:'Share Tech Mono';"></div>
+      </div>
+    </div>
+
+    <!-- Edit modal -->
+    <div id="sm-edit-modal" style="display:none;position:fixed;inset:0;z-index:9000;
+         background:rgba(1,8,20,0.88);align-items:center;justify-content:center;">
+      <div style="background:#0a1628;border:1px solid rgba(0,148,255,0.28);border-radius:6px;
+                  width:460px;max-width:90vw;padding:24px;font-family:'Share Tech Mono';">
+        <div style="font-size:12px;color:rgba(0,200,255,0.9);letter-spacing:.12em;margin-bottom:12px;">EDIT MEMORY</div>
+        <input type="hidden" id="sm-edit-id">
+        <textarea id="sm-edit-content" rows="4"
+          style="width:100%;background:rgba(0,148,255,0.04);border:1px solid rgba(0,148,255,0.18);
+                 border-radius:3px;color:rgba(0,200,255,0.85);font-family:'Share Tech Mono';
+                 font-size:11px;padding:9px 11px;resize:none;outline:none;box-sizing:border-box;">
+        </textarea>
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px;">
+          <button onclick="smCloseEdit()"
+            style="background:transparent;border:1px solid rgba(0,148,255,0.22);border-radius:3px;
+                   color:rgba(0,148,255,0.6);font-family:'Share Tech Mono';font-size:10px;
+                   padding:7px 14px;cursor:pointer;">CANCEL</button>
+          <button onclick="smSaveEdit()"
+            style="background:rgba(0,148,255,0.14);border:1px solid rgba(0,148,255,0.35);border-radius:3px;
+                   color:rgba(0,200,255,0.9);font-family:'Share Tech Mono';font-size:10px;
+                   padding:7px 14px;cursor:pointer;">SAVE</button>
+        </div>
       </div>
     </div>
 
@@ -1318,7 +1745,23 @@ body.spotlight-mode .pnl:not(.spotlighted) {
           <div class="cfg-label">UI STYLE (restart to apply)</div>
           <label class="cfg-opt"><input type="radio" name="ui-mode" value="classic"><span>Classic — React dashboard</span></label>
           <label class="cfg-opt"><input type="radio" name="ui-mode" value="scifi" checked><span>Sci-Fi — JARVIS holographic</span></label>
-          <div class="cfg-label" style="margin-top:10px;">SCREENSAVER TIMEOUT</div>
+          <div class="cfg-divider" style="margin:12px 0;border-top:1px solid rgba(0,148,255,0.07);"></div>
+          <div class="sp-sec-title" style="margin-bottom:8px;">IDLE SCREEN</div>
+          <div class="cfg-label">WALLPAPER</div>
+          <div style="display:flex;gap:6px;margin-bottom:8px;">
+            <button class="sp-action-btn" onclick="document.getElementById('idle-wp-picker').click()">BROWSE FILE</button>
+            <button class="sp-action-btn" onclick="clearIdleWallpaper()">CLEAR</button>
+          </div>
+          <input type="file" id="idle-wp-picker" accept="image/*" style="display:none" onchange="idleWpPicked(this)">
+          <div id="idle-wp-preview" style="display:none;margin-bottom:8px;">
+            <img id="idle-wp-thumb" style="width:100%;max-height:72px;object-fit:cover;border:1px solid rgba(0,148,255,0.2);border-radius:2px;">
+          </div>
+          <div class="cfg-toggle-row">
+            <span>Show Orb on Idle Screen</span>
+            <div class="cfg-tog on" id="tog-idle-orb" onclick="cfgToggleIdleOrb()"></div>
+          </div>
+          <div class="cfg-divider" style="margin:12px 0;border-top:1px solid rgba(0,148,255,0.07);"></div>
+          <div class="cfg-label">SCREENSAVER TIMEOUT</div>
           <select class="cfg-sel" id="cfg-ss">
             <option value="0">OFF — stay on SPEAK</option>
             <option value="2">2 minutes</option>
@@ -1364,47 +1807,6 @@ body.spotlight-mode .pnl:not(.spotlighted) {
             <option value="brief">Brief</option>
             <option value="detailed">Detailed</option>
           </select>
-        </div>
-        <div class="sp-divider"></div>
-        <div class="sp-sec">
-          <div class="sp-sec-title">LOCAL AI — OLLAMA</div>
-          <div id="ollama-badge" class="ollama-badge">
-            <div class="ollama-badge-dot base" id="ollama-badge-dot"></div>
-            <span class="ollama-badge-text" id="ollama-badge-text">LOADING...</span>
-          </div>
-          <div class="ollama-stat-grid">
-            <div class="ollama-stat">
-              <div class="ollama-stat-label">CONVERSATIONS</div>
-              <div class="ollama-stat-val" id="ol-total">—</div>
-            </div>
-            <div class="ollama-stat">
-              <div class="ollama-stat-label">EXAMPLES IN MODEL</div>
-              <div class="ollama-stat-val" id="ol-examples">—</div>
-            </div>
-            <div class="ollama-stat">
-              <div class="ollama-stat-label">BASE MODEL</div>
-              <div class="ollama-stat-val" id="ol-base">—</div>
-            </div>
-            <div class="ollama-stat">
-              <div class="ollama-stat-label">NEXT REBUILD</div>
-              <div class="ollama-stat-val highlight" id="ol-next">—</div>
-            </div>
-          </div>
-          <div class="ollama-progress-wrap">
-            <div class="ollama-progress-labels">
-              <span class="ollama-progress-lbl">PROGRESS TO REBUILD</span>
-              <span class="ollama-progress-val" id="ol-prog-label">0/25</span>
-            </div>
-            <div class="ollama-track">
-              <div class="ollama-fill" id="ol-prog-fill" style="width:0%;background:linear-gradient(90deg,rgba(0,148,255,0.4),#0094ff);"></div>
-            </div>
-            <div class="ollama-hint">Auto-rebuilds every 25 conversations · uses last 60 examples</div>
-          </div>
-          <div class="ollama-btn-row">
-            <button class="sp-action-btn" id="ol-rebuild-btn" onclick="forceOllamaRebuild()">⟳ FORCE REBUILD</button>
-            <button class="sp-action-btn" onclick="loadOllamaStats()">↺ REFRESH</button>
-          </div>
-          <div class="ollama-msg" id="ol-msg"></div>
         </div>
         <div class="sp-divider"></div>
         <div class="sp-sec">
@@ -1480,22 +1882,50 @@ body.spotlight-mode .pnl:not(.spotlighted) {
       <div class="sp-scroll">
 
         <div class="sp-sec">
-          <div class="sp-sec-title">GROQ</div>
+          <div class="sp-sec-title">GROQ — CHAT / COMMANDS</div>
           <div class="cfg-label">API KEY</div>
           <input class="cfg-inp" id="kf-groq" type="password" placeholder="Not set" autocomplete="off">
-          <div style="font-size:7px;color:rgba(0,148,255,0.60);margin-top:3px;letter-spacing:.06em;">console.groq.com — primary LLM + vision (llama-4-scout)</div>
+          <div style="font-size:7px;color:rgba(0,148,255,0.60);margin-top:3px;letter-spacing:.06em;">console.groq.com — used for chat, intent classification, agents</div>
         </div>
 
         <div class="sp-divider"></div>
         <div class="sp-sec">
-          <div class="sp-sec-title">GOOGLE GEMINI</div>
+          <div class="sp-sec-title">GROQ — VISION / CAMERA / SCREEN</div>
+          <div class="cfg-label">API KEY</div>
+          <input class="cfg-inp" id="kf-groq-vision" type="password" placeholder="Not set (falls back to chat key)" autocomplete="off">
+          <div style="font-size:7px;color:rgba(0,148,255,0.60);margin-top:3px;letter-spacing:.06em;">Separate quota pool so screen/camera analysis doesn't drain chat key</div>
+        </div>
+
+        <div class="sp-divider"></div>
+        <div class="sp-sec">
+          <div class="sp-sec-title">GROQ — WHATSAPP DND AUTOMATION</div>
+          <div class="cfg-label">API KEY</div>
+          <input class="cfg-inp" id="kf-groq-wa" type="password" placeholder="Not set (falls back to chat key)" autocomplete="off">
+          <div style="font-size:7px;color:rgba(0,148,255,0.60);margin-top:3px;letter-spacing:.06em;">Dedicated key for N8N auto-replies. Keeps WhatsApp AI quota separate from chat. Falls back to chat key if not set.</div>
+        </div>
+
+        <div class="sp-divider"></div>
+        <div class="sp-sec">
+          <div class="sp-sec-title">GOOGLE GEMINI — CHAT FALLBACK</div>
           <div class="cfg-label">KEY 1 (PRIMARY)</div>
           <input class="cfg-inp" id="kf-gem1" type="password" placeholder="Not set" autocomplete="off">
           <div class="cfg-label" style="margin-top:8px;">KEY 2</div>
           <input class="cfg-inp" id="kf-gem2" type="password" placeholder="Not set" autocomplete="off">
           <div class="cfg-label" style="margin-top:8px;">KEY 3</div>
           <input class="cfg-inp" id="kf-gem3" type="password" placeholder="Not set" autocomplete="off">
-          <div style="font-size:7px;color:rgba(0,148,255,0.60);margin-top:3px;letter-spacing:.06em;">aistudio.google.com — rotated on rate-limit</div>
+          <div style="font-size:7px;color:rgba(0,148,255,0.60);margin-top:3px;letter-spacing:.06em;">aistudio.google.com — used when Groq chat fails. Rotated on rate-limit.</div>
+        </div>
+
+        <div class="sp-divider"></div>
+        <div class="sp-sec">
+          <div class="sp-sec-title">GOOGLE GEMINI — VISION / CAMERA / SCREEN</div>
+          <div class="cfg-label">VISION KEY 1</div>
+          <input class="cfg-inp" id="kf-gemv1" type="password" placeholder="Not set (falls back to chat key)" autocomplete="off">
+          <div class="cfg-label" style="margin-top:8px;">VISION KEY 2</div>
+          <input class="cfg-inp" id="kf-gemv2" type="password" placeholder="Not set" autocomplete="off">
+          <div class="cfg-label" style="margin-top:8px;">VISION KEY 3</div>
+          <input class="cfg-inp" id="kf-gemv3" type="password" placeholder="Not set" autocomplete="off">
+          <div style="font-size:7px;color:rgba(0,148,255,0.60);margin-top:3px;letter-spacing:.06em;">Separate Gemini project keys so vision quota is independent from chat</div>
         </div>
 
         <div class="sp-divider"></div>
@@ -1597,6 +2027,34 @@ body.spotlight-mode .pnl:not(.spotlighted) {
       </div>
     </div>
 
+    <!-- ── CUSTOM LINKS TAB ── -->
+    <div class="sp-panel" id="sptab-links">
+      <div style="padding:14px 28px 6px;border-bottom:1px solid rgba(0,148,255,0.07);flex-shrink:0;">
+        <div style="font-size:7px;letter-spacing:.4em;color:rgba(0,148,255,0.32);margin-bottom:6px;">CUSTOM LINKS — "open X" → opens this URL in default browser</div>
+        <!-- Add row -->
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+          <input class="sp-add-inp" id="cl-inp-title" placeholder="Link Title  e.g. Google Slides" style="flex:1;min-width:140px;">
+          <input class="sp-add-inp" id="cl-inp-url"   placeholder="URL  e.g. https://slides.google.com" style="flex:2;min-width:180px;">
+          <button class="sp-add-btn" onclick="clAdd()">+ ADD</button>
+        </div>
+        <div style="font-size:8px;letter-spacing:.1em;color:rgba(0,148,255,0.4);margin-top:6px;" id="cl-msg"></div>
+      </div>
+      <!-- Table header -->
+      <div style="display:grid;grid-template-columns:1fr 2fr 28px;gap:0;padding:6px 28px 3px;flex-shrink:0;border-bottom:1px solid rgba(0,148,255,0.06);">
+        <div style="font-size:7px;letter-spacing:.35em;color:rgba(0,148,255,0.28);">TITLE</div>
+        <div style="font-size:7px;letter-spacing:.35em;color:rgba(0,148,255,0.28);">URL</div>
+        <div></div>
+      </div>
+      <!-- Scrollable list -->
+      <div class="sp-list-wrap" id="cl-list" style="padding:0 28px 20px;">
+        <div class="sp-empty" id="cl-empty">No custom links yet.</div>
+      </div>
+      <div class="sp-save-row" style="flex-shrink:0;">
+        <button class="sp-save-btn" onclick="clSave()">SAVE TO iZACH</button>
+        <span class="sp-save-msg" id="cl-save-msg"></span>
+      </div>
+    </div>
+
   </div>
 </div>
 
@@ -1642,9 +2100,17 @@ body.spotlight-mode .pnl:not(.spotlighted) {
       </div>
       <div class="ph-qr-hint" style="margin-top:6px;">SCAN WITH iZACH ANDROID APP</div>
     </div>
-    <div id="phone-on-state" style="display:none;flex-direction:column;align-items:center;gap:8px;">
-      <div class="ph-cdot on" style="width:12px;height:12px;"></div>
-      <div class="ph-devname" id="phone-dev-name">DEVICE CONNECTED</div>
+    <div id="phone-on-state" style="display:none;flex-direction:column;align-items:center;gap:6px;padding:10px 12px;">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <div class="ph-cdot on" style="width:10px;height:10px;"></div>
+        <div class="ph-devname" id="phone-dev-name" style="font-size:11px;letter-spacing:.18em;color:#00e5ff;">DEVICE</div>
+      </div>
+      <div style="font-size:7px;letter-spacing:.25em;color:rgba(29,185,84,0.8);">● CONNECTED</div>
+      <div style="width:100%;height:1px;background:rgba(0,148,255,0.15);margin:6px 0;"></div>
+      <div style="font-size:7px;letter-spacing:.2em;color:rgba(0,148,255,0.45);align-self:flex-start;">RECENT COMMANDS</div>
+      <div id="phone-cmd-list" style="width:100%;max-height:180px;overflow-y:auto;display:flex;flex-direction:column;gap:4px;">
+        <div style="font-size:8px;color:rgba(0,148,255,0.35);font-style:italic;">No commands yet — speak via phone app.</div>
+      </div>
     </div>
     <div style="display:flex;align-items:center;gap:7px;margin-top:4px;">
       <div class="ph-cdot" id="phone-status-dot"></div>
@@ -1771,6 +2237,46 @@ body.spotlight-mode .pnl:not(.spotlighted) {
   <div class="rh"></div>
 </div>
 
+<!-- CALL LOG PANEL -->
+<div id="p-calls" class="pnl" style="right:303px;top:120px;width:290px;height:340px;display:none;flex-direction:column;">
+  <div class="cb cb-tl"></div><div class="cb cb-tr"></div><div class="cb cb-bl"></div><div class="cb cb-br"></div>
+  <div class="ph">
+    <span class="ph-id">16 · CALLS</span>
+    <span class="ph-cat"><div class="ph-dot" id="calls-dot" style="background:#00e5ff;box-shadow:0 0 5px #00e5ff;"></div>WHATSAPP<span class="ph-min">—</span></span>
+  </div>
+
+  <!-- Busy mode toggle bar -->
+  <div style="padding:5px 10px;display:flex;align-items:center;gap:6px;border-bottom:1px solid rgba(255,140,0,0.15);background:rgba(255,140,0,0.03);flex-shrink:0;">
+    <span style="font-size:7px;letter-spacing:.18em;color:rgba(255,140,0,0.65);font-family:'Share Tech Mono',monospace;white-space:nowrap;" id="calls-busy-status">BUSY: OFF</span>
+    <select id="calls-busy-reason" style="flex:1;background:rgba(0,5,15,0.9);border:1px solid rgba(255,140,0,0.18);border-radius:3px;color:rgba(255,140,0,0.65);font-size:7px;font-family:'Share Tech Mono',monospace;padding:2px 3px;cursor:pointer;">
+      <option value="gym">💪 Gym</option>
+      <option value="studying">📚 Study</option>
+      <option value="sleeping">😴 Sleep</option>
+      <option value="eating">🍽️ Eating</option>
+      <option value="driving">🚗 Drive</option>
+      <option value="meeting">🤝 Meeting</option>
+      <option value="manual">🤖 Manual</option>
+    </select>
+    <input type="number" id="calls-busy-dur" placeholder="min" min="5" max="480"
+      style="width:38px;background:rgba(0,5,15,0.9);border:1px solid rgba(255,140,0,0.18);border-radius:3px;color:rgba(255,140,0,0.65);font-size:7px;font-family:'Share Tech Mono',monospace;padding:2px 3px;text-align:center;">
+    <button id="calls-busy-btn" onclick="callsBusyToggle()"
+      style="padding:2px 8px;background:rgba(255,140,0,0.10);border:1px solid rgba(255,140,0,0.28);border-radius:3px;color:rgba(255,140,0,0.75);font-size:7px;letter-spacing:.1em;cursor:pointer;font-family:'Share Tech Mono',monospace;white-space:nowrap;">ON</button>
+  </div>
+
+  <!-- WA calls pane -->
+  <div id="calls-pane-wa" style="flex:1;overflow-y:auto;display:flex;flex-direction:column;">
+    <div style="padding:4px 10px 3px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid rgba(0,148,255,0.07);flex-shrink:0;">
+      <span style="font-size:7px;letter-spacing:.18em;color:rgba(0,148,255,0.45);font-family:'Share Tech Mono',monospace;">WHATSAPP CALL LOG</span>
+      <button onclick="callLogRefresh()" style="padding:1px 6px;background:transparent;border:1px solid rgba(0,148,255,0.18);border-radius:3px;color:rgba(0,148,255,0.45);font-size:6px;letter-spacing:.1em;cursor:pointer;font-family:inherit;">↻</button>
+    </div>
+    <div id="calls-log-body" style="flex:1;overflow-y:auto;">
+      <div style="padding:20px;color:rgba(0,148,255,0.25);font-size:8px;letter-spacing:.18em;text-align:center;">NO WA CALL LOGS YET</div>
+    </div>
+  </div>
+
+  <div class="rh"></div>
+</div>
+
 <!-- AGENTS PANEL -->
 <div id="p-agents" class="pnl">
   <div class="cb cb-tl"></div><div class="cb cb-tr"></div><div class="cb cb-bl"></div><div class="cb cb-br"></div>
@@ -1784,82 +2290,6 @@ body.spotlight-mode .pnl:not(.spotlighted) {
   <div class="rh"></div>
 </div>
 
-<!-- GESTURE ENGINE PANEL -->
-<div id="p-gesture" class="pnl">
-  <div class="cb cb-tl"></div><div class="cb cb-tr"></div><div class="cb cb-bl"></div><div class="cb cb-br"></div>
-  <div class="ph"><span class="ph-id">16 · GESTURE</span><span class="ph-cat"><div class="ph-dot" id="ge-dot"></div>AURA ENGINE<span class="ph-min">—</span></span></div>
-  <div class="pnl-body">
-
-    <!-- Status row -->
-    <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px 8px;">
-      <div>
-        <div style="font-size:8px;letter-spacing:.35em;color:rgba(0,148,255,0.45);margin-bottom:4px;">ENGINE STATUS</div>
-        <div id="ge-status-txt" style="font-size:11px;letter-spacing:.25em;color:rgba(0,148,255,0.4);">OFFLINE</div>
-      </div>
-      <!-- Toggle switch -->
-      <div id="ge-toggle" onclick="toggleGestureEngine()"
-           style="width:38px;height:20px;border-radius:10px;background:rgba(0,148,255,0.08);
-                  border:1px solid rgba(0,148,255,0.25);cursor:pointer;position:relative;transition:background 0.2s;">
-        <div id="ge-toggle-knob"
-             style="position:absolute;top:3px;left:3px;width:12px;height:12px;border-radius:50%;
-                    background:rgba(0,148,255,0.35);transition:left 0.2s;"></div>
-      </div>
-    </div>
-
-    <div style="height:1px;margin:0 14px;background:rgba(0,148,255,0.07);"></div>
-
-    <!-- Current gesture display -->
-    <div style="padding:10px 14px 6px;">
-      <div style="font-size:7px;letter-spacing:.35em;color:rgba(0,148,255,0.32);margin-bottom:6px;">LAST GESTURE</div>
-      <div id="ge-gesture-name" style="font-size:13px;letter-spacing:.2em;color:rgba(0,148,255,0.55);">—</div>
-      <div id="ge-gesture-hand" style="font-size:8px;letter-spacing:.3em;color:rgba(0,148,255,0.3);margin-top:2px;">HAND · —</div>
-    </div>
-
-    <div style="height:1px;margin:0 14px;background:rgba(0,148,255,0.07);"></div>
-
-    <!-- Live indicators -->
-    <div style="padding:8px 14px;">
-      <div style="font-size:7px;letter-spacing:.35em;color:rgba(0,148,255,0.32);margin-bottom:8px;">LIVE CONTROLS</div>
-
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-        <span style="font-size:8px;letter-spacing:.2em;color:rgba(0,148,255,0.4);">VOLUME</span>
-        <div style="flex:1;height:2px;background:rgba(0,148,255,0.08);margin:0 10px;border-radius:1px;">
-          <div id="ge-vol-bar" style="height:100%;width:0%;background:rgba(0,148,255,0.6);border-radius:1px;transition:width 0.1s;"></div>
-        </div>
-        <span id="ge-vol-pct" style="font-size:8px;color:rgba(0,148,255,0.5);width:24px;text-align:right;">—</span>
-      </div>
-
-      <div style="display:flex;justify-content:space-between;align-items:center;">
-        <span style="font-size:8px;letter-spacing:.2em;color:rgba(0,148,255,0.4);">BRIGHT</span>
-        <div style="flex:1;height:2px;background:rgba(0,148,255,0.08);margin:0 10px;border-radius:1px;">
-          <div id="ge-bri-bar" style="height:100%;width:0%;background:rgba(255,150,0,0.6);border-radius:1px;transition:width 0.1s;"></div>
-        </div>
-        <span id="ge-bri-pct" style="font-size:8px;color:rgba(0,148,255,0.5);width:24px;text-align:right;">—</span>
-      </div>
-    </div>
-
-    <div style="height:1px;margin:0 14px;background:rgba(0,148,255,0.07);"></div>
-
-    <!-- Gesture reference cheatsheet -->
-    <div style="padding:8px 14px 10px;">
-      <div style="font-size:7px;letter-spacing:.35em;color:rgba(0,148,255,0.32);margin-bottom:6px;">GESTURE MAP</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;">
-        <div class="ge-chip">✊ FIST → GRAB</div>
-        <div class="ge-chip">🖐 PALM → DROP</div>
-        <div class="ge-chip">🤏 R-PINCH → VOL</div>
-        <div class="ge-chip">🤏 L-PINCH → BRIGHT</div>
-        <div class="ge-chip">👆 SWIPE → DESKTOP</div>
-        <div class="ge-chip">👍 THUMB → MAX/NEXT</div>
-        <div class="ge-chip">🤙 PINKY → MIN/PREV</div>
-        <div class="ge-chip">🤘 ROCK → PLAY/PAUSE</div>
-        <div class="ge-chip">✌ PEACE → VISION</div>
-        <div class="ge-chip">○ CIRCLE → SPOTLIGHT</div>
-      </div>
-    </div>
-
-  </div>
-  <div class="rh"></div>
-</div>
 
 <!-- ══════════════════ OCR PANEL ══════════════════ -->
 <div id="p-ocr" class="pnl">
@@ -2072,7 +2502,7 @@ body.spotlight-mode .pnl:not(.spotlighted) {
                letter-spacing:.2em;cursor:pointer;transition:background .15s;"
         onmouseover="this.style.background='rgba(0,148,255,0.22)'"
         onmouseout="this.style.background='rgba(0,148,255,0.12)'">
-        ⎙ PRINT ALL
+        ⎙ OPEN IN CHROME
       </button>
       <button onclick="printClearQueue()"
         style="padding:6px 10px;background:rgba(255,50,50,0.05);border:1px solid rgba(255,50,50,0.18);
@@ -2440,8 +2870,7 @@ body.spotlight-mode .pnl:not(.spotlighted) {
   <div class="cb cb-tl"></div><div class="cb cb-tr"></div><div class="cb cb-bl"></div><div class="cb cb-br"></div>
   <div class="ph">
     <span class="ph-id">24 · NEWS</span>
-    <span class="ph-sub" id="news-ph-sub">LIVE · MARKETS · HEADLINES</span>
-    <button class="news-btn" style="padding:2px 8px;font-size:7px;margin-left:auto;" onclick="newsToggleSettings()">⚙</button>
+    <span class="ph-cat"><div class="ph-dot"></div>LIVE FEED<span class="ph-min">—</span></span>
   </div>
   <div class="pb" style="position:relative;">
 
@@ -2453,11 +2882,20 @@ body.spotlight-mode .pnl:not(.spotlighted) {
     <!-- Main layout: TV left + right panel -->
     <div class="news-main-layout">
 
-      <!-- Left: YouTube Live -->
+      <!-- Left: Live channel launcher (YouTube embeds are unreliable —
+           channel-based live_stream URLs frequently return "Video player
+           configuration error" / Error 153 because the channel needs a
+           verified primary video. Instead, show a tile that opens the
+           channel live page in the default browser on demand.) -->
       <div>
-        <div class="news-tv-frame">
-          <iframe id="news-tv-iframe" src="" allow="autoplay; encrypted-media" allowfullscreen
-            title="Live News"></iframe>
+        <div id="news-tv-frame" class="news-tv-frame"
+             style="display:flex;flex-direction:column;align-items:center;justify-content:center;
+                    width:240px;height:135px;cursor:pointer;padding:8px;text-align:center;
+                    background:linear-gradient(135deg,#001428,#002a4a);"
+             onclick="newsLaunchLive()" title="Open channel live stream in browser">
+          <div style="font-size:24px;color:#ff3d3d;margin-bottom:4px;">▶ LIVE</div>
+          <div id="news-tv-channel" style="font-size:10px;color:#00e5ff;letter-spacing:.15em;font-family:'Share Tech Mono';">NDTV 24×7</div>
+          <div style="font-size:7px;color:rgba(0,148,255,0.6);margin-top:6px;">CLICK TO WATCH IN BROWSER</div>
         </div>
         <div class="news-tv-label" id="news-tv-label">NDTV 24×7</div>
         <div class="news-channel-row" id="news-channel-row">
@@ -2495,6 +2933,7 @@ body.spotlight-mode .pnl:not(.spotlighted) {
         <div class="news-ctrl-row">
           <button class="news-btn" onclick="newsNarrate()">▶ NARRATE ALL</button>
           <button class="news-btn" onclick="newsRefresh()">↻ REFRESH</button>
+          <button class="news-btn" onclick="newsToggleSettings()" title="Settings">⚙</button>
           <span style="font-size:7px;color:rgba(0,148,255,0.3);margin-left:auto;" id="news-last-updated"></span>
         </div>
       </div>
@@ -2546,7 +2985,7 @@ body.spotlight-mode .pnl:not(.spotlighted) {
   <div class="cb cb-tl"></div><div class="cb cb-tr"></div><div class="cb cb-bl"></div><div class="cb cb-br"></div>
   <div class="ph">
     <span class="ph-id">23 · INSTAGRAM</span>
-    <span class="ph-sub" id="ig-ph-sub">NOT CONNECTED</span>
+    <span class="ph-cat"><div class="ph-dot" id="ig-dot"></div><span id="ig-ph-sub">NOT CONNECTED</span><span class="ph-min">—</span></span>
   </div>
   <div class="pb">
 
@@ -2717,7 +3156,7 @@ body.spotlight-mode .pnl:not(.spotlighted) {
   <div class="cb cb-tl"></div><div class="cb cb-tr"></div><div class="cb cb-bl"></div><div class="cb cb-br"></div>
   <div class="ph">
     <span class="ph-id">22 · SUBCONSCIOUSNESS</span>
-    <span class="ph-sub"><span class="sc-status-dot" id="sc-status-dot"></span>BACKGROUND AGENT</span>
+    <span class="ph-cat"><div class="ph-dot sc-status-dot" id="sc-status-dot"></div>BACKGROUND AGENT<span class="ph-min">—</span></span>
   </div>
   <div class="pb">
 
@@ -2902,7 +3341,8 @@ function randViz(){bars.forEach(b=>{b.style.height=(8+Math.random()*30)+'px';});
 // ════════════════════════════════════════════════════
 function tick(){
   const n=new Date();
-  document.getElementById('ict').textContent=[n.getHours(),n.getMinutes(),n.getSeconds()].map(v=>String(v).padStart(2,'0')).join(':');
+  const h=n.getHours(), h12=h%12||12, ampm=h>=12?'PM':'AM';
+  document.getElementById('ict').textContent=[h12,n.getMinutes(),n.getSeconds()].map(v=>String(v).padStart(2,'0')).join(':')+' '+ampm;
   const D=['SUNDAY','MONDAY','TUESDAY','WEDNESDAY','THURSDAY','FRIDAY','SATURDAY'];
   const M=['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
   document.getElementById('icd').textContent=`${D[n.getDay()]} · ${n.getDate()} ${M[n.getMonth()]} ${n.getFullYear()}`;
@@ -2929,7 +3369,7 @@ tick(); setInterval(tick,1000);
 // STATE MACHINE
 // ════════════════════════════════════════════════════
 let camStream=null;
-const allWgts=['p-comm','p-audio','p-sched','p-sys','p-intel','p-mem','p-msg','p-wx','p-rel','p-feed','p-hist','p-clock','p-phone','p-devices','p-agents','p-gesture','p-ocr','p-print','p-fit','p-loc','p-sh','p-sc','p-ig','p-news'];
+const allWgts=['p-comm','p-audio','p-sched','p-sys','p-intel','p-mem','p-msg','p-wx','p-feed','p-hist','p-clock','p-phone','p-devices','p-agents','p-ocr','p-print','p-fit','p-loc','p-sh','p-sc','p-ig'];
 const dkMap={'p-comm':'dk-comm','p-audio':'dk-aud','p-sched':'dk-sch','p-sys':'dk-sys','p-intel':'dk-int','p-mem':'dk-mem','p-msg':'dk-msg','p-wx':'dk-wx','p-rel':'dk-rel','p-feed':'dk-feed','p-hist':'dk-hist','p-clock':'dk-clk','p-phone':'dk-phone','p-devices':'dk-devices','p-agents':'dk-agents'};
 
 function slideScreens(show){
@@ -3004,6 +3444,34 @@ function hideAll(){
     _syncWpBtn(w,false);
   });
 }
+
+// ── Ctrl+A: toggle all widgets hide/show ──────────────────
+let _wgtsHidden=false, _wgtsSnapshot=[];
+function toggleAllWidgets(){
+  if(!_wgtsHidden){
+    // Snapshot visible then hide
+    _wgtsSnapshot=allWgts.filter(w=>document.getElementById(w)?.classList.contains('show'));
+    _wgtsSnapshot.forEach(w=>{document.getElementById(w).classList.remove('show');_syncWpBtn(w,false);});
+    _wgtsHidden=true;
+    showToast('WIDGETS','All widgets hidden — Ctrl+D to restore');
+  } else {
+    // Restore snapshot
+    _wgtsSnapshot.forEach(w=>{
+      const el=document.getElementById(w);
+      if(el){el.classList.add('show');_syncWpBtn(w,true);}
+    });
+    _wgtsHidden=false;
+    showToast('WIDGETS','Widgets restored');
+  }
+}
+document.addEventListener('keydown',e=>{
+  // Ctrl+D: hide/show widgets — works in idle AND widget mode (widgets visible in both)
+  if(e.ctrlKey && e.key.toLowerCase()==='d' && currentMode!=='speak' && currentMode!=='proc' && currentMode!=='cam'){
+    e.preventDefault();
+    toggleAllWidgets();
+  }
+});
+
 // Map widget id → widget-picker button id
 const wpMap={
   'p-comm':'wpb-comm','p-audio':'wpb-audio','p-sched':'wpb-sched',
@@ -3034,18 +3502,52 @@ function togWgt(id){
   const dk=dkMap[id]; if(dk){const b=document.getElementById(dk);if(b)b.classList.toggle('on',active);}
   // Sync widget picker button highlight
   const wpb=wpMap[id]; if(wpb){const b=document.getElementById(wpb);if(b)b.classList.toggle('on',active);}
+  // Auto-refresh data when widget opens
+  if(active){
+
+    if(id==='p-msg')  { dndLogRefresh(); }
+  }
 }
 
 // ════════════════════════════════════════════════════
 // CAMERA
 // ════════════════════════════════════════════════════
 async function startCam(){
-  try{camStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'user'}});document.getElementById('cam').srcObject=camStream;}
-  catch(e){}
+  try {
+    if(camStream){ camStream.getTracks().forEach(t=>t.stop()); camStream=null; }
+    const _hd = { width:{ideal:1920}, height:{ideal:1080}, frameRate:{ideal:30} };
+    let constraints = { video: _hd };
+    // Map _selCam (OpenCV/DirectShow index) to browser video device by position
+    if(_selCam !== '' && _selCam != null){
+      try {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const videoDevs = devices.filter(d => d.kind === 'videoinput');
+        const idx = parseInt(_selCam);
+        if(!isNaN(idx) && videoDevs[idx] && videoDevs[idx].deviceId){
+          constraints = { video: { deviceId: { exact: videoDevs[idx].deviceId }, ..._hd } };
+        }
+      } catch(_){}
+    }
+    camStream = await navigator.mediaDevices.getUserMedia(constraints);
+    document.getElementById('cam').srcObject = camStream;
+  } catch(e){ console.warn('[CAM] startCam error:', e); }
 }
 function stopCam(){
   if(camStream){camStream.getTracks().forEach(t=>t.stop());camStream=null;}
   document.getElementById('cam').srcObject=null;
+}
+function toggleOptics(){
+  if(currentMode==='cam'){
+    setMode('widget');
+    // Re-show panels if none are visible (all were hidden while in cam mode)
+    const anyShown = allWgts.some(w => {
+      const el = document.getElementById(w);
+      return el && el.classList.contains('show');
+    });
+    if(!anyShown) showDefault();
+  } else {
+    setMode('cam');
+  }
 }
 
 // ════════════════════════════════════════════════════
@@ -3128,10 +3630,14 @@ async function toggleListen(){
     if(btn){btn.classList.remove('on');btn.style.color='';}
     if(glowRafId){cancelAnimationFrame(glowRafId);glowRafId=null;}
     glowEl.style.opacity=0;
+    // Tell backend voice_loop to stop listening
+    fetch(API+'/mic',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({active:false})}).catch(()=>{});
     return;
   }
   listening=true;
   if(btn){btn.classList.add('on');btn.style.color='#0094ff';}
+  // Tell backend voice_loop to resume listening
+  fetch(API+'/mic',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({active:true})}).catch(()=>{});
 
   if(!audioCtx){
     try{
@@ -3234,16 +3740,87 @@ function demoToast(){
 // RELATIONSHIP GRAPH
 // ════════════════════════════════════════════════════
 const relCanvas=document.getElementById('rel-canvas');
-const relCtx=relCanvas.getContext('2d');
-const people=[
-  {name:'RAHUL',   angle:0.3,  dist:90, phase:0},
-  {name:'MOM',     angle:1.4,  dist:80, phase:1.1},
-  {name:'PRIYA',   angle:2.5,  dist:95, phase:2.2},
-  {name:'ANANYA',  angle:3.8,  dist:85, phase:0.7},
-  {name:'DEV GRP', angle:5.1,  dist:100,phase:1.8},
-];
+const relCtx=relCanvas ? relCanvas.getContext('2d') : null;
+// Start with empty list — populated from /contacts. Falls back to a placeholder
+// node if user has no contacts yet, instead of hardcoded sample names.
+let people=[];
 let relT=0;
+
+async function loadRelations(){
+  try{
+    const r=await fetch(API+'/contacts');
+    const d=await r.json();
+    const contacts=(d.contacts||d.list||[]).slice(0,8);
+    if(contacts.length===0){
+      people=[{name:'NO CONTACTS', angle:0, dist:80, phase:0}];
+      return;
+    }
+    people=contacts.map((c,i)=>{
+      const name=(c.name||c.label||c).toString().toUpperCase().slice(0,12);
+      return {
+        name,
+        angle:(i/contacts.length)*Math.PI*2,
+        dist:80+Math.random()*25,
+        phase:Math.random()*Math.PI*2,
+      };
+    });
+  }catch(e){
+    people=[{name:'OFFLINE', angle:0, dist:80, phase:0}];
+  }
+}
+if(relCanvas) {
+  loadRelations();
+  setInterval(loadRelations, 120000);  // refresh every 2 min
+}
+
+// ── Weather widget — replace hardcoded New Delhi/29°C with live data ────────
+async function loadWeather(){
+  try{
+    const r=await fetch(API+'/weather');
+    const d=await r.json();
+    if(!d.ok) return;
+    const set=(id,v)=>{const el=document.getElementById(id); if(el) el.textContent=v;};
+    set('wx-temp', d.temp_c);
+    set('wx-desc', d.desc);
+    set('wx-city', `${d.city} · ${d.country||'—'}`);
+    set('wx-humidity', `${d.humidity}%`);
+    set('wx-uv', d.uv_index >= 8 ? `Very High (${d.uv_index})` : d.uv_index >= 6 ? `High (${d.uv_index})` : d.uv_index >= 3 ? `Moderate (${d.uv_index})` : `Low (${d.uv_index})`);
+    set('wx-wind', `${d.wind_kmh} km/h ${d.wind_dir||''}`.trim());
+    set('wx-feels', `${d.feels_c}°C`);
+  }catch(e){}
+}
+loadWeather();
+setInterval(loadWeather, 300000);  // refresh every 5 min
+
+// ── Phone QR — fetch on load so QR shows even before phone connects ────────
+async function loadPhoneQR(){
+  try{
+    const r=await fetch(API+'/connect/qr');
+    const d=await r.json();
+    if(d.qr_base64){
+      const img=document.getElementById('phone-qr-img');
+      const ph=document.getElementById('phone-qr-ph');
+      if(img){img.src='data:image/png;base64,'+d.qr_base64; img.style.display='block';}
+      if(ph)  ph.style.display='none';
+    }
+  }catch(e){}
+}
+loadPhoneQR();
+
+// ── Sync mic toggle with backend state on page load ─────────────────────────
+(async()=>{
+  try{
+    const r=await fetch(API+'/mic');
+    const d=await r.json();
+    if(d.ok){
+      listening = d.mic_active;
+      const btn=document.getElementById('tb-mic');
+      if(btn) btn.classList.toggle('on', listening);
+    }
+  }catch(e){}
+})();
 function drawRel(){
+  if(!relCanvas || !relCtx) return;  // panel removed
   const rw=relCanvas.offsetWidth, rh=relCanvas.offsetHeight;
   if(rw===0){requestAnimationFrame(drawRel);return;}
   relCanvas.width=rw; relCanvas.height=rh;
@@ -3498,6 +4075,7 @@ document.addEventListener('keydown',e=>{
 
   function applyTbPos(){
     if(!tb)return;
+
     if(_tbLeft!==null){
       // Dragged position — absolute left/top, scale only (no translateX)
       tb.style.left        = _tbLeft+'px';
@@ -3505,14 +4083,16 @@ document.addEventListener('keydown',e=>{
       tb.style.bottom      = 'auto';
       tb.style.transform   = `scale(${_tbScale})`;
       tb.style.transformOrigin = 'center center';
-      // Widget picker: above taskbar
+      // Widget picker: above taskbar, same width
       if(wp){
+        const tbW = tb.getBoundingClientRect().width;
+        wp.style.width     = tbW+'px';
         wp.style.left      = _tbLeft+'px';
         wp.style.top       = (_tbTop - 62)+'px';
         wp.style.bottom    = 'auto';
         wp.style.transform = 'translateX(-50%)';
       }
-      // Device bar: above taskbar (taskbar ~65px tall)
+      // Device bar: above taskbar
       if(db){
         db.style.left      = _tbLeft+'px';
         db.style.top       = (_tbTop - 96)+'px';
@@ -3526,11 +4106,14 @@ document.addEventListener('keydown',e=>{
       tb.style.bottom='18px';
       tb.style.transform=`translateX(-50%) scale(${_tbScale})`;
       tb.style.transformOrigin='center bottom';
+      // Sync widget picker width to taskbar's scaled visual width
       if(wp){
-        wp.style.left='50%';
-        wp.style.top='';
-        wp.style.bottom='';
-        wp.style.transform='translateX(-50%) translateY(8px)';
+        const tbW = tb.getBoundingClientRect().width;
+        wp.style.width     = tbW+'px';
+        wp.style.left      = '50%';
+        wp.style.top       = '';
+        wp.style.bottom    = '';
+        wp.style.transform = 'translateX(-50%) translateY(8px)';
       }
       if(db){
         db.style.left='50%';
@@ -3616,6 +4199,11 @@ document.addEventListener('keydown',e=>{
   });
 })();
 
+function wpSwitchTab(name){
+  document.querySelectorAll('.wp-tab').forEach(t=>t.classList.toggle('active', t.dataset.wptab===name));
+  document.querySelectorAll('.wp-panel').forEach(p=>p.classList.toggle('active', p.id==='wppan-'+name));
+}
+
 function toggleWidgetPicker(){
   const wp=document.getElementById('widget-picker');
   if(!wp)return;
@@ -3625,12 +4213,12 @@ function toggleWidgetPicker(){
 }
 
 function syncObsidian(){
-  fetch(API+'/sync/obsidian',{method:'POST'}).catch(()=>{});
+  fetch(API+'/obsidian/sync',{method:'POST'}).catch(()=>{});
   showToast('OBSIDIAN','Sync triggered');
 }
 
 function analysePerfLog(){
-  fetch(API+'/analyse/perf',{method:'POST'}).catch(()=>{});
+  fetch(API+'/analyze',{method:'POST'}).catch(()=>{});
   showToast('PERF','Performance analysis started');
 }
 
@@ -3694,23 +4282,42 @@ function selectMicDevice(idx){
   fetch(API+'/mic/select',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({index:parseInt(idx)})}).catch(()=>{});
 }
 
-function loadCamDevices(){
-  fetch(API+'/vision/cameras').then(r=>r.json()).then(d=>{
-    const indices=d.cameras||[];
-    const active=d.active!=null?d.active:0;
-    if(!indices.length){
+function loadCamDevices(forceRefresh){
+  const url = API + '/vision/cameras' + (forceRefresh ? '?refresh=1' : '');
+  fetch(url).then(r=>r.json()).then(d=>{
+    // Backend returns [{index, name}, ...] — but tolerate legacy int[] too
+    const raw = d.cameras || [];
+    const cams = raw.map(c => typeof c === 'object' && c !== null
+      ? { index: c.index, name: (c.name || ('Camera ' + c.index)).toString() }
+      : { index: c, name: 'Camera ' + c });
+    const active = d.active != null ? d.active : 0;
+    if(!cams.length){
       _buildPicker('dev-picker-cam',['No camera'],0,()=>{});
       return;
     }
-    const labels=indices.map(i=>'Camera '+i);
-    const curIdx=Math.max(0,indices.indexOf(active));
-    const cur=document.getElementById('dev-cam-cur');
-    if(cur) cur.textContent=('CAM '+active);
-    _buildPicker('dev-picker-cam',labels,curIdx,(i,label)=>{
-      const idx=indices[i];
-      _selCam=idx;
-      const c=document.getElementById('dev-cam-cur'); if(c) c.textContent=label.substring(0,18);
-      fetch(API+'/vision/camera',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({index:idx})}).catch(()=>{});
+    // Short labels for dropdown — keep full name in title attr via picker
+    const labels = cams.map(c => {
+      // Trim WMI prefixes like "USB Composite Device" / strip serials
+      let n = c.name.replace(/\s*\(\d+\)$/,'').trim();
+      if(n.length > 28) n = n.substring(0, 26) + '…';
+      return n + '  ·  #' + c.index;
+    });
+    const curIdx = Math.max(0, cams.findIndex(c => c.index === active));
+    // Init _selCam from backend's active index on first load
+    if(_selCam === '' && cams[curIdx]) _selCam = cams[curIdx].index;
+    const cur = document.getElementById('dev-cam-cur');
+    if(cur) cur.textContent = (cams[curIdx] ? cams[curIdx].name : 'CAM ' + active).substring(0,18);
+    _buildPicker('dev-picker-cam', labels, curIdx, (i, label) => {
+      const cam = cams[i];
+      if(!cam) return;
+      _selCam = cam.index;
+      if(cur) cur.textContent = cam.name.substring(0, 18);
+      fetch(API + '/vision/camera', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ index: cam.index })
+      }).catch(()=>{});
+      // If optics is active, restart stream with new device immediately
+      if(currentMode === 'cam') startCam();
     });
   }).catch(()=>{
     _buildPicker('dev-picker-cam',['No camera'],0,()=>{});
@@ -3784,9 +4391,9 @@ let _ws=null, _wsDelay=1500, _wsConnected=false;
 function connectWS(){
   try{
     _ws=new WebSocket('ws://localhost:5051');
-    _ws.onopen=()=>{ _wsDelay=1500; _wsConnected=true; showToast('SYSTEM','iZACH backend online'); };
+    _ws.onopen=()=>{ _wsDelay=1500; _wsConnected=true; showToast('SYSTEM','iZACH backend online'); setOrbColor(_dndActive?'dnd':'normal'); };
     _ws.onmessage=e=>{ try{ handleWS(JSON.parse(e.data)); }catch(ex){} };
-    _ws.onclose=()=>{ _ws=null; _wsConnected=false; _wsDelay=Math.min(_wsDelay*1.6,16000); setTimeout(connectWS,_wsDelay); };
+    _ws.onclose=()=>{ _ws=null; _wsConnected=false; _wsDelay=Math.min(_wsDelay*1.6,16000); setTimeout(connectWS,_wsDelay); setOrbColor('offline'); };
     _ws.onerror=()=>{ _ws&&_ws.close(); };
   }catch(ex){}
 }
@@ -3868,11 +4475,11 @@ function handleWS(d){
     showToast('SCREENSHOT','Captured: '+d.filename);
     addFeedItem('SYSTEM','Screenshot: '+d.filename);
   }
-  // WhatsApp message received — add to MSG panel
+  // WhatsApp message received — add to INBOX tab
   else if(d.type==='wa_message'){
     const name=d.sender||d.from||'Unknown';
     const text=d.text||d.body||'';
-    const body=document.getElementById('p-msg-body');
+    const body=document.getElementById('wa-pane-inbox');
     const existing=body.querySelector('[data-placeholder]'); if(existing) existing.remove();
     const row=document.createElement('div'); row.className='wa';
     const init=(name[0]||'?').toUpperCase();
@@ -3926,17 +4533,6 @@ function handleWS(d){
     updateAgentActive(d.domain||'', d.confidence||0);
     return;
   }
-  // ── Gesture Engine events ─────────────────────────────────────
-  else if(d.event==='gesture_status'){
-    const on=!!(d.payload&&d.payload.running);
-    _gestureSetUI(on);
-    showToast('GESTURE', on ? 'AURA engine online' : 'Gesture engine stopped');
-    return;
-  }
-  else if(d.event==='gesture_event' && d.source==='gesture_engine'){
-    _handleGestureEvent(d.payload||{});
-    return;
-  }
   // OCR result push
   else if(d.type==='ocr_result'){
     _handleOcrWsMsg(d);
@@ -3955,271 +4551,6 @@ function handleWS(d){
   }
 }
 
-// ════════════════════════════════════════════════════
-// GESTURE ENGINE — UI + drag wiring
-// ════════════════════════════════════════════════════
-let _gestureEngineOn = false;
-let _gestureGrabbing = false;
-let _gestureTarget   = null;   // panel element currently being dragged
-
-// Step 8 — spotlight state
-let _spotlightPanel = null;
-let _spotlightTimer = null;
-
-function _setSpotlight(pnl) {
-  // Circling the same panel again → toggle off
-  if(_spotlightPanel === pnl) { _clearSpotlight(); return; }
-  _clearSpotlight();
-  if(!pnl) return;
-  _spotlightPanel = pnl;
-  pnl.classList.add('spotlighted');
-  document.body.classList.add('spotlight-mode');
-  clearTimeout(_spotlightTimer);
-  _spotlightTimer = setTimeout(_clearSpotlight, 9000);  // auto-off after 9s
-}
-
-function _clearSpotlight() {
-  clearTimeout(_spotlightTimer);
-  if(_spotlightPanel) _spotlightPanel.classList.remove('spotlighted');
-  _spotlightPanel = null;
-  document.body.classList.remove('spotlight-mode');
-}
-
-// Gesture label map for display
-const _GESTURE_LABELS = {
-  grab:             '✊  GRAB',
-  move:             '✊  HOLD & MOVE',
-  release:          '🖐  RELEASE',
-  pinch_volume:     '🤏  VOLUME',
-  pinch_brightness: '🤏  BRIGHTNESS',
-  swipe_left:       '👈  SWIPE LEFT',
-  swipe_right:      '👉  SWIPE RIGHT',
-  swipe_down:       '👇  SWIPE DOWN',
-  thumbs_up:        '👍  MAXIMIZE / NEXT',
-  thumbs_down:      '🤙  MINIMIZE / PREV',
-  rock:             '🤘  PLAY / PAUSE',
-  peace:            '✌  VISION SCAN',
-  point:            '☝  POINT',
-  circle:           '○  SPOTLIGHT',
-};
-
-function _gestureSetUI(on) {
-  _gestureEngineOn = on;
-  const tog   = document.getElementById('ge-toggle');
-  const knob  = document.getElementById('ge-toggle-knob');
-  const txt   = document.getElementById('ge-status-txt');
-  const dot   = document.getElementById('ge-dot');
-  const wpBtn = document.getElementById('wpb-gesture');
-  if(tog)  tog.classList.toggle('on', on);
-  if(txt){ txt.textContent = on ? 'ONLINE' : 'OFFLINE'; txt.classList.toggle('on', on); }
-  if(dot)  dot.classList.toggle('active', on);
-  if(wpBtn) wpBtn.style.borderColor = on ? 'rgba(0,148,255,0.6)' : '';
-}
-
-// ── Step 6: Floating gesture HUD ─────────────────────────────
-let _gestureHudTimer = null;
-function _showGestureHUD(label, hand) {
-  const hud  = document.getElementById('gesture-hud');
-  const txt  = document.getElementById('gesture-hud-text');
-  const hTxt = document.getElementById('gesture-hud-hand');
-  if(!hud || !txt) return;
-  txt.textContent  = label;
-  if(hTxt) hTxt.textContent = hand && hand !== 'NONE' ? hand + ' ·' : '';
-  hud.classList.add('show');
-  clearTimeout(_gestureHudTimer);
-  _gestureHudTimer = setTimeout(() => hud.classList.remove('show'), 2000);
-}
-
-// ── Step 4+5: helper — find .pnl under gesture cursor ────────
-function _pnlAt(gx, gy) {
-  const hit = document.elementFromPoint(gx, gy);
-  return hit ? hit.closest('.pnl') : null;
-}
-
-function _handleGestureEvent(p) {
-  const gesture = p.gesture || '';
-  const hand    = (p.hand  || 'none').toUpperCase();
-  const extra   = p.extra  || {};
-
-  // ── Update GESTURE panel display ──────────────────────────
-  const gName = document.getElementById('ge-gesture-name');
-  const gHand = document.getElementById('ge-gesture-hand');
-  if(gName) gName.textContent = _GESTURE_LABELS[gesture] || gesture.toUpperCase();
-  if(gHand) gHand.textContent = `HAND · ${hand}`;
-
-  // ── Volume / brightness live bars ─────────────────────────
-  if(gesture === 'pinch_volume' && extra.percent !== undefined){
-    const pct = extra.percent;
-    const bar = document.getElementById('ge-vol-bar');
-    const lbl = document.getElementById('ge-vol-pct');
-    if(bar) bar.style.width = pct + '%';
-    if(lbl) lbl.textContent = pct + '%';
-    _showGestureHUD(`VOL ${pct}%`, hand);
-    return;
-  }
-  if(gesture === 'pinch_brightness' && extra.percent !== undefined){
-    const pct = extra.percent;
-    const bar = document.getElementById('ge-bri-bar');
-    const lbl = document.getElementById('ge-bri-pct');
-    if(bar) bar.style.width = pct + '%';
-    if(lbl) lbl.textContent = pct + '%';
-    _showGestureHUD(`BRIGHT ${pct}%`, hand);
-    return;
-  }
-
-  // ── Normalize hand pos → screen pixels ────────────────────
-  const gx = Math.round((p.x || 0.5) * window.innerWidth);
-  const gy = Math.round((p.y || 0.5) * window.innerHeight);
-
-  // ══ STEP 4: GRAB — panel glow + drag start ════════════════
-  if(gesture === 'grab'){
-    const pnl = _pnlAt(gx, gy);
-    if(pnl && dragHandlers[pnl.id]){
-      dragHandlers[pnl.id](gx, gy);
-      _gestureTarget   = pnl;
-      _gestureGrabbing = true;
-      document.body.classList.add('gesture-grabbing');
-      // Visual: glow the grabbed panel
-      pnl.classList.add('gesture-grabbed');
-      // Update GESTURE panel to show which widget is grabbed
-      const pnlId = pnl.querySelector('.ph-id');
-      const label = pnlId ? pnlId.textContent : pnl.id;
-      if(gName) gName.textContent = `✊ GRABBING ${label}`;
-      _showGestureHUD(`GRAB · ${label}`, hand);
-    }
-    return;
-  }
-
-  // ══ STEP 4: MOVE — synthetic mousemove, panel follows hand ═
-  if(gesture === 'move'){
-    if(_gestureGrabbing){
-      document.dispatchEvent(new MouseEvent('mousemove',{
-        clientX: gx, clientY: gy, bubbles: true, cancelable: true
-      }));
-    }
-    return;
-  }
-
-  // ══ STEP 4: RELEASE — drop panel, strip glow ══════════════
-  if(gesture === 'release'){
-    if(_gestureGrabbing){
-      document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
-      if(_gestureTarget) _gestureTarget.classList.remove('gesture-grabbed');
-      _gestureGrabbing = false;
-      _gestureTarget   = null;
-      document.body.classList.remove('gesture-grabbing');
-      _showGestureHUD('DROPPED', hand);
-    }
-    return;
-  }
-
-  // ══ STEP 5: THUMBS UP — context-aware ══════════════════════
-  // Over a panel  → MAXIMIZE (restore if minimised, raise z-index)
-  // No panel      → Spotify NEXT track
-  if(gesture === 'thumbs_up'){
-    const pnl = _pnlAt(gx, gy);
-    if(pnl){
-      const minBtn = pnl.querySelector('.ph-min');
-      if(pnl.classList.contains('minimized') && minBtn){
-        minBtn.click();   // restore
-      }
-      pnl.style.zIndex = ++zTop;
-      const pnlId = pnl.querySelector('.ph-id');
-      const label = pnlId ? pnlId.textContent : pnl.id;
-      _showGestureHUD(`MAXIMIZE · ${label}`, hand);
-    } else {
-      fetch(API+'/spotify/control',{
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({action:'next'})
-      }).catch(()=>{});
-      _showGestureHUD('⏭  NEXT TRACK', hand);
-    }
-    return;
-  }
-
-  // ══ STEP 5: THUMBS DOWN (pinky) — context-aware ════════════
-  // Over a panel  → MINIMIZE
-  // No panel      → Spotify PREV track
-  if(gesture === 'thumbs_down'){
-    const pnl = _pnlAt(gx, gy);
-    if(pnl){
-      const minBtn = pnl.querySelector('.ph-min');
-      if(!pnl.classList.contains('minimized') && minBtn){
-        minBtn.click();   // collapse to header
-      }
-      const pnlId = pnl.querySelector('.ph-id');
-      const label = pnlId ? pnlId.textContent : pnl.id;
-      _showGestureHUD(`MINIMIZE · ${label}`, hand);
-    } else {
-      fetch(API+'/spotify/control',{
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({action:'prev'})
-      }).catch(()=>{});
-      _showGestureHUD('⏮  PREV TRACK', hand);
-    }
-    return;
-  }
-
-  // ── PEACE sign → camera vision scan ───────────────────────
-  if(gesture === 'peace'){
-    if(_ws && _ws.readyState === 1){
-      _ws.send(JSON.stringify({type:'command', text:'what do you see'}));
-    }
-    _showGestureHUD('✌  VISION SCAN', hand);
-    return;
-  }
-
-  // ── POINT — show HUD only (future: hover inspect) ─────────
-  if(gesture === 'point'){
-    _showGestureHUD('☝  POINT', hand);
-    return;
-  }
-
-  // ── SWIPE gestures — HUD feedback ─────────────────────────
-  if(gesture === 'swipe_left' || gesture === 'swipe_right' || gesture === 'swipe_down'){
-    _showGestureHUD(_GESTURE_LABELS[gesture] || gesture.toUpperCase(), hand);
-    return;
-  }
-
-  // ══ STEP 7: ROCK 🤘 → Spotify play / pause ════════════════
-  if(gesture === 'rock'){
-    fetch(API + '/spotify/control', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'toggle' }),
-    }).catch(() => {});
-    _showGestureHUD('🤘  PLAY / PAUSE', hand);
-    return;
-  }
-
-  // ══ STEP 8: CIRCLE ○ → spotlight / focus panel ════════════
-  // Circle over a panel → dim all others, highlight that panel.
-  // Circle again over same panel OR anywhere empty → release spotlight.
-  if(gesture === 'circle'){
-    const pnl = _pnlAt(gx, gy);
-    if(pnl && pnl.classList.contains('show')){
-      _setSpotlight(pnl);
-      const label = pnl.querySelector('.ph-id')?.textContent || pnl.id;
-      const action = _spotlightPanel ? `FOCUS · ${label}` : 'SPOTLIGHT OFF';
-      _showGestureHUD(`○  ${action}`, hand);
-    } else {
-      _clearSpotlight();
-      _showGestureHUD('○  SPOTLIGHT OFF', hand);
-    }
-    return;
-  }
-}
-
-function toggleGestureEngine(){
-  if(!_ws || _ws.readyState !== 1){
-    showToast('GESTURE','Backend not connected');
-    return;
-  }
-  const cmd = _gestureEngineOn ? 'stop gesture engine' : 'start gesture engine';
-  _ws.send(JSON.stringify({type:'command', text: cmd}));
-}
 
 // ════════════════════════════════════════════════════
 // OCR PANEL
@@ -4534,38 +4865,33 @@ function printClearQueue() {
   _renderPrintQueue();
 }
 
+// Open each queued file in the user's default browser (Chrome by default).
+// Chrome's built-in PDF viewer has print preview + page selection + scale
+// + color controls baked in — much friendlier than the old IPP/CUPS path.
+// For non-PDF files (.docx/.jpg/.txt), Chrome will either render or download.
 async function printNow() {
   if (_printQueue.length === 0) { showToast('PRINT','No files in queue'); return; }
-  const paths = _printQueue.map(f => f.path);
-
-  // Build per_file_pages map: only include non-"all" specs
-  const perFilePages = {};
-  _printQueue.forEach(f => {
-    const spec = (f.pages || 'all').trim();
-    if (spec && spec !== 'all') perFilePages[f.path] = spec;
-  });
-
   const btn = document.querySelector('#p-print button[onclick="printNow()"]');
-  if (btn) { btn.textContent = '⎙ PRINTING…'; btn.disabled = true; }
-  try {
-    const r = await fetch(API + '/print/job', {
-      method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({
-        files: paths,
-        overrides: _printPrefs,
-        per_file_pages: perFilePages,
-      }),
-    }).then(x => x.json());
-    if (r.ok) {
-      showToast('PRINT', `${paths.length} file${paths.length > 1 ? 's' : ''} sent to printer`);
-      _printQueue = [];
-      _renderPrintQueue();
-    } else {
-      const failed = (r.results || []).filter(x => !x.success).map(x => x.file).join(', ');
-      showToast('PRINT', failed ? `Failed: ${failed}` : 'Print failed — check printer');
-    }
-  } catch(e) { showToast('PRINT', 'Backend error'); }
-  if (btn) { btn.textContent = '⎙ PRINT ALL'; btn.disabled = false; }
+  if (btn) { btn.textContent = '⎙ OPENING…'; btn.disabled = true; }
+  let opened = 0;
+  for (const f of _printQueue) {
+    try {
+      const r = await fetch(API + '/print/open-browser', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ path: f.path }),
+      });
+      const d = await r.json();
+      if (d.ok) opened++;
+    } catch(e) {}
+  }
+  if (opened > 0) {
+    showToast('PRINT', `${opened} file${opened > 1 ? 's' : ''} opened in Chrome — use Ctrl+P to print`, 'success');
+    _printQueue = [];
+    _renderPrintQueue();
+  } else {
+    showToast('PRINT', 'Could not open files in browser', 'error');
+  }
+  if (btn) { btn.textContent = '⎙ OPEN IN CHROME'; btn.disabled = false; }
 }
 
 // Init printer panel when first opened
@@ -5083,6 +5409,33 @@ async function shACStatus(deviceId) {
   }
 }
 
+// ── Nest thermostat actions (Google SDM) ─────────────────────────────────────
+async function shSetTemp(deviceId, mode) {
+  const val = parseFloat(document.getElementById(`sh-temp-${deviceId}`)?.value || 24);
+  const r = await fetch(`${API}/smarthome/ac/temperature`, {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({device_id: deviceId, temp_c: val, mode}),
+  });
+  const d = await r.json(); _shMsg(d.message || d.error || 'Done', d.success);
+  if (d.success) setTimeout(() => shRefresh(), 800);
+}
+async function shSetMode(deviceId, mode) {
+  const r = await fetch(`${API}/smarthome/ac/mode`, {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({device_id: deviceId, mode}),
+  });
+  const d = await r.json(); _shMsg(d.message || d.error || 'Done', d.success);
+  if (d.success) setTimeout(() => shRefresh(), 800);
+}
+async function shFan(deviceId, action, duration_sec) {
+  const r = await fetch(`${API}/smarthome/ac/fan`, {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({device_id: deviceId, action, duration_sec: duration_sec || 900}),
+  });
+  const d = await r.json(); _shMsg(d.message || d.error || 'Done', d.success);
+  if (d.success) setTimeout(() => shRefresh(), 800);
+}
+
 // ── Samsung TV actions (SmartThings primary, local WebSocket fallback) ───────
 async function shTV(action, value) {
   try {
@@ -5265,6 +5618,17 @@ function newsGetEmbedUrl(key, autoplay=false) {
   return `https://www.youtube-nocookie.com/embed/live_stream?channel=${ch.id}&autoplay=${autoplay?1:0}&mute=1&controls=1&modestbranding=1`;
 }
 
+// Open the live stream URL in the user's default browser instead of an iframe
+// (avoids YouTube embed Error 153 / "Video player configuration error").
+function newsLaunchLive(){
+  const ch = _NEWS_CHANNELS[_newsChannel] || _NEWS_CHANNELS.ndtv;
+  const url = `https://www.youtube.com/channel/${ch.id}/live`;
+  try{
+    if(window.electronAPI?.openExternal) window.electronAPI.openExternal(url);
+    else window.open(url, '_blank');
+  }catch(e){ window.open(url, '_blank'); }
+}
+
 // ── init on open ──────────────────────────────────────────────
 async function newsInit() {
   // Load settings first
@@ -5313,10 +5677,10 @@ async function newsInit() {
 // ── channel ───────────────────────────────────────────────────
 function newsSetChannel(key, autoplay=false) {
   _newsChannel = key;
-  const iframe = document.getElementById('news-tv-iframe');
   const label  = document.getElementById('news-tv-label');
-  if (iframe) iframe.src = newsGetEmbedUrl(key, autoplay);
+  const chip   = document.getElementById('news-tv-channel');
   if (label && _NEWS_CHANNELS[key]) label.textContent = _NEWS_CHANNELS[key].name;
+  if (chip  && _NEWS_CHANNELS[key]) chip.textContent  = _NEWS_CHANNELS[key].name;
   // Update active button
   document.querySelectorAll('.news-ch-btn').forEach(b => {
     b.classList.toggle('active', b.textContent === (_NEWS_CHANNELS[key]?.name.split(' ')[0].toUpperCase() || ''));
@@ -6086,14 +6450,11 @@ async function pollStatus(){
     const ivRam=document.getElementById('iv-ram'); if(ivRam) ivRam.textContent='RAM · '+d.ram+'%';
     const ivGpu=document.getElementById('iv-gpu'); if(ivGpu) ivGpu.textContent='GPU · '+d.gpu+'%';
   }catch(e){}
-  // Poll phone status when widget is visible
+  // Always poll phone status — keeps idle-screen dot + phone widget in sync
   try{
-    const phoneEl=document.getElementById('p-phone');
-    if(phoneEl&&phoneEl.classList.contains('show')){
-      const pr=await fetch(API+'/phone/status');
-      const pd=await pr.json();
-      if(pd.ok) handleWS({type:'phone_status',connected:pd.connected,qr:pd.qr||null,device_name:pd.device_name||''});
-    }
+    const pr=await fetch(API+'/phone/status');
+    const pd=await pr.json();
+    if(pd.ok) handleWS({type:'phone_status',connected:pd.connected,qr:pd.qr||null,device_name:pd.device_name||''});
   }catch(e){}
 }
 setInterval(pollStatus,5000); pollStatus();
@@ -6250,47 +6611,6 @@ async function selectMic(value){
   try{ await fetch(API+'/mic/select',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({index:Number(value)})}); }catch(e){}
 }
 
-// ── Ollama stats + rebuild ─────────────────────────────
-async function loadOllamaStats(){
-  try{
-    const r=await fetch(API+'/ollama/stats'); const d=await r.json();
-    if(!d.ok) return;
-    const isCustom = d.active_model === d.custom_model;
-    const dot=document.getElementById('ollama-badge-dot');
-    const txt=document.getElementById('ollama-badge-text');
-    if(dot){ dot.className='ollama-badge-dot '+(isCustom?'custom':'base'); }
-    if(txt) txt.textContent=isCustom?('CUSTOM MODEL ACTIVE — '+d.active_model):('BASE MODEL — '+d.active_model);
-    const total=d.total_samples||0, lastAt=d.last_built_at_sample||0, every=d.rebuild_every||25;
-    const nextAt=d.next_rebuild_at_sample||25, sinceRebuild=total-lastAt, remaining=Math.max(nextAt-total,0);
-    const pct=Math.min(sinceRebuild/every,1);
-    const set=(id,v)=>{ const el=document.getElementById(id); if(el) el.textContent=v; };
-    set('ol-total', total.toLocaleString());
-    set('ol-examples', d.examples_available||0);
-    set('ol-base', d.base_model||'llama3.2');
-    set('ol-next', remaining===0?'READY NOW':(remaining+' MORE'));
-    set('ol-prog-label', sinceRebuild+'/'+every);
-    const fill=document.getElementById('ol-prog-fill');
-    if(fill){
-      fill.style.width=(pct*100)+'%';
-      fill.style.background=pct>=1?'#0094ff':'linear-gradient(90deg,rgba(0,148,255,0.4),#0094ff)';
-      fill.style.boxShadow=pct>=1?'0 0 8px rgba(0,148,255,0.6)':'none';
-    }
-  }catch(e){}
-}
-
-async function forceOllamaRebuild(){
-  const btn=document.getElementById('ol-rebuild-btn');
-  const msg=document.getElementById('ol-msg');
-  if(btn) btn.disabled=true;
-  if(msg){ msg.style.color='rgba(0,148,255,0.5)'; msg.textContent='Starting rebuild...'; }
-  try{
-    const r=await fetch(API+'/ollama/rebuild',{method:'POST'}); const d=await r.json();
-    if(msg) msg.textContent=d.ok?'Building izach model in background — check terminal for progress.':(d.error||'Failed');
-  }catch(e){ if(msg){ msg.style.color='rgba(255,80,80,0.5)'; msg.textContent='Backend offline.'; } }
-  if(btn) btn.disabled=false;
-  setTimeout(()=>{ if(msg) msg.textContent=''; loadOllamaStats(); },9000);
-}
-
 // ── Config panel — load + save ────────────────────────
 async function loadConfig(){
   try{
@@ -6342,10 +6662,19 @@ async function loadConfig(){
 
 // ── KEYS & ID tab ───────────────────────────────────────
 const _KEY_FIELD_MAP = {
+  // Chat / commands
   GROQ_API_KEY:        'kf-groq',
   GEMINI_KEY_1:        'kf-gem1',
   GEMINI_KEY_2:        'kf-gem2',
   GEMINI_KEY_3:        'kf-gem3',
+  // Vision / camera / screen (separate quota pool)
+  GROQ_VISION_KEY:     'kf-groq-vision',
+  // WhatsApp DND automation (separate quota pool)
+  GROQ_WA_KEY:         'kf-groq-wa',
+  GEMINI_VISION_KEY_1: 'kf-gemv1',
+  GEMINI_VISION_KEY_2: 'kf-gemv2',
+  GEMINI_VISION_KEY_3: 'kf-gemv3',
+  // Other services
   SPOTIPY_CLIENT_ID:   'kf-sp-id',
   SPOTIPY_CLIENT_SECRET:'kf-sp-sec',
   SPOTIPY_REDIRECT_URI:'kf-sp-uri',
@@ -6442,19 +6771,351 @@ function switchSettingsTab(tab){
   if(btn) btn.classList.add('active');
   if(panel) panel.classList.add('active');
   if(tab==='memory') loadMemoryTab();
-  else if(tab==='settings'){ loadConfig(); loadOllamaStats(); }
+  else if(tab==='settings'){ loadConfig(); }
   else if(tab==='keys') loadKeysTab();
   else if(tab==='contacts') loadContactsTab();
   else if(tab==='security') loadSecurityTab();
   else if(tab==='commands') buildCommandsAccordion();
+  else if(tab==='links') clLoad();
 }
 
-// ── Memory tab ────────────────────────────────────────
+// ════════════════════════════════════════════════════════════
+// IDLE SCREEN WALLPAPER
+// ════════════════════════════════════════════════════════════
+
+function setIdleWallpaper(dataUrl){
+  const wp  = document.getElementById('idle-wp');
+  const vig = document.getElementById('idle-vignette');
+  if(!wp || !vig) return;
+  if(dataUrl){
+    wp.style.backgroundImage = `url('${dataUrl}')`;
+    wp.classList.add('active');
+    vig.classList.add('active');
+    localStorage.setItem('izach_idle_wp', dataUrl);
+  } else {
+    wp.style.backgroundImage = '';
+    wp.classList.remove('active');
+    vig.classList.remove('active');
+  }
+}
+
+function clearIdleWallpaper(){
+  setIdleWallpaper(null);
+  localStorage.removeItem('izach_idle_wp');
+  const preview = document.getElementById('idle-wp-preview');
+  if(preview) preview.style.display = 'none';
+  const picker = document.getElementById('idle-wp-picker');
+  if(picker) picker.value = '';
+}
+
+function idleWpPicked(input){
+  const file = input.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    setIdleWallpaper(ev.target.result);
+    const preview = document.getElementById('idle-wp-preview');
+    const thumb   = document.getElementById('idle-wp-thumb');
+    if(preview && thumb){ thumb.src = ev.target.result; preview.style.display = 'block'; }
+  };
+  reader.readAsDataURL(file);
+}
+
+function cfgToggleIdleOrb(){
+  const tog = document.getElementById('tog-idle-orb');
+  const orb = document.querySelector('.idle-orb');
+  const isOn = tog.classList.contains('on');
+  tog.classList.toggle('on', !isOn);
+  if(orb) orb.style.display = isOn ? 'none' : '';
+  localStorage.setItem('izach_idle_orb_hidden', isOn ? '1' : '0');
+}
+
+function loadIdleWallpaper(){
+  const saved = localStorage.getItem('izach_idle_wp');
+  if(saved){
+    setIdleWallpaper(saved);
+    const preview = document.getElementById('idle-wp-preview');
+    const thumb   = document.getElementById('idle-wp-thumb');
+    if(preview && thumb){ thumb.src = saved; preview.style.display = 'block'; }
+  }
+  const orbHidden = localStorage.getItem('izach_idle_orb_hidden') === '1';
+  const orb = document.querySelector('.idle-orb');
+  if(orb) orb.style.display = orbHidden ? 'none' : '';
+  const tog = document.getElementById('tog-idle-orb');
+  if(tog) tog.classList.toggle('on', !orbHidden);
+}
+// Run on startup
+loadIdleWallpaper();
+
+// ── Custom Links tab ──────────────────────────────────
+let _clLinks = [];   // [{title, url}, ...]
+
+async function clLoad(){
+  // Try backend first, fall back to localStorage
+  try{
+    const r = await fetch(`${_BASE}/api/custom_links`);
+    if(r.ok){ _clLinks = await r.json(); }
+    else throw new Error('no backend');
+  }catch{
+    try{ _clLinks = JSON.parse(localStorage.getItem('izach_custom_links')||'[]'); }catch{ _clLinks=[]; }
+  }
+  clRender();
+}
+
+function clRender(){
+  const list = document.getElementById('cl-list');
+  const empty = document.getElementById('cl-empty');
+  if(!list) return;
+  // Remove old rows (keep empty element)
+  list.querySelectorAll('.cl-row').forEach(r=>r.remove());
+  if(!_clLinks.length){ if(empty) empty.style.display=''; return; }
+  if(empty) empty.style.display='none';
+  _clLinks.forEach((lk,i)=>{
+    const row = document.createElement('div');
+    row.className = 'cl-row';
+    row.style = 'display:grid;grid-template-columns:1fr 2fr 28px;gap:0;padding:8px 0;border-bottom:1px solid rgba(0,148,255,0.05);align-items:center;';
+    row.innerHTML = `
+      <span style="font-size:10px;color:var(--th);padding-right:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${lk.title}">${lk.title}</span>
+      <span style="font-size:8.5px;color:rgba(0,148,255,0.45);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${lk.url}">${lk.url}</span>
+      <button onclick="clDel(${i})" style="background:none;border:1px solid rgba(255,80,80,0.14);color:rgba(255,80,80,0.32);font-size:7.5px;padding:2px 5px;cursor:pointer;font-family:inherit;letter-spacing:.08em;transition:all .12s;" onmouseover="this.style.borderColor='rgba(255,80,80,0.5)';this.style.color='#ff5050'" onmouseout="this.style.borderColor='rgba(255,80,80,0.14)';this.style.color='rgba(255,80,80,0.32)'">✕</button>`;
+    list.appendChild(row);
+  });
+}
+
+function clAdd(){
+  const title = document.getElementById('cl-inp-title')?.value.trim();
+  const url   = document.getElementById('cl-inp-url')?.value.trim();
+  const msg   = document.getElementById('cl-msg');
+  if(!title||!url){ if(msg) msg.textContent='Both title and URL required.'; return; }
+  // Auto-prefix https
+  const finalUrl = /^https?:\/\//i.test(url) ? url : 'https://'+url;
+  _clLinks.push({title, url: finalUrl});
+  if(document.getElementById('cl-inp-title')) document.getElementById('cl-inp-title').value='';
+  if(document.getElementById('cl-inp-url'))   document.getElementById('cl-inp-url').value='';
+  if(msg) msg.textContent='';
+  clRender();
+}
+
+function clDel(i){
+  _clLinks.splice(i,1);
+  clRender();
+}
+
+async function clSave(){
+  const msg = document.getElementById('cl-save-msg');
+  try{
+    const r = await fetch(`${_BASE}/api/custom_links`,{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(_clLinks),
+    });
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    localStorage.setItem('izach_custom_links', JSON.stringify(_clLinks));
+    if(msg){ msg.textContent='SAVED'; msg.style.color='rgba(0,200,83,0.8)'; setTimeout(()=>msg.textContent='',2500); }
+  }catch(e){
+    // Fallback: save to localStorage only
+    localStorage.setItem('izach_custom_links', JSON.stringify(_clLinks));
+    if(msg){ msg.textContent='SAVED LOCALLY'; msg.style.color='rgba(255,180,0,0.8)'; setTimeout(()=>msg.textContent='',2500); }
+  }
+}
+
+// ══════════════════════════════════════════════════════════════
+// SMART MEMORY TAB
+// ══════════════════════════════════════════════════════════════
+
+let _smCat = '';
+let _smSearch = '';
+
+function smSetCat(btn, cat) {
+  document.querySelectorAll('.sm-cat-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  _smCat = cat;
+  loadSmartMemories();
+}
+
+function smFilter(val) {
+  _smSearch = val;
+  loadSmartMemories();
+}
+
+async function loadSmartMemories() {
+  const list = document.getElementById('sm-list');
+  if (!list) return;
+  list.innerHTML = '<div style="color:rgba(0,148,255,0.3);font-size:9px;font-family:\'Share Tech Mono\';text-align:center;padding:16px 0;">LOADING…</div>';
+  try {
+    let url = API + '/smart-memory?include_disabled=true';
+    if (_smCat)    url += '&category=' + _smCat;
+    if (_smSearch) url += '&search=' + encodeURIComponent(_smSearch);
+    const r = await fetch(url);
+    const d = await r.json();
+    if (!d.ok || !d.data || !d.data.length) {
+      list.innerHTML = '<div style="color:rgba(0,148,255,0.28);font-size:9px;font-family:\'Share Tech Mono\';text-align:center;padding:20px 0;">NO MEMORIES SAVED</div>';
+      return;
+    }
+    list.innerHTML = '';
+    d.data.forEach(m => list.appendChild(_smBuildCard(m)));
+  } catch(e) {
+    list.innerHTML = '<div style="color:rgba(255,60,60,0.4);font-size:9px;font-family:\'Share Tech Mono\';text-align:center;padding:16px 0;">BACKEND OFFLINE</div>';
+  }
+}
+
+function _smBuildCard(m) {
+  const card = document.createElement('div');
+  card.className = 'sm-card';
+  if (!m.enabled) card.style.opacity = '0.45';
+
+  const CAT_LABELS = { profile: '👤 PROFILE', instruction: '📋 RULE', automation: '⏰ AUTO' };
+  const label = CAT_LABELS[m.category] || m.category.toUpperCase();
+  const ts = (m.updated || m.created || '').replace('T', ' ').substring(0, 16);
+
+  let schedHtml = '';
+  if (m.category === 'automation' && m.auto_schedule) {
+    const cron = m.auto_schedule.cron || '';
+    schedHtml = `<div style="font-size:8px;color:rgba(0,200,83,0.55);font-family:'Share Tech Mono';margin-top:4px;">⏰ ${cron || 'no schedule'}</div>`;
+  }
+
+  const toggleClass = m.enabled ? 'sm-toggle on' : 'sm-toggle';
+  const safeId = (m.id || '').replace(/'/g, '');
+  const safeContent = (m.content || '').replace(/`/g, '\\`').replace(/\$/g, '\\$');
+
+  card.innerHTML = `
+    <div class="sm-card-content">${m.content || ''}</div>
+    ${schedHtml}
+    <div class="sm-card-meta">
+      <span class="sm-badge ${m.category}">${label}</span>
+      <span class="sm-card-ts">${ts}</span>
+      <div class="sm-card-actions">
+        <div class="${toggleClass}" title="${m.enabled?'Disable':'Enable'}" onclick="smToggle('${safeId}',${!m.enabled})"></div>
+        <button class="sm-btn" onclick="smOpenEdit('${safeId}',\`${safeContent}\`)">EDIT</button>
+        <button class="sm-btn del" onclick="smDelete('${safeId}')">✕</button>
+      </div>
+    </div>
+  `;
+  return card;
+}
+
+async function smAddMemory() {
+  const cat  = document.getElementById('sm-add-cat').value;
+  const text = (document.getElementById('sm-add-content').value || '').trim();
+  const msg  = document.getElementById('sm-msg');
+  if (!text) { if(msg) { msg.textContent='Content required.'; setTimeout(()=>msg.textContent='',3000); } return; }
+  try {
+    const r = await fetch(API+'/smart-memory', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ category: cat, content: text }),
+    });
+    const d = await r.json();
+    if (d.ok) {
+      document.getElementById('sm-add-content').value = '';
+      if(msg){ msg.textContent = '✓ Saved.'; setTimeout(()=>msg.textContent='',3000); }
+      loadSmartMemories();
+    } else {
+      if(msg){ msg.textContent = d.error || 'Failed.'; setTimeout(()=>msg.textContent='',4000); }
+    }
+  } catch(e) { if(msg){ msg.textContent='Backend offline.'; setTimeout(()=>msg.textContent='',4000); } }
+}
+
+async function smDelete(mid) {
+  try {
+    await fetch(API+'/smart-memory/'+mid, { method:'DELETE' });
+    loadSmartMemories();
+  } catch(e) {}
+}
+
+async function smToggle(mid, enabled) {
+  try {
+    await fetch(API+'/smart-memory/'+mid, {
+      method:'PATCH', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ enabled }),
+    });
+    loadSmartMemories();
+  } catch(e) {}
+}
+
+function smOpenEdit(mid, content) {
+  document.getElementById('sm-edit-id').value = mid;
+  document.getElementById('sm-edit-content').value = content;
+  const modal = document.getElementById('sm-edit-modal');
+  modal.style.display = 'flex';
+}
+function smCloseEdit() {
+  document.getElementById('sm-edit-modal').style.display = 'none';
+}
+async function smSaveEdit() {
+  const mid     = document.getElementById('sm-edit-id').value;
+  const content = (document.getElementById('sm-edit-content').value || '').trim();
+  if (!content || !mid) return;
+  try {
+    await fetch(API+'/smart-memory/'+mid, {
+      method:'PATCH', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ content }),
+    });
+    smCloseEdit();
+    loadSmartMemories();
+  } catch(e) {}
+}
+
+async function smExport() {
+  try {
+    const r = await fetch(API+'/smart-memory/export');
+    const d = await r.json();
+    if (!d.ok) return;
+    // Copy to clipboard
+    await navigator.clipboard.writeText(d.text || '');
+    showToast('MEMORY', 'Exported to clipboard.');
+  } catch(e) { showToast('MEMORY', 'Export failed.'); }
+}
+
+async function smObsidianSync() {
+  try {
+    const r = await fetch(API+'/smart-memory/obsidian-sync', { method:'POST' });
+    const d = await r.json();
+    if (d.ok) showToast('OBSIDIAN', `Synced ${d.synced} memories to vault.`);
+    else showToast('OBSIDIAN', d.error || 'Sync failed.');
+  } catch(e) { showToast('OBSIDIAN', 'Sync failed — backend offline.'); }
+}
+
+function smOpenImport() {
+  document.getElementById('sm-import-text').value = '';
+  document.getElementById('sm-import-msg').textContent = '';
+  document.getElementById('sm-import-modal').style.display = 'flex';
+}
+function smCloseImport() {
+  document.getElementById('sm-import-modal').style.display = 'none';
+}
+async function smCopyExportPrompt() {
+  const txt = document.getElementById('sm-export-prompt').textContent || '';
+  try { await navigator.clipboard.writeText(txt); showToast('COPIED','Prompt copied.'); } catch(e) {}
+}
+async function smDoImport() {
+  const raw = (document.getElementById('sm-import-text').value || '').trim();
+  const msg = document.getElementById('sm-import-msg');
+  if (!raw) { msg.textContent = 'Paste some text first.'; return; }
+  msg.textContent = 'Importing…';
+  try {
+    const r = await fetch(API+'/smart-memory/import', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ text: raw }),
+    });
+    const d = await r.json();
+    if (d.ok) {
+      msg.textContent = `✓ Imported ${d.imported} memories.`;
+      msg.style.color = 'rgba(0,200,83,0.8)';
+      loadSmartMemories();
+      setTimeout(smCloseImport, 1800);
+    } else {
+      msg.textContent = d.error || 'Import failed.';
+      msg.style.color = 'rgba(255,80,80,0.7)';
+    }
+  } catch(e) { msg.textContent = 'Backend offline.'; }
+}
+
+// ── Quick Facts (original key/value memory) ──────────────────
 async function loadMemoryTab(){
+  loadSmartMemories();
   const c=document.getElementById('sp-mem-list'); c.innerHTML='';
   try{
     const r=await fetch(API+'/memory'); const d=await r.json();
-    if(!d.ok||!d.data||!d.data.length){ c.innerHTML='<div class="sp-empty">NO MEMORY ENTRIES</div>'; return; }
+    if(!d.ok||!d.data||!d.data.length){ c.innerHTML='<div class="sp-empty">NO QUICK FACTS</div>'; return; }
     d.data.forEach(entry=>{
       const row=document.createElement('div'); row.className='sp-item';
       const safeKey=(entry.key||'').replace(/'/g,'');
@@ -6894,6 +7555,1037 @@ Object.keys(DEVICE_NODES).forEach(nid => {
 });
 
 connectWS();
+
+/* ═══════════════════════════════════════════════════════════════════════
+   FORGE-PARITY JS — voice wizard, toasts, shell confirm, copy buttons,
+   suggestion chips, drag orb, live mic waveform
+   ═══════════════════════════════════════════════════════════════════════ */
+
+// ─── Voice Enrollment Wizard ──────────────────────────────────────────
+const VE_TOTAL = 5;
+let _veStep = 0;
+let _veCountdownTimer = null;
+
+function veShow(){ document.getElementById('ve-overlay').classList.add('show'); }
+function veHide(){ document.getElementById('ve-overlay').classList.remove('show'); _veStep = 0; clearInterval(_veCountdownTimer); }
+
+function veBuildSteps(){
+  const wrap = document.getElementById('ve-steps');
+  if(!wrap) return;
+  wrap.innerHTML = '';
+  for(let i = 1; i <= VE_TOTAL; i++){
+    const dot = document.createElement('div');
+    dot.className = 've-step-dot';
+    dot.id = 've-step-' + i;
+    dot.textContent = i;
+    wrap.appendChild(dot);
+    if(i < VE_TOTAL){
+      const line = document.createElement('div');
+      line.className = 've-step-line';
+      line.id = 've-step-line-' + i;
+      wrap.appendChild(line);
+    }
+  }
+}
+
+function veSetStep(n, status){
+  for(let i = 1; i <= VE_TOTAL; i++){
+    const dot = document.getElementById('ve-step-' + i);
+    if(!dot) continue;
+    dot.classList.remove('active','done');
+    if(i < n) { dot.classList.add('done'); dot.textContent = '✓'; }
+    else if(i === n) { dot.classList.add(status === 'done' ? 'done' : 'active'); dot.textContent = status === 'done' ? '✓' : i; }
+    else dot.textContent = i;
+    const ln = document.getElementById('ve-step-line-' + i);
+    if(ln) ln.classList.toggle('done', i < n);
+  }
+}
+
+function veRenderPhase(state, data){
+  const body = document.getElementById('ve-body');
+  if(!body) return;
+  clearInterval(_veCountdownTimer);
+  if(state === 'start'){
+    body.innerHTML = '<div id="ve-phase-lbl">STARTING ENROLLMENT</div><div id="ve-phrase">You will read 5 short phrases aloud</div>';
+  }
+  else if(state === 'ready'){
+    let cd = data.prep || 2;
+    body.innerHTML = `
+      <div id="ve-phase-lbl">PHRASE ${data.step} OF ${VE_TOTAL} — READ ALOUD:</div>
+      <div id="ve-phrase">"${(data.phrase||'').replace(/"/g,'&quot;')}"</div>
+      ${data.hint ? `<div style="color:#ffb300;font-size:9px;">${data.hint}</div>` : ''}
+      <div id="ve-countdown">${cd}</div>`;
+    _veCountdownTimer = setInterval(() => {
+      cd--;
+      const el = document.getElementById('ve-countdown');
+      if(el) el.textContent = cd > 0 ? cd : 'GO';
+      if(cd <= 0) clearInterval(_veCountdownTimer);
+    }, 1000);
+  }
+  else if(state === 'recording'){
+    let cd = data.seconds || 4;
+    body.innerHTML = `
+      <div id="ve-phase-lbl">PHRASE ${data.step} OF ${VE_TOTAL} — SPEAK NOW:</div>
+      <div id="ve-phrase" style="color:#00e5ff;">"${(data.phrase||'').replace(/"/g,'&quot;')}"</div>
+      <div id="ve-rec-line"><div class="ve-rec-dot"></div><span>REC — <span id="ve-rec-cd">${cd}</span>s</span></div>`;
+    _veCountdownTimer = setInterval(() => {
+      cd--;
+      const el = document.getElementById('ve-rec-cd');
+      if(el) el.textContent = cd > 0 ? cd : 0;
+      if(cd <= 0) clearInterval(_veCountdownTimer);
+    }, 1000);
+  }
+  else if(state === 'step_done'){
+    body.innerHTML = '<div style="color:#1db954;font-size:10px;letter-spacing:.15em;">✓ CAPTURED · LOADING NEXT PHRASE…</div>';
+  }
+  else if(state === 'processing'){
+    body.innerHTML = '<div id="ve-phase-lbl">COMPUTING VOICE PROFILE…</div><div style="display:flex;gap:5px;justify-content:center;"><div style="width:6px;height:6px;border-radius:50%;background:#00e5ff;animation:blink 1s infinite;"></div><div style="width:6px;height:6px;border-radius:50%;background:#00e5ff;animation:blink 1s .2s infinite;"></div><div style="width:6px;height:6px;border-radius:50%;background:#00e5ff;animation:blink 1s .4s infinite;"></div></div>';
+  }
+  else if(state === 'done'){
+    body.innerHTML = '<div style="font-size:32px;color:#1db954;">✓</div><div style="color:#1db954;font-size:11px;letter-spacing:.2em;">VOICE ENROLLED</div><div style="color:rgba(0,148,255,0.55);font-size:9px;">iZACH will recognise your voice from now on</div>';
+    setTimeout(veHide, 1800);
+  }
+  else if(state === 'failed'){
+    body.innerHTML = `<div style="font-size:24px;color:#ff3d3d;">✗</div><div style="color:#ff3d3d;font-size:10px;letter-spacing:.15em;">ENROLLMENT FAILED</div><div style="color:rgba(0,148,255,0.55);font-size:9px;">${data.reason || 'Unknown error'}</div>`;
+  }
+}
+
+// Wire WS — listen for voice_enroll events
+(function(){
+  const _origHandleWS = window.handleWS || function(){};
+  window.handleWS = function(d){
+    if(d && d.type === 'voice_enroll'){
+      if(d.state === 'start')    { veBuildSteps(); veShow(); veRenderPhase('start', d); }
+      else if(d.state === 'ready'){ veSetStep(d.step, 'active'); veRenderPhase('ready', d); }
+      else if(d.state === 'recording'){ veRenderPhase('recording', d); }
+      else if(d.state === 'step_done'){ veSetStep(d.step + 1, 'pending'); veRenderPhase('step_done', d); }
+      else if(d.state === 'processing'){ veRenderPhase('processing', d); }
+      else if(d.state === 'done')   { for(let i = 1; i <= VE_TOTAL; i++) { const e = document.getElementById('ve-step-'+i); if(e){e.classList.add('done'); e.classList.remove('active'); e.textContent='✓';} } veRenderPhase('done', d); }
+      else if(d.state === 'failed'){ veRenderPhase('failed', d); }
+      return;
+    }
+    return _origHandleWS(d);
+  };
+})();
+
+// Override Settings → ENROLL VOICE button to open wizard instead of just calling /voice/enroll
+const _origEnrollVoice = window.enrollVoice;
+window.enrollVoice = async function(){
+  veBuildSteps(); veShow(); veRenderPhase('start', {});
+  try{
+    await fetch(API + '/voice/enroll', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({label:'owner'}) });
+    showToast('Voice enrollment started.', 'info', 'VOICE');
+  }catch(e){
+    showToast('Backend offline.', 'error', 'VOICE');
+    veHide();
+  }
+};
+
+// ─── Toast Notifications ──────────────────────────────────────────────
+function showToast(text, level = 'info', title = ''){
+  const c = document.getElementById('toast-container');
+  if(!c) return;
+  const t = document.createElement('div');
+  t.className = 'toast ' + (level || '');
+  const iconMap = { info: '●', success: '✓', error: '✗', warn: '⚠' };
+  t.innerHTML = `<div class="toast-icon">${iconMap[level] || '●'}</div><div class="toast-body">${title ? `<div class="toast-title">${title}</div>` : ''}<div class="toast-text">${text}</div></div>`;
+  t.onclick = () => removeToast(t);
+  c.appendChild(t);
+  setTimeout(() => removeToast(t), 5000);
+}
+function removeToast(t){
+  if(!t || t._removing) return;
+  t._removing = true;
+  t.classList.add('out');
+  setTimeout(() => t.remove(), 260);
+}
+// Re-wire WS to surface notifications
+(function(){
+  const _hw = window.handleWS;
+  window.handleWS = function(d){
+    if(d && d.type === 'notification' && d.text){
+      showToast(d.text, 'info', 'iZACH');
+    }
+    return _hw(d);
+  };
+})();
+
+// ─── Shell Command Confirm ────────────────────────────────────────────
+let _shellPendingId = null;
+function showShellConfirm(id, cmd, reason){
+  _shellPendingId = id;
+  document.getElementById('shell-confirm-cmd').textContent = cmd || '(unknown command)';
+  document.getElementById('shell-confirm-msg').textContent = reason || 'iZACH wants to execute this shell command. Allow?';
+  document.getElementById('shell-confirm').classList.add('show');
+}
+function hideShellConfirm(){ document.getElementById('shell-confirm').classList.remove('show'); _shellPendingId = null; }
+function shellConfirmAllow(){
+  if(!_shellPendingId){ hideShellConfirm(); return; }
+  fetch(API + '/shell/confirm', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ id: _shellPendingId, allow: true }) }).catch(()=>{});
+  hideShellConfirm();
+}
+function shellConfirmDeny(){
+  if(_shellPendingId){
+    fetch(API + '/shell/confirm', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ id: _shellPendingId, allow: false }) }).catch(()=>{});
+  }
+  hideShellConfirm();
+}
+// Wire WS for shell_confirm events
+(function(){
+  const _hw = window.handleWS;
+  window.handleWS = function(d){
+    if(d && d.type === 'shell_confirm' && d.id){
+      showShellConfirm(d.id, d.command || d.cmd, d.reason);
+    }
+    return _hw(d);
+  };
+})();
+
+// ─── Auto-add Copy buttons to all chat messages ───────────────────────
+function addCopyButton(el){
+  if(!el || el.querySelector('.cm-copy')) return;
+  if(el.classList.contains('cm-system')) return;
+  const txt = el.textContent || '';
+  if(!txt || txt.length < 3) return;
+  const btn = document.createElement('button');
+  btn.className = 'cm-copy';
+  btn.textContent = 'COPY';
+  btn.onclick = async (e) => {
+    e.stopPropagation();
+    const ok = await copyTextUniversal(txt);
+    if(ok){
+      btn.textContent = 'COPIED';
+      btn.classList.add('copied');
+      setTimeout(() => { btn.textContent = 'COPY'; btn.classList.remove('copied'); }, 1500);
+    }
+  };
+  el.appendChild(btn);
+}
+async function copyTextUniversal(text){
+  if(text == null) return false;
+  const s = String(text);
+  try{ if(window.electronAPI?.clipboardWrite){ window.electronAPI.clipboardWrite(s); return true; } }catch(e){}
+  try{ if(navigator.clipboard?.writeText){ await navigator.clipboard.writeText(s); return true; } }catch(e){}
+  try{
+    const ta = document.createElement('textarea');
+    ta.value = s; ta.style.position='fixed'; ta.style.opacity='0';
+    document.body.appendChild(ta); ta.focus(); ta.select();
+    const ok = document.execCommand('copy');
+    document.body.removeChild(ta);
+    return ok;
+  }catch(e){ return false; }
+}
+// MutationObserver — auto-add copy button to any new chat msg added by ANY code
+(function(){
+  const chatBox = document.getElementById('p-comm-msgs');
+  if(!chatBox) return;
+  // Tag existing
+  chatBox.querySelectorAll('.cm').forEach(addCopyButton);
+  const obs = new MutationObserver(muts => {
+    muts.forEach(m => m.addedNodes.forEach(n => {
+      if(n.nodeType === 1 && n.classList && n.classList.contains('cm')) addCopyButton(n);
+    }));
+  });
+  obs.observe(chatBox, { childList: true });
+})();
+
+// ─── Suggestion Chips on empty chat ───────────────────────────────────
+const CHAT_SUGGESTIONS = [
+  { icon:'♪',  text:"play something chill on spotify" },
+  { icon:'◭',  text:"what's the weather today" },
+  { icon:'▦',  text:"remind me to call mom at 6pm" },
+  { icon:'⊞',  text:"open chrome" },
+  { icon:'▤',  text:"read my whatsapp messages" },
+  { icon:'⊡',  text:"take a screenshot" },
+  { icon:'◉',  text:"what can you do" },
+];
+function renderChatChips(){
+  const wrap = document.getElementById('chat-suggestions');
+  const box = document.getElementById('p-comm-msgs');
+  if(!wrap || !box) return;
+  wrap.innerHTML = '';
+  CHAT_SUGGESTIONS.forEach(s => {
+    const c = document.createElement('div');
+    c.className = 'chip';
+    c.textContent = `${s.icon}  ${s.text}`;
+    c.onclick = () => {
+      if(typeof execCmd === 'function') execCmd(s.text);
+    };
+    wrap.appendChild(c);
+  });
+  const realMsgs = box.querySelectorAll('.cm.u, .cm.a:not([style*="rgba(0,148,255,0.35)"])').length;
+  wrap.classList.toggle('show', realMsgs === 0);
+}
+// Re-evaluate visibility whenever a new chat message arrives
+(function(){
+  const box = document.getElementById('p-comm-msgs');
+  if(!box) return;
+  renderChatChips();
+  const wrap = document.getElementById('chat-suggestions');
+  const obs = new MutationObserver(() => {
+    if(box.querySelectorAll('.cm.u').length > 0 && wrap) wrap.classList.remove('show');
+  });
+  obs.observe(box, { childList: true });
+})();
+
+// ─── MacOS-style dock magnification on taskbar hover ─────────────────
+(function(){
+  const inner = document.getElementById('tb-inner');
+  if(!inner) return;
+  const MAX_SCALE = 1.52;
+  const INFLUENCE = 110; // px radius of magnification effect
+
+  function applyMag(mouseX){
+    const btns = inner.querySelectorAll('.tb-btn');
+    btns.forEach(btn => {
+      const r = btn.getBoundingClientRect();
+      const center = r.left + r.width / 2;
+      const dist = Math.abs(mouseX - center);
+      if(dist < INFLUENCE){
+        const t = 1 - dist / INFLUENCE;
+        const scale = 1 + (MAX_SCALE - 1) * t * t; // quadratic falloff
+        const lift  = (scale - 1) * 14;
+        btn.style.transform = `scale(${scale.toFixed(3)}) translateY(-${lift.toFixed(1)}px)`;
+      } else {
+        btn.style.transform = '';
+      }
+    });
+  }
+
+  inner.addEventListener('mousemove', e => applyMag(e.clientX));
+  inner.addEventListener('mouseleave', () => {
+    inner.querySelectorAll('.tb-btn').forEach(b => b.style.transform = '');
+  });
+})();
+
+// ─── Draggable Idle Orb (always starts centered; session-only drag) ───
+(function(){
+  const orb = document.querySelector('.idle-orb');
+  if(!orb) return;
+  // Always start centered — clear any stale localStorage position
+  localStorage.removeItem('izach_orb_pos');
+  // (restore block removed so orb is always at CSS calc center)
+  let drag = null;
+  orb.addEventListener('mousedown', e => {
+    if(e.button !== 0) return;
+    const r = orb.getBoundingClientRect();
+    drag = { x: e.clientX - r.left, y: e.clientY - r.top };
+    orb.classList.add('dragging');
+    e.preventDefault();
+  });
+  window.addEventListener('mousemove', e => {
+    if(!drag) return;
+    orb.style.position = 'absolute';
+    orb.style.left = (e.clientX - drag.x) + 'px';
+    orb.style.top  = (e.clientY - drag.y) + 'px';
+  });
+  window.addEventListener('mouseup', () => {
+    if(!drag) return;
+    drag = null;
+    orb.classList.remove('dragging');
+    // Not saving position — orb always resets to center on reload
+  });
+})();
+
+// ─── Live Mic Waveform on Idle Orb ────────────────────────────────────
+(function(){
+  const orb = document.querySelector('.idle-orb');
+  if(!orb) return;
+  const cv = document.createElement('canvas');
+  cv.id = 'mic-wave-canvas';
+  cv.width = 220; cv.height = 220;
+  orb.style.position = orb.style.position || 'absolute';
+  orb.appendChild(cv);
+  const ctx = cv.getContext('2d');
+  function draw(){
+    if(typeof listening !== 'undefined' && listening && typeof micBuf !== 'undefined' && typeof analyser !== 'undefined' && analyser && micBuf){
+      cv.classList.add('active');
+      analyser.getByteFrequencyData(micBuf);
+      const w = cv.width, h = cv.height, cx = w/2, cy = h/2, baseR = 70;
+      ctx.clearRect(0, 0, w, h);
+      const bars = 64;
+      ctx.lineWidth = 2;
+      for(let i = 0; i < bars; i++){
+        const v = micBuf[Math.floor(i / bars * micBuf.length)] / 255;
+        const a = (i / bars) * Math.PI * 2 - Math.PI/2;
+        const r1 = baseR;
+        const r2 = baseR + 8 + v * 28;
+        const x1 = cx + Math.cos(a) * r1, y1 = cy + Math.sin(a) * r1;
+        const x2 = cx + Math.cos(a) * r2, y2 = cy + Math.sin(a) * r2;
+        ctx.strokeStyle = `rgba(0, 229, 255, ${0.3 + v * 0.7})`;
+        ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+      }
+    } else {
+      cv.classList.remove('active');
+      ctx.clearRect(0, 0, cv.width, cv.height);
+    }
+    requestAnimationFrame(draw);
+  }
+  draw();
+})();
+
+// ─── Phone widget — command list + connection heartbeat ──────────────
+function addPhoneCommand(text, ts){
+  const list = document.getElementById('phone-cmd-list');
+  if(!list) return;
+  // Clear placeholder
+  if(list.children.length === 1 && list.children[0].textContent.includes('No commands yet')){
+    list.innerHTML = '';
+  }
+  const row = document.createElement('div');
+  row.style.cssText = 'background:rgba(0,148,255,0.05);border-left:2px solid rgba(0,229,255,0.5);padding:5px 8px;font-size:8px;letter-spacing:.05em;color:rgba(200,232,240,0.8);display:flex;justify-content:space-between;gap:6px;';
+  row.innerHTML = `<span style="flex:1;word-break:break-word;">${text.replace(/</g,'&lt;')}</span><span style="color:rgba(0,148,255,0.4);font-size:7px;flex-shrink:0;">${ts||''}</span>`;
+  list.insertBefore(row, list.firstChild);
+  while(list.children.length > 20) list.removeChild(list.lastChild);
+}
+async function loadPhoneCommands(){
+  try{
+    const r = await fetch(API + '/phone/commands');
+    const d = await r.json();
+    const list = document.getElementById('phone-cmd-list');
+    if(!list || !d.ok) return;
+    if((d.commands||[]).length === 0) return;
+    list.innerHTML = '';
+    d.commands.slice().reverse().forEach(c => addPhoneCommand(c.text, c.ts));
+  }catch(e){}
+}
+loadPhoneCommands();
+// Listen for new phone commands via WS
+(function(){
+  const _hw = window.handleWS;
+  window.handleWS = function(d){
+    if(d && d.type === 'phone_command'){
+      addPhoneCommand(d.text || '', d.ts || '');
+      // Add to main chat feed so PC chatbox shows phone commands
+      const c = document.getElementById('p-comm-msgs');
+      if(c && d.text){
+        const el = document.createElement('div');
+        el.className = 'cm u';
+        el.style.cssText = 'border-left-color:rgba(0,200,83,0.6);color:rgba(0,230,100,0.85);';
+        el.textContent = '📱 ' + d.text;
+        c.appendChild(el); c.scrollTop = c.scrollHeight;
+        addFeedItem('CHAT', '📱 ' + (d.text||'').substring(0,38));
+      }
+      // Force connected status when a command arrives
+      _hw({ type: 'phone_status', connected: true, device_name: d.device_name || '' });
+      return;
+    }
+    return _hw(d);
+  };
+})();
+
+// ─── WhatsApp widget — status + QR rendering ──────────────────────────
+function setWhatsAppStatus(connected, qr){
+  const dot = document.getElementById('wa-status-dot');
+  const txt = document.getElementById('wa-status-txt');
+  const qrState = document.getElementById('wa-qr-state');
+  const qrImg = document.getElementById('wa-qr-img');
+  if(dot) dot.style.background = connected ? '#1db954' : 'rgba(255,80,80,0.75)';
+  if(dot) dot.style.boxShadow = connected ? '0 0 6px #1db954' : '0 0 6px rgba(255,80,80,0.55)';
+  if(txt) txt.textContent = connected ? 'CONNECTED' : 'DISCONNECTED — SCAN QR';
+  if(qrState){
+    if(!connected && qr){
+      qrState.style.display = 'flex';
+      if(qrImg) qrImg.src = qr.startsWith('data:') ? qr : 'data:image/png;base64,' + qr;
+    } else {
+      qrState.style.display = 'none';
+    }
+  }
+}
+async function loadWhatsAppStatus(){
+  try{
+    const r = await fetch(API + '/whatsapp/status');
+    const d = await r.json();
+    setWhatsAppStatus(!!d.connected, d.qr || '');
+  }catch(e){
+    setWhatsAppStatus(false, '');
+  }
+}
+loadWhatsAppStatus();
+// While disconnected (waiting for scan), poll every 8s so QR stays fresh.
+// Once connected, slow to 30s.
+let _waPollInterval = setInterval(loadWhatsAppStatus, 30000);
+function _resetWaPoll(connected){
+  clearInterval(_waPollInterval);
+  _waPollInterval = setInterval(loadWhatsAppStatus, connected ? 30000 : 8000);
+}
+// Patch setWhatsAppStatus to drive poll rate
+const _origSetWA = setWhatsAppStatus;
+setWhatsAppStatus = function(connected, qr){
+  _origSetWA(connected, qr);
+  _resetWaPoll(connected);
+};
+// React to WhatsApp status / QR WS events live
+(function(){
+  const _hw = window.handleWS;
+  window.handleWS = function(d){
+    if(d && d.type === 'whatsapp_status'){
+      setWhatsAppStatus(!!d.connected, d.qr || '');
+      return;
+    }
+    if(d && d.type === 'whatsapp_qr'){
+      // Force disconnected + render the new QR
+      setWhatsAppStatus(false, d.qr || '');
+      return;
+    }
+    return _hw(d);
+  };
+})();
+
 </script>
+
+<!-- ═════════════════════════════════════════════════════════════════════
+     FORGE-PARITY OVERLAYS (voice wizard, shell confirm, toasts)
+     ═════════════════════════════════════════════════════════════════════ -->
+
+<!-- Voice Enrollment Wizard Overlay -->
+<div id="ve-overlay">
+  <div id="ve-card">
+    <div id="ve-head">
+      <div id="ve-title">◎ VOICE ENROLLMENT</div>
+      <button id="ve-cancel" onclick="veHide()">✕</button>
+    </div>
+    <div id="ve-steps"></div>
+    <div id="ve-body">
+      <div id="ve-phase-lbl">PREPARING…</div>
+    </div>
+  </div>
+</div>
+
+<!-- Shell Command Confirm Overlay -->
+<div id="shell-confirm">
+  <div id="shell-confirm-card">
+    <div id="shell-confirm-title">⚠ SHELL EXECUTION REQUEST</div>
+    <div id="shell-confirm-cmd"></div>
+    <div id="shell-confirm-msg"></div>
+    <div id="shell-confirm-btns">
+      <button class="shell-btn deny"  onclick="shellConfirmDeny()">DENY</button>
+      <button class="shell-btn allow" onclick="shellConfirmAllow()">ALLOW</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast Container -->
+<div id="toast-container"></div>
+
+<script>
+// Inject chat suggestion chips container directly above the chat input area
+(function(){
+  const msgs = document.getElementById('p-comm-msgs');
+  if(!msgs || document.getElementById('chat-suggestions')) return;
+  const chips = document.createElement('div');
+  chips.id = 'chat-suggestions';
+  msgs.parentNode.insertBefore(chips, msgs.nextSibling);
+  renderChatChips();
+})();
+</script>
+
+<script>
+// ════════════════════════════════════════════════════════════
+// ORB COLOR — normal (blue) | dnd (orange) | offline (red)
+// ════════════════════════════════════════════════════════════
+let _orbState = 'normal'; // 'normal' | 'dnd' | 'offline'
+
+function setOrbColor(state){
+  _orbState = state;
+  let c, r;
+  if(state === 'dnd')     { c = '#ff8c00'; r = '255,140,0'; }
+  else if(state === 'offline') { c = '#ff2244'; r = '255,34,68'; }
+  else                    { c = '#0094ff'; r = '0,148,255'; }
+
+  const root = document.documentElement;
+  root.style.setProperty('--orb-c',       c);
+  root.style.setProperty('--orb-dim',     `rgba(${r},0.1)`);
+  root.style.setProperty('--orb-mid',     `rgba(${r},0.5)`);
+  root.style.setProperty('--orb-bright',  `rgba(${r},0.5)`);
+  root.style.setProperty('--orb-glow',    `rgba(${r},0.45)`);
+  root.style.setProperty('--orb-glow30',  `rgba(${r},0.3)`);
+  root.style.setProperty('--orb-glow12',  `rgba(${r},0.12)`);
+  root.style.setProperty('--orb-glow04',  `rgba(${r},0.04)`);
+  root.style.setProperty('--orb-glow42',  `rgba(${r},0.42)`);
+  root.style.setProperty('--orb-glow18',  `rgba(${r},0.18)`);
+  root.style.setProperty('--orb-glow06',  `rgba(${r},0.06)`);
+}
+
+// ════════════════════════════════════════════════════════════
+// DND — Do Not Disturb
+// ════════════════════════════════════════════════════════════
+
+let _dndActive   = false;
+let _dndAlertIdx = null;   // queue index of currently shown alert overlay
+
+// ── State rendering ─────────────────────────────────────────
+function applyDNDState(active, reason, queueCount){
+  _dndActive = active;
+  const bar    = document.getElementById('dnd-bar');
+  const btn    = document.getElementById('tb-dnd');
+  const rea    = document.getElementById('dnd-bar-reason');
+  const cnt    = document.getElementById('dnd-bar-count');
+
+  if(active){
+    if(bar){ bar.style.display = 'block'; }
+    if(btn){ btn.classList.add('on'); btn.title = 'DND ON — click to disable'; }
+    if(rea){ rea.textContent = reason ? reason.toUpperCase() : 'MANUAL'; }
+    if(cnt){ cnt.textContent = queueCount || 0; }
+    // Push main screen down to avoid overlap
+    const screens = document.getElementById('screens');
+    if(screens) screens.style.marginTop = '26px';
+    // Orb → orange (only if backend is online)
+    if(_wsConnected) setOrbColor('dnd');
+  } else {
+    if(bar){ bar.style.display = 'none'; }
+    if(btn){ btn.classList.remove('on'); btn.title = 'DO NOT DISTURB'; }
+    const screens = document.getElementById('screens');
+    if(screens) screens.style.marginTop = '';
+    // Orb → blue (only if backend is online)
+    if(_wsConnected) setOrbColor('normal');
+  }
+}
+
+// ── Toggle via button ───────────────────────────────────────
+async function toggleDND(){
+  const action = _dndActive ? 'off' : 'on';
+  try{
+    const r = await fetch(API + '/dnd', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({action, reason:'manual'})
+    });
+    const d = await r.json();
+    if(d.ok) applyDNDState(d.active, d.reason, d.queue_count);
+  }catch(e){ showToast('DND toggle failed','error','DND'); }
+}
+
+// ── Load initial state on page open ────────────────────────
+async function loadDNDStatus(){
+  try{
+    const r = await fetch(API + '/dnd');
+    const d = await r.json();
+    if(d.ok) applyDNDState(d.active, d.reason, d.queue_count);
+  }catch(e){}
+}
+loadDNDStatus();
+initBusyStatus();
+
+// ── Alert overlay ────────────────────────────────────────────
+function showDNDAlert(item){
+  _dndAlertIdx = item.id != null ? item.id : null;
+  const ov   = document.getElementById('dnd-alert-overlay');
+  const ttl  = document.getElementById('dnd-alert-title');
+  const body = document.getElementById('dnd-alert-body');
+  if(!ov) return;
+
+  const sender = item.from || 'Unknown';
+  const typ    = item.type || 'alert';
+  let icon = '⛔';
+  if(typ === 'whatsapp_message') icon = '📱';
+  else if(typ === 'phone_call')  icon = '📞';
+
+  if(ttl) ttl.textContent = `${icon} DND — ${typ.replace('_',' ').toUpperCase()}`;
+  if(body){
+    const ts = item.ts ? new Date(item.ts*1000).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}) : '';
+    body.innerHTML =
+      `<b style="color:#a8d8ff">${sender}</b><br>` +
+      (item.text ? `<span style="opacity:0.85">${item.text.slice(0,120)}</span><br>` : '') +
+      (ts ? `<span style="opacity:0.45;font-size:9px">${ts}</span>` : '');
+  }
+  ov.style.display = 'block';
+
+  // Update queue count in bar
+  const cnt = document.getElementById('dnd-bar-count');
+  if(cnt){ cnt.textContent = parseInt(cnt.textContent||'0') + 1; }
+}
+
+function dismissDNDAlert(){
+  const ov = document.getElementById('dnd-alert-overlay');
+  if(ov) ov.style.display = 'none';
+  _dndAlertIdx = null;
+}
+
+async function handleDNDAlert(){
+  if(_dndAlertIdx == null){ dismissDNDAlert(); return; }
+  try{
+    await fetch(API + '/dnd/handle',{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({index: _dndAlertIdx})
+    });
+    showToast('iZACH will handle it — reply being sent','info','DND');
+  }catch(e){}
+  dismissDNDAlert();
+}
+
+async function busyDNDAlert(){
+  if(_dndAlertIdx == null){ dismissDNDAlert(); return; }
+  try{
+    await fetch(API + '/dnd/busy',{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({index: _dndAlertIdx})
+    });
+    showToast('Auto-replied — I\'m busy','info','DND');
+  }catch(e){}
+  dismissDNDAlert();
+}
+
+// ── Queue panel (shown after DND off) ───────────────────────
+function showDNDQueuePanel(queue){
+  if(!queue || !queue.length) return;
+  const panel = document.getElementById('dnd-queue-panel');
+  const list  = document.getElementById('dnd-queue-list');
+  if(!panel || !list) return;
+
+  const actionLabel = {handle:'HANDLED', busy:'BUSY → AUTO-REPLIED', unattended:'UNATTENDED', null:''};
+  const actionColor = {handle:'#6ab0e0', busy:'#ff8080', unattended:'#ff8c00'};
+  list.innerHTML = queue.map((item,i) => {
+    const icon   = item.type==='whatsapp_message' ? '📱' : item.type==='phone_call' ? '📞' : '⚡';
+    const sender = item.from || 'Unknown';
+    const action = item.action;
+    const ts     = item.ts ? new Date(item.ts*1000).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}) : '';
+    const actBadge = action
+      ? `<span style="color:${actionColor[action]||'#aaa'};font-size:9px;"> [${actionLabel[action]||action.toUpperCase()}]</span>`
+      : '';
+    return `<div style="border-bottom:1px solid rgba(0,148,255,0.1);padding:8px 0;display:flex;gap:8px;align-items:flex-start;">
+      <span>${icon}</span>
+      <div style="flex:1;">
+        <b style="color:#a8d8ff">${sender}</b>${actBadge}
+        <span style="float:right;opacity:0.4;font-size:9px">${ts}</span><br>
+        ${item.text ? `<span style="opacity:0.7">${item.text.slice(0,80)}</span><br>` : ''}
+        ${!action ? `<div style="display:flex;gap:6px;margin-top:4px;">
+          <button onclick="handleQueueItem(${i})" style="font-size:9px;padding:2px 8px;border-radius:4px;
+            background:rgba(0,148,255,0.15);border:1px solid rgba(0,148,255,0.4);color:#6ab0e0;cursor:pointer;font-family:inherit;">HANDLE</button>
+          <button onclick="busyQueueItem(${i})" style="font-size:9px;padding:2px 8px;border-radius:4px;
+            background:rgba(200,40,40,0.15);border:1px solid rgba(200,40,40,0.4);color:#ff8080;cursor:pointer;font-family:inherit;">I'M BUSY</button>
+        </div>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+  panel.style.display = 'block';
+}
+
+async function handleQueueItem(idx){
+  await fetch(API+'/dnd/handle',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({index:idx})});
+  showToast('Marked to handle','info','DND');
+  loadDNDStatus();
+}
+async function busyQueueItem(idx){
+  await fetch(API+'/dnd/busy',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({index:idx})});
+  showToast('Auto-replied as busy','info','DND');
+  loadDNDStatus();
+}
+
+function closeDNDQueue(){
+  const panel = document.getElementById('dnd-queue-panel');
+  if(panel) panel.style.display = 'none';
+  fetch(API+'/dnd/clear',{method:'POST'}).catch(()=>{});
+}
+
+// ── WS event hook — DND events ───────────────────────────────
+(function(){
+  const _origHandleWS = window.handleWS;
+  window.handleWS = function(d){
+    if(d && d.type === 'dnd_status'){
+      applyDNDState(!!d.active, d.reason, d.queue_count);
+      return;
+    }
+    if(d && d.type === 'dnd_alert'){
+      showDNDAlert(d);
+      dndLogAddOrUpdate(d);
+      return;
+    }
+    if(d && d.type === 'dnd_off'){
+      applyDNDState(false, '', 0);
+      if(d.queue && d.queue.length) showDNDQueuePanel(d.queue);
+      return;
+    }
+    if(d && d.type === 'dnd_queue_update'){
+      loadDNDStatus();
+      dndLogAddOrUpdate(d);
+      return;
+    }
+    if(d && d.type === 'urgent_alert'){
+      showUrgentAlert(d);
+      return;
+    }
+    if(d && d.type === 'call_log_update'){
+      handleCallLogUpdate(d);
+      showToast(`📞 ${d.caller||'Unknown'} called (${(d.action||'declined').replace('_',' ')})`, 'warn', 'CALLS');
+      return;
+    }
+    if(d && d.type === 'busy_status'){
+      handleBusyStatus(d);
+      return;
+    }
+    if(d && d.type === 'busy_briefing'){
+      handleBusyStatus({active:false});
+      showToast(`🔶 Busy off — ${d.msg_count} msg${d.msg_count!==1?'s':''} handled (${d.duration_min}min)`, 'info', 'BUSY');
+      return;
+    }
+    if(_origHandleWS) _origHandleWS(d);
+  };
+})();
+
+// ════════════════════════════════════════════════════════════
+// WhatsApp Widget — Tab switching
+// ════════════════════════════════════════════════════════════
+function waTab(tab){
+  const inbox   = document.getElementById('wa-pane-inbox');
+  const dndPane = document.getElementById('wa-pane-dnd');
+  const tbInbox = document.getElementById('wa-tab-inbox');
+  const tbDnd   = document.getElementById('wa-tab-dnd');
+  if(tab === 'inbox'){
+    if(inbox)   inbox.style.display   = 'flex';
+    if(dndPane) dndPane.style.display = 'none';
+    if(tbInbox){ tbInbox.style.background='rgba(0,148,255,0.10)'; tbInbox.style.borderBottomColor='#0094ff'; tbInbox.style.color='#6ab0e0'; }
+    if(tbDnd)  { tbDnd.style.background='transparent'; tbDnd.style.borderBottomColor='transparent'; tbDnd.style.color='rgba(0,148,255,0.35)'; }
+  } else {
+    if(inbox)   inbox.style.display   = 'none';
+    if(dndPane) dndPane.style.display = 'flex';
+    if(tbDnd)  { tbDnd.style.background='rgba(255,60,60,0.08)'; tbDnd.style.borderBottomColor='rgba(255,80,80,0.6)'; tbDnd.style.color='rgba(255,120,120,0.9)'; }
+    if(tbInbox){ tbInbox.style.background='transparent'; tbInbox.style.borderBottomColor='transparent'; tbInbox.style.color='rgba(0,148,255,0.35)'; }
+    dndLogRefresh();
+  }
+}
+
+// ════════════════════════════════════════════════════════════
+// DND Log — renders queue items inside WA widget DND tab
+// ════════════════════════════════════════════════════════════
+const _dndLogItems = {};   // id → element
+
+function _dndLogBadge(action, reminder_status){
+  if(action === 'handle'){
+    const r = reminder_status || 'none';
+    const rLabel = {pending:'🔔 REMINDER SET', done:'✅ REMINDER DONE', cancelled:'💬 REPLIED', none:''}[r] || '';
+    return `<span style="padding:1px 5px;border-radius:3px;background:rgba(0,148,255,0.15);color:#6ab0e0;font-size:7px;letter-spacing:.1em;">HANDLE${rLabel?' · '+rLabel:''}</span>`;
+  }
+  if(action === 'busy') return '<span style="padding:1px 5px;border-radius:3px;background:rgba(255,80,80,0.12);color:#ff8080;font-size:7px;letter-spacing:.1em;">AUTO-REPLIED BUSY</span>';
+  return '<span style="padding:1px 5px;border-radius:3px;background:rgba(255,255,255,0.05);color:rgba(0,148,255,0.4);font-size:7px;letter-spacing:.1em;">PENDING</span>';
+}
+
+function _dndLogRow(item){
+  const id   = item.id ?? item.id ?? '?';
+  const name = item.from || 'Unknown';
+  const text = (item.text||'').replace(/\n\+ /g,' · ');   // grouped msgs
+  const preview = text.length > 55 ? text.slice(0,55)+'…' : text;
+  const typ  = item.type || 'alert';
+  const icon = typ === 'whatsapp_message' ? '📱' : typ === 'phone_call' ? '📞' : '⛔';
+  const ts   = item.ts ? new Date(item.ts*1000).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}) : '';
+  const badge = _dndLogBadge(item.action, item.reminder_status);
+  const escalated = item.escalated ? '<span style="color:#ff6060;font-size:7px;">🚨 ESCALATED</span>' : '';
+  const grouped   = item.grouped   ? '<span style="color:rgba(0,200,255,0.5);font-size:7px;">🔗 GROUPED</span>' : '';
+
+  return `<div id="dnd-log-item-${id}" style="
+    padding:8px 12px;border-bottom:1px solid rgba(0,148,255,0.06);
+    display:flex;flex-direction:column;gap:4px;cursor:default;
+    transition:background .15s;font-family:'Share Tech Mono',monospace;"
+    onmouseenter="this.style.background='rgba(0,148,255,0.03)'"
+    onmouseleave="this.style.background='transparent'">
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <span style="font-size:9px;color:#a8d8ff;letter-spacing:.12em;">${icon} ${name}</span>
+      <span style="font-size:7px;color:rgba(0,148,255,0.4);">${ts}</span>
+    </div>
+    <div style="font-size:8px;color:rgba(200,220,255,0.7);line-height:1.4;">${preview}</div>
+    <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">${badge}${escalated}${grouped}</div>
+    <div id="dnd-log-actions-${id}" style="display:flex;gap:5px;margin-top:2px;">
+      ${item.action ? '' : `
+        <button onclick="dndLogHandle(${id})" style="flex:1;padding:3px;border-radius:3px;background:rgba(0,148,255,0.12);border:1px solid rgba(0,148,255,0.3);color:#6ab0e0;font-size:7px;cursor:pointer;font-family:inherit;letter-spacing:.1em;">HANDLE</button>
+        <button onclick="dndLogBusy(${id})"   style="flex:1;padding:3px;border-radius:3px;background:rgba(200,40,40,0.12);border:1px solid rgba(200,40,40,0.3);color:#ff8080;font-size:7px;cursor:pointer;font-family:inherit;letter-spacing:.1em;">BUSY</button>
+      `}
+    </div>
+  </div>`;
+}
+
+function dndLogAddOrUpdate(item){
+  const body = document.getElementById('wa-dnd-log-body');
+  if(!body) return;
+  const placeholder = body.querySelector('[data-dnd-placeholder]');
+  if(placeholder) placeholder.remove();
+  const id = item.id ?? 0;
+  const existing = document.getElementById(`dnd-log-item-${id}`);
+  if(existing){
+    existing.outerHTML = _dndLogRow(item);
+  } else {
+    body.insertAdjacentHTML('afterbegin', _dndLogRow(item));
+  }
+}
+
+async function dndLogRefresh(){
+  try{
+    const r = await fetch(API+'/dnd/queue');
+    const d = await r.json();
+    if(!d.ok || !d.queue) return;
+    const body = document.getElementById('wa-dnd-log-body');
+    if(!body) return;
+    if(!d.queue.length){
+      body.innerHTML = '<div data-dnd-placeholder style="padding:20px 14px;color:rgba(255,100,100,0.25);font-size:9px;letter-spacing:.2em;line-height:2;text-align:center;">NO DND ALERTS YET<br>ENABLE DND TO START TRACKING</div>';
+      return;
+    }
+    body.innerHTML = '';
+    // newest first
+    [...d.queue].reverse().forEach(item => {
+      body.insertAdjacentHTML('beforeend', _dndLogRow(item));
+    });
+  }catch(e){}
+}
+
+async function dndLogHandle(idx){
+  try{
+    await fetch(API+'/dnd/handle',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({index:idx})});
+    showToast('Marked to handle — reminder set','info','DND');
+    setTimeout(dndLogRefresh, 600);
+  }catch(e){}
+}
+async function dndLogBusy(idx){
+  try{
+    await fetch(API+'/dnd/busy',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({index:idx})});
+    showToast('Auto-replied as busy','info','DND');
+    setTimeout(dndLogRefresh, 600);
+  }catch(e){}
+}
+
+// ════════════════════════════════════════════════════════════
+// CALLS WIDGET — WhatsApp calls + Busy mode
+// ════════════════════════════════════════════════════════════
+let _callsBusyActive = false;
+
+// ── Row renderer ────────────────────────────────────────────
+function _waCallRow(c, idx) {
+  const ts  = c.ts ? new Date(c.ts*1000).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}) : '';
+  const esc = c.escalated ? ' call-esc' : '';
+  const acol = {declined:'#ff6060',escalated:'#ff3030',busy_declined:'#ffaa30',callback_scheduled:'#00e5ff'}[c.action]||'#6ab0e0';
+  return `<div class="call-row${esc}">
+    <span class="call-who">${c.caller||'Unknown'}</span>
+    <span class="call-tag" style="background:rgba(37,211,102,0.10);color:#25D366;">WA</span>
+    <span class="call-ts">${ts}</span>
+    <div class="call-act" style="margin-top:2px;color:${acol};">▶ ${(c.action||'declined').replace(/_/g,' ').toUpperCase()}${c.escalated?'<span style="color:#ff3030;margin-left:6px;">⚠ ESC</span>':''}</div>
+    <div class="call-cb">
+      <button onclick="callScheduleCallback(${idx},'')">📅 Callback</button>
+      <button onclick="callScheduleCallbackTime(${idx})">⏰ Set Time</button>
+    </div>
+  </div>`;
+}
+
+// ── WA call log ─────────────────────────────────────────────
+async function callLogRefresh() {
+  try {
+    const r = await fetch(API+'/calls');
+    const d = await r.json();
+    if(!d.ok) return;
+    const body = document.getElementById('calls-log-body');
+    if(!body) return;
+    if(!d.calls || !d.calls.length){
+      body.innerHTML = '<div style="padding:20px;color:rgba(0,148,255,0.25);font-size:8px;letter-spacing:.18em;text-align:center;">NO WA CALL LOGS YET</div>';
+      return;
+    }
+    body.innerHTML = '';
+    d.calls.forEach((c,i) => body.insertAdjacentHTML('beforeend', _waCallRow(c, i)));
+  }catch(e){}
+}
+
+async function callScheduleCallback(idx, timeStr) {
+  try {
+    const r = await fetch(API+'/calls/callback',{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({index: idx, time: timeStr})
+    });
+    const d = await r.json();
+    showToast(d.ok ? '📅 Callback scheduled' : '⚠ Callback failed', d.ok?'info':'warn','CALLS');
+  }catch(e){ showToast('Callback error','warn','CALLS'); }
+}
+
+function callScheduleCallbackTime(idx) {
+  const t = prompt('Callback time (e.g. "4:30 PM"):','');
+  if(t) callScheduleCallback(idx, t.trim());
+}
+
+// ── Busy mode toggle ────────────────────────────────────────
+async function callsBusyToggle() {
+  const btn    = document.getElementById('calls-busy-btn');
+  const status = document.getElementById('calls-busy-status');
+  const reason = document.getElementById('calls-busy-reason').value;
+  const dur    = parseInt(document.getElementById('calls-busy-dur').value)||null;
+  const action = _callsBusyActive ? 'off' : 'on';
+  try {
+    const body = {action, reason};
+    if(dur) body.duration_min = dur;
+    await fetch(API+'/busy',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    _callsBusyActive = !_callsBusyActive;
+    _updateBusyUI(_callsBusyActive, reason, dur);
+    showToast(`🔶 Busy ${_callsBusyActive?'ON — '+reason:'OFF'}`, 'info','BUSY');
+  }catch(e){ showToast('Busy toggle error','warn','BUSY'); }
+}
+
+function _updateBusyUI(active, reason, remainMin) {
+  const btn    = document.getElementById('calls-busy-btn');
+  const status = document.getElementById('calls-busy-status');
+  if(!btn||!status) return;
+  if(active){
+    btn.textContent='OFF'; btn.style.background='rgba(255,140,0,0.25)'; btn.style.borderColor='rgba(255,140,0,0.6)'; btn.style.color='rgba(255,180,30,0.95)';
+    status.textContent=`BUSY: ${(reason||'').toUpperCase()}${remainMin?' ('+remainMin+'m)':''}`;
+    status.style.color='rgba(255,160,30,0.9)';
+  } else {
+    btn.textContent='ON'; btn.style.background='rgba(255,140,0,0.10)'; btn.style.borderColor='rgba(255,140,0,0.28)'; btn.style.color='rgba(255,140,0,0.75)';
+    status.textContent='BUSY: OFF'; status.style.color='rgba(255,140,0,0.65)';
+  }
+}
+
+async function initBusyStatus() {
+  try {
+    const r = await fetch(API+'/busy');
+    const d = await r.json();
+    if(d.ok && d.active){
+      _callsBusyActive = true;
+      _updateBusyUI(true, d.reason, d.remaining_sec ? Math.ceil(d.remaining_sec/60) : null);
+    }
+  }catch(e){}
+}
+
+function handleBusyStatus(d) {
+  _callsBusyActive = !!d.active;
+  _updateBusyUI(d.active, d.reason, d.remaining_sec ? Math.ceil(d.remaining_sec/60) : null);
+}
+
+// WA call update via WS
+function handleCallLogUpdate(d) {
+  const body = document.getElementById('calls-log-body');
+  if(!body) return;
+  body.insertAdjacentHTML('afterbegin', _waCallRow(d, 0));
+}
+
+// ════════════════════════════════════════════════════════════
+// URGENT alert — flash overlay + auto-dismiss
+// ════════════════════════════════════════════════════════════
+function showUrgentAlert(d){
+  const sender = d.from || 'Unknown';
+  const text   = d.text || '';
+  const ts     = d.ts ? new Date(d.ts*1000).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}) : '';
+  const prev   = document.getElementById('urgent-overlay');
+  if(prev) prev.remove();
+  const overlay = document.createElement('div');
+  overlay.id = 'urgent-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(180,10,10,0.15);display:flex;align-items:center;justify-content:center;backdrop-filter:blur(2px);animation:urgentFlash 0.4s ease 3;';
+  overlay.innerHTML = `<div style="background:rgba(3,0,12,0.97);border:2px solid rgba(255,50,50,0.8);border-radius:14px;padding:28px 32px;max-width:420px;width:90%;font-family:'Share Tech Mono',monospace;box-shadow:0 0 60px rgba(255,30,30,0.4);animation:urgentSlideIn 0.25s ease;">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;">
+      <div>
+        <div style="color:#ff3030;font-size:11px;letter-spacing:.25em;margin-bottom:4px;">🚨 URGENT MESSAGE</div>
+        <div style="color:#ff8080;font-size:14px;letter-spacing:.15em;">${sender}</div>
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">
+        <span style="color:rgba(255,80,80,0.5);font-size:8px;">${ts}</span>
+        <span onclick="document.getElementById('urgent-overlay').remove()" style="cursor:pointer;color:rgba(255,80,80,0.5);font-size:16px;line-height:1;">✕</span>
+      </div>
+    </div>
+    <div style="color:#f0d0d0;font-size:12px;line-height:1.6;margin-bottom:18px;padding:10px 12px;background:rgba(255,50,50,0.06);border-radius:6px;border-left:3px solid rgba(255,50,50,0.4);">${text}</div>
+    <button onclick="document.getElementById('urgent-overlay').remove()" style="width:100%;padding:8px;border-radius:6px;background:rgba(255,50,50,0.15);border:1px solid rgba(255,50,50,0.4);color:#ff8080;font-size:9px;cursor:pointer;letter-spacing:.1em;font-family:inherit;">ACKNOWLEDGED</button>
+  </div>`;
+  if(!document.getElementById('urgent-anim-style')){
+    const s=document.createElement('style');
+    s.id='urgent-anim-style';
+    s.textContent='@keyframes urgentFlash{0%,100%{background:rgba(180,10,10,0.15)}50%{background:rgba(255,20,20,0.28)}}@keyframes urgentSlideIn{from{transform:scale(0.85);opacity:0}to{transform:scale(1);opacity:1}}';
+    document.head.appendChild(s);
+  }
+  document.body.appendChild(overlay);
+  setTimeout(()=>{const el=document.getElementById('urgent-overlay');if(el)el.remove();},45000);
+}
+
+</script>
+
 </body>
 </html>

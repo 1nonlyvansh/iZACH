@@ -1,0 +1,234 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@color/bg_deep">
+
+    <!-- Header -->
+    <LinearLayout android:id="@+id/topBar"
+        android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:minHeight="56dp" android:background="@color/bg_panel"
+        android:orientation="horizontal" android:gravity="center_vertical"
+        android:paddingHorizontal="8dp">
+        <ImageButton android:id="@+id/btnBack"
+            android:layout_width="48dp" android:layout_height="48dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@drawable/ic_back" android:contentDescription="Back" />
+        <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content"
+            android:layout_weight="1" android:orientation="vertical" android:gravity="center">
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:text="ALLIEDNODE 2"
+                android:textColor="@color/cyan" android:textSize="14sp"
+                android:fontFamily="monospace" android:letterSpacing="0.2" android:textStyle="bold" />
+            <LinearLayout android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:orientation="horizontal" android:gravity="center_vertical"
+                android:layout_marginTop="2dp">
+                <View android:id="@+id/alliedDot"
+                    android:layout_width="6dp" android:layout_height="6dp"
+                    android:layout_marginEnd="4dp"
+                    android:background="@drawable/dot_disconnected" />
+                <TextView android:id="@+id/tvAlliedStatus"
+                    android:layout_width="wrap_content" android:layout_height="wrap_content"
+                    android:text="OFFLINE" android:textColor="@color/red_neon"
+                    android:textSize="9sp" android:fontFamily="monospace" />
+            </LinearLayout>
+        </LinearLayout>
+        <View android:layout_width="48dp" android:layout_height="48dp" />
+    </LinearLayout>
+
+    <ScrollView android:layout_width="match_parent" android:layout_height="0dp"
+        android:layout_weight="1" android:padding="16dp">
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <!-- VITALS -->
+            <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:text="VITALS" android:textColor="@color/cyan" android:textSize="11sp"
+                android:fontFamily="monospace" android:letterSpacing="0.2"
+                android:layout_marginBottom="12dp" android:layout_marginTop="8dp" />
+
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:orientation="horizontal" android:gravity="center_vertical"
+                android:layout_marginBottom="12dp">
+                <TextView android:layout_width="56dp" android:layout_height="wrap_content"
+                    android:text="CPU" android:textColor="@color/text_sec"
+                    android:textSize="11sp" android:fontFamily="monospace" />
+                <ProgressBar android:id="@+id/pbAlliedCpu"
+                    style="?android:attr/progressBarStyleHorizontal"
+                    android:layout_width="0dp" android:layout_height="8dp" android:layout_weight="1"
+                    android:max="100" android:progressTint="@color/cyan"
+                    android:progressBackgroundTint="@color/bg_card" />
+                <TextView android:id="@+id/tvAlliedCpu"
+                    android:layout_width="52dp" android:layout_height="wrap_content"
+                    android:text="—" android:textColor="@color/text_pri"
+                    android:textSize="11sp" android:fontFamily="monospace"
+                    android:gravity="end" android:layout_marginStart="8dp" />
+            </LinearLayout>
+
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:orientation="horizontal" android:gravity="center_vertical"
+                android:layout_marginBottom="12dp">
+                <TextView android:layout_width="56dp" android:layout_height="wrap_content"
+                    android:text="RAM" android:textColor="@color/text_sec"
+                    android:textSize="11sp" android:fontFamily="monospace" />
+                <ProgressBar android:id="@+id/pbAlliedRam"
+                    style="?android:attr/progressBarStyleHorizontal"
+                    android:layout_width="0dp" android:layout_height="8dp" android:layout_weight="1"
+                    android:max="100" android:progressTint="@color/amber"
+                    android:progressBackgroundTint="@color/bg_card" />
+                <TextView android:id="@+id/tvAlliedRam"
+                    android:layout_width="52dp" android:layout_height="wrap_content"
+                    android:text="—" android:textColor="@color/text_pri"
+                    android:textSize="11sp" android:fontFamily="monospace"
+                    android:gravity="end" android:layout_marginStart="8dp" />
+            </LinearLayout>
+
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:orientation="horizontal" android:gravity="center_vertical"
+                android:layout_marginBottom="24dp">
+                <TextView android:layout_width="56dp" android:layout_height="wrap_content"
+                    android:text="GPU" android:textColor="@color/text_sec"
+                    android:textSize="11sp" android:fontFamily="monospace" />
+                <ProgressBar android:id="@+id/pbAlliedGpu"
+                    style="?android:attr/progressBarStyleHorizontal"
+                    android:layout_width="0dp" android:layout_height="8dp" android:layout_weight="1"
+                    android:max="100" android:progressTint="@color/green_neon"
+                    android:progressBackgroundTint="@color/bg_card" />
+                <TextView android:id="@+id/tvAlliedGpu"
+                    android:layout_width="52dp" android:layout_height="wrap_content"
+                    android:text="—" android:textColor="@color/text_pri"
+                    android:textSize="11sp" android:fontFamily="monospace"
+                    android:gravity="end" android:layout_marginStart="8dp" />
+            </LinearLayout>
+
+            <!-- PC POWER -->
+            <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:text="PC POWER" android:textColor="@color/cyan" android:textSize="11sp"
+                android:fontFamily="monospace" android:letterSpacing="0.2"
+                android:layout_marginBottom="12dp" />
+
+            <GridLayout
+                android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:columnCount="2" android:rowCount="2" android:useDefaultMargins="false">
+
+                <Button android:id="@+id/btnAlliedLock"
+                    android:layout_width="0dp" android:layout_height="48dp"
+                    android:layout_columnWeight="1" android:layout_rowWeight="1"
+                    android:text="🔒 LOCK" android:textColor="@color/cyan"
+                    android:backgroundTint="#15007080" android:fontFamily="monospace"
+                    android:textSize="11sp" android:layout_margin="4dp"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton" />
+
+                <Button android:id="@+id/btnAlliedSleep"
+                    android:layout_width="0dp" android:layout_height="48dp"
+                    android:layout_columnWeight="1" android:layout_rowWeight="1"
+                    android:text="💤 SLEEP" android:textColor="@color/amber"
+                    android:backgroundTint="#15ffb300" android:fontFamily="monospace"
+                    android:textSize="11sp" android:layout_margin="4dp"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton" />
+
+                <Button android:id="@+id/btnAlliedRestart"
+                    android:layout_width="0dp" android:layout_height="48dp"
+                    android:layout_columnWeight="1" android:layout_rowWeight="1"
+                    android:text="🔄 RESTART" android:textColor="@color/green_neon"
+                    android:backgroundTint="#151db954" android:fontFamily="monospace"
+                    android:textSize="11sp" android:layout_margin="4dp"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton" />
+
+                <Button android:id="@+id/btnAlliedShutdown"
+                    android:layout_width="0dp" android:layout_height="48dp"
+                    android:layout_columnWeight="1" android:layout_rowWeight="1"
+                    android:text="⏻ SHUTDOWN" android:textColor="@color/red_neon"
+                    android:backgroundTint="#15ff0000" android:fontFamily="monospace"
+                    android:textSize="11sp" android:layout_margin="4dp"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton" />
+            </GridLayout>
+
+            <!-- VOLUME -->
+            <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:text="VOLUME" android:textColor="@color/cyan" android:textSize="11sp"
+                android:fontFamily="monospace" android:letterSpacing="0.2"
+                android:layout_marginBottom="8dp" android:layout_marginTop="24dp" />
+
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:orientation="horizontal" android:gravity="center_vertical"
+                android:layout_marginBottom="4dp">
+                <SeekBar android:id="@+id/seekVolume"
+                    android:layout_width="0dp" android:layout_height="wrap_content"
+                    android:layout_weight="1" android:max="100" android:progress="50"
+                    android:progressTint="@color/cyan" android:thumbTint="@color/cyan" />
+                <TextView android:id="@+id/tvVolumeVal"
+                    android:layout_width="40dp" android:layout_height="wrap_content"
+                    android:text="50%" android:textColor="@color/text_pri"
+                    android:textSize="11sp" android:fontFamily="monospace"
+                    android:gravity="end" android:layout_marginStart="8dp" />
+            </LinearLayout>
+
+            <Button android:id="@+id/btnSetVolume"
+                android:layout_width="wrap_content" android:layout_height="36dp"
+                android:text="SET VOLUME" android:textColor="@color/cyan"
+                android:backgroundTint="@color/bg_card" android:fontFamily="monospace"
+                android:textSize="11sp" android:paddingHorizontal="16dp"
+                android:layout_marginBottom="16dp" />
+
+            <!-- BRIGHTNESS -->
+            <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:text="BRIGHTNESS" android:textColor="@color/cyan" android:textSize="11sp"
+                android:fontFamily="monospace" android:letterSpacing="0.2"
+                android:layout_marginBottom="8dp" />
+
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:orientation="horizontal" android:gravity="center_vertical"
+                android:layout_marginBottom="4dp">
+                <SeekBar android:id="@+id/seekBrightness"
+                    android:layout_width="0dp" android:layout_height="wrap_content"
+                    android:layout_weight="1" android:max="100" android:progress="80"
+                    android:progressTint="#FFffee58" android:thumbTint="#FFffee58" />
+                <TextView android:id="@+id/tvBrightnessVal"
+                    android:layout_width="40dp" android:layout_height="wrap_content"
+                    android:text="80%" android:textColor="@color/text_pri"
+                    android:textSize="11sp" android:fontFamily="monospace"
+                    android:gravity="end" android:layout_marginStart="8dp" />
+            </LinearLayout>
+
+            <Button android:id="@+id/btnSetBrightness"
+                android:layout_width="wrap_content" android:layout_height="36dp"
+                android:text="SET BRIGHTNESS" android:textColor="#FFffee58"
+                android:backgroundTint="@color/bg_card" android:fontFamily="monospace"
+                android:textSize="11sp" android:paddingHorizontal="16dp"
+                android:layout_marginBottom="24dp" />
+
+            <!-- ACTIONS -->
+            <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:text="ACTIONS" android:textColor="@color/cyan" android:textSize="11sp"
+                android:fontFamily="monospace" android:letterSpacing="0.2"
+                android:layout_marginBottom="12dp" />
+
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <Button android:id="@+id/btnAlliedScreenshot"
+                    android:layout_width="0dp" android:layout_height="44dp"
+                    android:layout_weight="1" android:text="📸 SNAP"
+                    android:textColor="@color/text_pri" android:backgroundTint="@color/bg_card"
+                    android:fontFamily="monospace" android:textSize="11sp"
+                    android:layout_marginEnd="6dp" />
+
+                <Button android:id="@+id/btnAlliedProcesses"
+                    android:layout_width="0dp" android:layout_height="44dp"
+                    android:layout_weight="1" android:text="⚙ PROCS"
+                    android:textColor="@color/text_pri" android:backgroundTint="@color/bg_card"
+                    android:fontFamily="monospace" android:textSize="11sp"
+                    android:layout_marginEnd="6dp" />
+
+                <Button android:id="@+id/btnAlliedTerminal"
+                    android:layout_width="0dp" android:layout_height="44dp"
+                    android:layout_weight="1" android:text=">_ TERM"
+                    android:textColor="@color/green_neon" android:backgroundTint="@color/bg_card"
+                    android:fontFamily="monospace" android:textSize="11sp" />
+            </LinearLayout>
+
+        </LinearLayout>
+    </ScrollView>
+</LinearLayout>

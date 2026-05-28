@@ -1,0 +1,1338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>iZACH NODE</title>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#050d1a;--bg2:#071220;--bg3:#0a1628;
+  --c:#0094ff;--c2:rgba(0,148,255,0.12);--c3:rgba(0,148,255,0.05);
+  --border:rgba(0,148,255,0.14);--border-hi:rgba(0,148,255,0.28);
+  --text:rgba(0,148,255,0.65);--text-dim:rgba(0,148,255,0.28);
+  --text-hi:#a0d8ff;
+  --green:#1db954;--amber:#ffb300;--red:#ff3d3d;
+  --mono:'Share Tech Mono',monospace;--code:'JetBrains Mono',monospace;
+}
+html,body{background:var(--bg);color:var(--text);font-family:var(--mono);font-size:12px;min-height:100vh;scrollbar-width:thin;scrollbar-color:rgba(0,148,255,0.18) transparent}
+::-webkit-scrollbar{width:4px;height:4px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:rgba(0,148,255,0.18);border-radius:2px}
+a{color:inherit;text-decoration:none}
+button{font-family:var(--mono);cursor:pointer}
+
+/* ── HEADER ── */
+#hdr{
+  position:sticky;top:0;z-index:100;
+  display:flex;align-items:center;justify-content:space-between;
+  height:46px;padding:0 22px;
+  background:rgba(5,13,26,0.96);border-bottom:1px solid var(--border);
+  backdrop-filter:blur(14px);
+}
+.hdr-l{display:flex;align-items:center;gap:14px}
+#hdr-dot{width:7px;height:7px;border-radius:50%;background:var(--c);box-shadow:0 0 8px var(--c);animation:hPulse 2.2s ease-in-out infinite;flex-shrink:0}
+#hdr-title{font-size:12px;letter-spacing:.3em;color:var(--text-hi)}
+#hdr-node{font-size:8.5px;letter-spacing:.18em;color:var(--text-dim);padding-left:2px}
+.hdr-r{display:flex;align-items:center;gap:22px}
+#conn-row{display:flex;align-items:center;gap:7px;font-size:8.5px;letter-spacing:.14em}
+#conn-dot{width:5px;height:5px;border-radius:50%;background:var(--red);transition:background .3s,box-shadow .3s}
+#conn-dot.on{background:var(--green);box-shadow:0 0 6px var(--green)}
+#conn-lbl{color:var(--text-dim)}
+#hdr-time{font-size:9px;color:var(--text-dim);letter-spacing:.15em;min-width:60px;text-align:right}
+
+/* ── LAYOUT ── */
+main{max-width:980px;margin:0 auto;padding:18px 16px 60px;display:flex;flex-direction:column;gap:12px}
+
+/* ── SECTION ── */
+.sec{background:var(--bg2);border:1px solid var(--border);border-radius:4px;overflow:hidden;position:relative}
+.sec::before,.sec::after{content:'';position:absolute;width:6px;height:6px;border-color:var(--c);border-style:solid;opacity:.4}
+.sec::before{top:0;left:0;border-width:1px 0 0 1px}
+.sec::after{top:0;right:0;border-width:1px 1px 0 0}
+.sec-hdr{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:8px 14px;background:var(--bg3);
+  border-bottom:1px solid var(--border);
+}
+.sec-title{font-size:8.5px;letter-spacing:.28em;color:var(--c);display:flex;align-items:center;gap:8px}
+.sec-dot{width:4px;height:4px;background:var(--c);border-radius:50%;flex-shrink:0}
+.sec-body{padding:14px}
+.sec-id{font-size:7.5px;letter-spacing:.15em;color:var(--text-dim)}
+.sec-btn{
+  background:transparent;border:1px solid var(--border);border-radius:2px;
+  color:var(--text-dim);font-family:var(--mono);font-size:8px;letter-spacing:.15em;
+  padding:3px 11px;transition:all .14s;
+}
+.sec-btn:hover{border-color:var(--c);color:var(--c)}
+.sec-btn.prim{border-color:rgba(0,148,255,0.3);color:var(--c);background:var(--c2)}
+.sec-btn.prim:hover{background:rgba(0,148,255,0.2)}
+
+/* ── VITALS ── */
+#vitals-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+@media(max-width:640px){#vitals-grid{grid-template-columns:repeat(2,1fr)}}
+.vc{background:var(--bg3);border:1px solid rgba(0,148,255,0.1);border-radius:3px;padding:10px 12px}
+.vc-lbl{font-size:7px;letter-spacing:.28em;color:var(--text-dim);margin-bottom:5px}
+.vc-val{font-size:22px;font-family:var(--code);font-weight:500;color:var(--text-hi);line-height:1;margin-bottom:3px}
+.vc-sub{font-size:7px;color:var(--text-dim);letter-spacing:.06em;margin-bottom:7px;min-height:11px}
+.vbar{height:2px;background:rgba(0,148,255,0.09);border-radius:1px}
+.vbar-f{height:100%;background:var(--c);border-radius:1px;width:0;transition:width .5s ease;box-shadow:0 0 4px rgba(0,148,255,0.35)}
+.vbar-f.w{background:var(--amber)}
+.vbar-f.c{background:var(--red)}
+
+/* ── SCREENSHOT ── */
+#snap-wrap{display:flex;gap:10px;align-items:center;margin-bottom:12px}
+#snap-auto-lbl{font-size:8px;letter-spacing:.1em;color:var(--text-dim);display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none}
+#snap-img-box{display:none}
+#snap-img{width:100%;border:1px solid rgba(0,148,255,0.1);border-radius:2px;cursor:pointer;margin-top:10px}
+#snap-ts{font-size:7px;color:var(--text-dim);text-align:right;margin-top:3px}
+
+/* ── PROCESS TABLE ── */
+#proc-wrap{max-height:230px;overflow-y:auto}
+.pt{width:100%;border-collapse:collapse}
+.pt th{font-size:7.5px;letter-spacing:.2em;color:var(--text-dim);text-align:left;padding:4px 8px;border-bottom:1px solid rgba(0,148,255,0.07);font-weight:normal;white-space:nowrap}
+.pt td{font-size:8.5px;font-family:var(--code);color:rgba(0,148,255,0.55);padding:5px 8px;border-bottom:1px solid rgba(0,148,255,0.04);letter-spacing:.04em}
+.pt tr:hover td{background:rgba(0,148,255,0.03)}
+.p-name{color:rgba(0,148,255,0.7);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.p-kill{
+  background:transparent;border:1px solid rgba(255,61,61,0.25);border-radius:2px;
+  color:rgba(255,61,61,0.55);font-family:var(--mono);font-size:7px;letter-spacing:.1em;
+  padding:2px 7px;transition:all .14s;
+}
+.p-kill:hover{border-color:var(--red);color:var(--red)}
+.p-mem{color:rgba(255,179,0,0.65)}
+.pt-empty{padding:20px 8px;font-size:8px;color:var(--text-dim);letter-spacing:.15em}
+
+/* ── TERMINAL ── */
+#term-out{
+  background:#020810;border:1px solid rgba(0,148,255,0.09);border-radius:2px;
+  padding:10px 12px;height:175px;overflow-y:auto;
+  font-family:var(--code);font-size:10px;line-height:1.7;
+  color:rgba(0,148,255,0.6);margin-bottom:10px;
+}
+.tl-cmd{color:rgba(0,148,255,0.35)}
+.tl-out{color:rgba(0,220,110,0.75);white-space:pre-wrap;word-break:break-all}
+.tl-err{color:rgba(255,100,100,0.75);white-space:pre-wrap;word-break:break-all}
+.tl-sys{color:rgba(0,148,255,0.25);font-size:9px}
+.term-bar{display:flex;align-items:center;gap:8px;background:#020810;border:1px solid rgba(0,148,255,0.09);border-radius:2px;padding:6px 10px}
+.term-ps{font-size:9px;color:var(--text-dim);white-space:nowrap}
+#term-in{flex:1;background:transparent;border:none;outline:none;color:var(--text-hi);font-family:var(--code);font-size:10px;letter-spacing:.04em;caret-color:var(--c)}
+
+/* ── FILES ── */
+.file-row{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.file-lbl{font-size:8px;letter-spacing:.14em;color:var(--text-dim);width:74px;flex-shrink:0}
+.file-in{
+  flex:1;background:var(--bg3);border:1px solid rgba(0,148,255,0.14);border-radius:2px;
+  color:var(--text-hi);font-family:var(--code);font-size:9px;padding:5px 9px;outline:none;
+  letter-spacing:.04em;min-width:0;
+}
+.file-in:focus{border-color:rgba(0,148,255,0.38)}
+.file-upload-lbl{
+  background:var(--c2);border:1px solid rgba(0,148,255,0.25);border-radius:2px;
+  color:var(--c);font-family:var(--mono);font-size:8px;letter-spacing:.15em;
+  padding:5px 12px;cursor:pointer;transition:all .14s;white-space:nowrap;
+}
+.file-upload-lbl:hover{background:rgba(0,148,255,0.2)}
+.file-msg{font-size:8px;color:var(--text-dim);font-family:var(--code);min-height:13px;letter-spacing:.04em;margin-top:2px}
+.file-msg.ok{color:rgba(0,220,110,0.7)}
+.file-msg.err{color:rgba(255,100,100,0.7)}
+
+/* ── APP LAUNCHER ── */
+#app-grid{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
+.app-btn{
+  background:var(--bg3);border:1px solid rgba(0,148,255,0.1);border-radius:3px;
+  color:rgba(0,148,255,0.5);font-family:var(--mono);font-size:8.5px;letter-spacing:.12em;
+  padding:6px 13px;transition:all .14s;
+}
+.app-btn:hover{background:var(--c2);border-color:rgba(0,148,255,0.35);color:var(--c)}
+.app-custom-row{display:flex;gap:8px;align-items:center;margin-top:4px}
+
+/* ── POWER ── */
+#pw-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+@media(max-width:480px){#pw-grid{grid-template-columns:repeat(2,1fr)}}
+.pw-btn{
+  padding:11px 0;border-radius:3px;font-family:var(--mono);
+  font-size:9px;letter-spacing:.18em;background:transparent;
+  text-transform:uppercase;border-width:1px;border-style:solid;transition:all .14s;
+}
+#pw-lock  {border-color:rgba(0,148,255,0.25);color:rgba(0,148,255,0.7)}
+#pw-lock:hover{background:rgba(0,148,255,0.09)}
+#pw-sleep {border-color:rgba(74,144,164,0.35);color:rgba(74,144,164,0.85)}
+#pw-sleep:hover{background:rgba(74,144,164,0.08)}
+#pw-restart{border-color:rgba(255,179,0,0.35);color:rgba(255,179,0,0.85)}
+#pw-restart:hover{background:rgba(255,179,0,0.07)}
+#pw-shutdown{border-color:rgba(255,61,61,0.35);color:rgba(255,61,61,0.85)}
+#pw-shutdown:hover{background:rgba(255,61,61,0.07)}
+
+/* ── ACTIVITY FEED ── */
+#feed-list{max-height:160px;overflow-y:auto}
+.feed-row{display:flex;gap:10px;padding:5px 0;border-bottom:1px solid rgba(0,148,255,0.04);font-size:8px;letter-spacing:.06em}
+.feed-ts{color:var(--text-dim);white-space:nowrap;font-family:var(--code)}
+.feed-tag{color:rgba(0,148,255,0.5);white-space:nowrap;min-width:60px}
+.feed-body{color:rgba(0,148,255,0.6);font-family:var(--code);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.feed-body.ok{color:rgba(0,220,110,0.65)}
+.feed-body.err{color:rgba(255,100,100,0.65)}
+#feed-empty{padding:12px 0;font-size:8px;color:var(--text-dim);letter-spacing:.15em}
+
+/* ── TOAST ── */
+#toast-wrap{position:fixed;bottom:20px;right:20px;z-index:9999;display:flex;flex-direction:column;gap:6px;pointer-events:none}
+.toast{
+  background:rgba(7,18,32,0.97);border:1px solid rgba(0,148,255,0.22);
+  border-radius:3px;padding:8px 14px;font-size:9px;letter-spacing:.14em;
+  color:var(--text-hi);backdrop-filter:blur(12px);
+  animation:tIn .2s ease forwards;pointer-events:none;
+}
+.toast.err{border-color:rgba(255,61,61,0.3);color:rgba(255,120,120,0.9)}
+.toast.ok{border-color:rgba(29,185,84,0.3);color:rgba(100,220,130,0.9)}
+
+/* ── SPINNER ── */
+.spin{display:inline-block;width:10px;height:10px;border:1.5px solid rgba(0,148,255,0.2);border-top-color:var(--c);border-radius:50%;animation:rot .6s linear infinite;margin-right:6px;vertical-align:middle}
+
+@keyframes hPulse{0%,100%{box-shadow:0 0 6px var(--c)}50%{box-shadow:0 0 14px var(--c)}}
+@keyframes tIn{from{opacity:0;transform:translateX(10px)}to{opacity:1;transform:translateX(0)}}
+@keyframes rot{to{transform:rotate(360deg)}}
+
+/* ── SYSTEM INFO ── */
+#si-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px}
+@media(max-width:580px){#si-grid{grid-template-columns:repeat(2,1fr)}}
+.si-card{background:var(--bg3);border:1px solid rgba(0,148,255,0.1);border-radius:3px;padding:9px 12px}
+.si-lbl{font-size:7px;letter-spacing:.28em;color:var(--text-dim);margin-bottom:4px}
+.si-val{font-size:10px;color:var(--text-hi);font-family:var(--code);letter-spacing:.05em;line-height:1.4;word-break:break-all}
+.si-val.big{font-size:13px}
+#si-net{border-top:1px solid var(--border);padding-top:12px}
+.net-iface{margin-bottom:8px}
+.net-iface-name{font-size:7.5px;letter-spacing:.2em;color:var(--c);margin-bottom:3px}
+.net-addr{font-size:8px;font-family:var(--code);color:rgba(0,148,255,0.5);padding:2px 0;letter-spacing:.04em}
+.bat-bar{height:6px;background:rgba(0,148,255,0.09);border-radius:3px;margin-top:4px;overflow:hidden}
+.bat-fill{height:100%;border-radius:3px;transition:width .4s}
+
+/* ── LIVE GRAPHS ── */
+.graph-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+@media(max-width:560px){.graph-grid{grid-template-columns:1fr}}
+.graph-card{background:var(--bg3);border:1px solid rgba(0,148,255,0.1);border-radius:3px;padding:10px 12px}
+.graph-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+.graph-lbl{font-size:7px;letter-spacing:.28em;color:var(--text-dim)}
+.graph-val{font-size:13px;font-family:var(--code);color:var(--text-hi)}
+.graph-canvas{width:100%;height:48px;display:block}
+
+/* ── FILE BROWSER ── */
+#fb-path-bar{display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap}
+#fb-path-in{flex:1;min-width:120px}
+#fb-list{max-height:280px;overflow-y:auto}
+.fb-row{display:flex;align-items:center;gap:0;padding:5px 4px;border-bottom:1px solid rgba(0,148,255,0.04);cursor:pointer;transition:background .1s;border-radius:2px}
+.fb-row:hover{background:rgba(0,148,255,0.05)}
+.fb-ic{width:22px;text-align:center;font-size:11px;flex-shrink:0;color:rgba(0,148,255,0.4)}
+.fb-name{flex:1;font-size:9px;font-family:var(--code);color:rgba(0,148,255,0.65);letter-spacing:.04em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fb-row.dir .fb-name{color:var(--text-hi)}
+.fb-size{font-size:7.5px;color:var(--text-dim);font-family:var(--code);white-space:nowrap;margin-right:6px}
+.fb-actions{display:flex;gap:4px;opacity:0;transition:opacity .12s}
+.fb-row:hover .fb-actions{opacity:1}
+.fb-act{background:transparent;border:1px solid rgba(0,148,255,0.18);border-radius:2px;color:var(--text-dim);font-family:var(--mono);font-size:6.5px;padding:2px 6px;letter-spacing:.08em;transition:all .12s}
+.fb-act:hover{border-color:var(--c);color:var(--c)}
+.fb-act.del{border-color:rgba(255,61,61,0.2);color:rgba(255,61,61,0.5)}
+.fb-act.del:hover{border-color:var(--red);color:var(--red)}
+#fb-viewer{display:none;margin-top:10px}
+#fb-view-name{font-size:8px;letter-spacing:.12em;color:var(--text-dim);margin-bottom:6px}
+#fb-view-content{
+  background:#020810;border:1px solid rgba(0,148,255,0.09);border-radius:2px;
+  padding:10px 12px;max-height:200px;overflow-y:auto;
+  font-family:var(--code);font-size:9px;color:rgba(0,148,255,0.65);
+  white-space:pre;line-height:1.6;
+}
+#fb-parent-btn{background:var(--bg3);border:1px solid var(--border);border-radius:2px;color:var(--text-dim);font-family:var(--mono);font-size:8px;letter-spacing:.12em;padding:4px 10px;cursor:pointer;transition:all .14s}
+#fb-parent-btn:hover{border-color:var(--c);color:var(--c)}
+
+/* ── iZACH BRIDGE ── */
+#bridge-status-row{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+#bridge-dot{width:8px;height:8px;border-radius:50%;background:var(--red);flex-shrink:0;transition:all .3s}
+#bridge-dot.on{background:var(--green);box-shadow:0 0 8px var(--green)}
+#bridge-lbl{font-size:10px;letter-spacing:.2em;color:var(--text-hi)}
+#bridge-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px}
+.bridge-card{background:var(--bg3);border:1px solid rgba(0,148,255,0.1);border-radius:3px;padding:8px 10px}
+.bridge-card-lbl{font-size:7px;letter-spacing:.22em;color:var(--text-dim);margin-bottom:3px}
+.bridge-card-val{font-size:12px;font-family:var(--code);color:var(--text-hi)}
+#bridge-last-cmd{padding:8px 12px;background:var(--bg3);border:1px solid rgba(0,148,255,0.1);border-radius:3px;margin-bottom:10px}
+#bridge-cmd-lbl{font-size:7px;letter-spacing:.22em;color:var(--text-dim);margin-bottom:4px}
+#bridge-cmd-val{font-size:9px;font-family:var(--code);color:rgba(0,148,255,0.65);letter-spacing:.04em}
+.bridge-notify-row{display:flex;gap:8px}
+
+/* ── REMOTE INPUT ── */
+.ri-section{margin-bottom:14px}
+.ri-section-lbl{font-size:7.5px;letter-spacing:.22em;color:var(--text-dim);margin-bottom:8px}
+.ri-hotkeys{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:8px}
+.hk-btn{
+  background:var(--bg3);border:1px solid rgba(0,148,255,0.12);border-radius:3px;
+  color:rgba(0,148,255,0.55);font-family:var(--mono);font-size:8px;letter-spacing:.1em;
+  padding:5px 10px;cursor:pointer;transition:all .14s;
+}
+.hk-btn:hover{background:var(--c2);border-color:rgba(0,148,255,0.3);color:var(--c)}
+#ri-text-area{
+  width:100%;background:var(--bg3);border:1px solid rgba(0,148,255,0.14);border-radius:2px;
+  color:var(--text-hi);font-family:var(--code);font-size:10px;padding:8px 10px;outline:none;
+  resize:vertical;min-height:60px;letter-spacing:.04em;
+}
+#ri-text-area:focus{border-color:rgba(0,148,255,0.38)}
+.ri-send-row{display:flex;gap:8px;margin-top:6px;align-items:center}
+#ri-delay{width:60px;text-align:center}
+#ri-status{font-size:8px;font-family:var(--code);color:rgba(0,220,110,0.7);letter-spacing:.06em}
+</style>
+</head>
+<body>
+
+<!-- ── HEADER ── -->
+<div id="hdr">
+  <div class="hdr-l">
+    <div id="hdr-dot"></div>
+    <span id="hdr-title">iZACH NODE</span>
+    <span id="hdr-node">ALLIEDNODE 2</span>
+  </div>
+  <div class="hdr-r">
+    <div id="conn-row">
+      <div id="conn-dot"></div>
+      <span id="conn-lbl">CHECKING...</span>
+    </div>
+    <span id="hdr-time"></span>
+  </div>
+</div>
+
+<!-- ── MAIN ── -->
+<main>
+
+  <!-- VITALS -->
+  <div class="sec">
+    <div class="sec-hdr">
+      <span class="sec-title"><span class="sec-dot"></span>SYSTEM VITALS</span>
+      <div style="display:flex;gap:8px;align-items:center">
+        <span id="vitals-ts" class="sec-id"></span>
+        <button class="sec-btn" onclick="pollVitals()">↻ REFRESH</button>
+      </div>
+    </div>
+    <div class="sec-body">
+      <div id="vitals-grid">
+        <!-- CPU -->
+        <div class="vc">
+          <div class="vc-lbl">CPU LOAD</div>
+          <div class="vc-val" id="v-cpu">—</div>
+          <div class="vc-sub" id="v-cpu-sub"></div>
+          <div class="vbar"><div class="vbar-f" id="vb-cpu"></div></div>
+        </div>
+        <!-- RAM -->
+        <div class="vc">
+          <div class="vc-lbl">MEMORY</div>
+          <div class="vc-val" id="v-ram">—</div>
+          <div class="vc-sub" id="v-ram-sub"></div>
+          <div class="vbar"><div class="vbar-f" id="vb-ram"></div></div>
+        </div>
+        <!-- DISK -->
+        <div class="vc">
+          <div class="vc-lbl">DISK  C:</div>
+          <div class="vc-val" id="v-disk">—</div>
+          <div class="vc-sub" id="v-disk-sub"></div>
+          <div class="vbar"><div class="vbar-f" id="vb-disk"></div></div>
+        </div>
+        <!-- TEMP -->
+        <div class="vc">
+          <div class="vc-lbl">TEMPERATURE</div>
+          <div class="vc-val" id="v-temp">—</div>
+          <div class="vc-sub" id="v-temp-sub" style="color:rgba(0,148,255,0.25)">NO SENSOR</div>
+          <div class="vbar"><div class="vbar-f" id="vb-temp"></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TWO-COL ROW: Screenshot + App Launcher -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+
+    <!-- SCREENSHOT -->
+    <div class="sec">
+      <div class="sec-hdr">
+        <span class="sec-title"><span class="sec-dot"></span>SCREENSHOT</span>
+        <div style="display:flex;gap:8px;align-items:center">
+          <label id="snap-auto-lbl" style="display:flex;align-items:center;gap:6px;font-size:8px;letter-spacing:.1em;color:var(--text-dim);cursor:pointer">
+            <input type="checkbox" id="snap-auto" onchange="toggleSnapAuto()" style="accent-color:var(--c);width:11px;height:11px"> AUTO
+          </label>
+          <button class="sec-btn prim" onclick="takeSnap()">SNAP</button>
+        </div>
+      </div>
+      <div class="sec-body">
+        <div id="snap-placeholder" style="padding:20px 0;text-align:center;font-size:8px;color:var(--text-dim);letter-spacing:.2em">PRESS SNAP TO CAPTURE</div>
+        <div id="snap-img-box">
+          <img id="snap-img" src="" alt="screenshot" onclick="window.open(this.src,'_blank')" title="Click to open full size">
+          <div id="snap-ts"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- APP LAUNCHER -->
+    <div class="sec">
+      <div class="sec-hdr">
+        <span class="sec-title"><span class="sec-dot"></span>APP LAUNCHER</span>
+      </div>
+      <div class="sec-body">
+        <div id="app-grid">
+          <button class="app-btn" onclick="launchApp('explorer.exe')">⊞  EXPLORER</button>
+          <button class="app-btn" onclick="launchApp('chrome.exe')">◉  CHROME</button>
+          <button class="app-btn" onclick="launchApp('notepad.exe')">▤  NOTEPAD</button>
+          <button class="app-btn" onclick="launchApp('cmd.exe')">▸  CMD</button>
+          <button class="app-btn" onclick="launchApp('taskmgr.exe')">⊞  TASK MGR</button>
+          <button class="app-btn" onclick="launchApp('mspaint.exe')">▣  PAINT</button>
+          <button class="app-btn" onclick="launchApp('calc.exe')">◫  CALC</button>
+          <button class="app-btn" onclick="launchApp('control.exe')">⊙  CONTROL</button>
+        </div>
+        <div class="app-custom-row">
+          <input class="file-in" id="app-custom" placeholder="custom app / command..." style="font-size:9px">
+          <button class="sec-btn prim" onclick="launchCustomApp()">LAUNCH</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- PROCESSES -->
+  <div class="sec">
+    <div class="sec-hdr">
+      <span class="sec-title"><span class="sec-dot"></span>PROCESSES</span>
+      <div style="display:flex;gap:8px">
+        <span class="sec-id" id="proc-count"></span>
+        <button class="sec-btn" onclick="loadProcesses()">↻ REFRESH</button>
+      </div>
+    </div>
+    <div class="sec-body" style="padding:0">
+      <div id="proc-wrap">
+        <div class="pt-empty" style="padding:20px 14px">CLICK ↻ REFRESH TO LOAD PROCESSES</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TERMINAL -->
+  <div class="sec">
+    <div class="sec-hdr">
+      <span class="sec-title"><span class="sec-dot"></span>REMOTE TERMINAL</span>
+      <div style="display:flex;gap:8px">
+        <button class="sec-btn" onclick="clearTerm()">CLEAR</button>
+      </div>
+    </div>
+    <div class="sec-body">
+      <div id="term-out"><div class="tl-sys">iZACH Node terminal ready. Commands run on AlliedNode 2.</div></div>
+      <div class="term-bar">
+        <span class="term-ps">PS C:\&gt;</span>
+        <input id="term-in" placeholder="enter command..." onkeydown="if(event.key==='Enter')runCmd()">
+        <button class="sec-btn prim" onclick="runCmd()">RUN</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- FILE TRANSFER -->
+  <div class="sec">
+    <div class="sec-hdr">
+      <span class="sec-title"><span class="sec-dot"></span>FILE TRANSFER</span>
+    </div>
+    <div class="sec-body">
+      <!-- Upload -->
+      <div style="margin-bottom:14px">
+        <div style="font-size:7.5px;letter-spacing:.22em;color:var(--text-dim);margin-bottom:8px;display:flex;align-items:center;gap:8px"><span style="width:4px;height:1px;background:var(--text-dim);display:inline-block"></span>UPLOAD TO NODE</div>
+        <div class="file-row">
+          <span class="file-lbl">DEST PATH</span>
+          <input class="file-in" id="upload-path" placeholder="C:\Users\Public\Downloads\file.txt">
+        </div>
+        <div class="file-row">
+          <span class="file-lbl">FILE</span>
+          <label class="file-upload-lbl" for="upload-file-in">CHOOSE FILE</label>
+          <input type="file" id="upload-file-in" style="display:none" onchange="handleFileSelect(this)">
+          <span id="upload-file-name" style="font-size:8px;color:var(--text-dim);font-family:var(--code);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1"></span>
+          <button class="sec-btn prim" onclick="uploadFile()" id="upload-btn">UPLOAD</button>
+        </div>
+        <div class="file-msg" id="upload-msg"></div>
+      </div>
+      <!-- Download -->
+      <div>
+        <div style="font-size:7.5px;letter-spacing:.22em;color:var(--text-dim);margin-bottom:8px;display:flex;align-items:center;gap:8px"><span style="width:4px;height:1px;background:var(--text-dim);display:inline-block"></span>DOWNLOAD FROM NODE</div>
+        <div class="file-row">
+          <span class="file-lbl">FILE PATH</span>
+          <input class="file-in" id="dl-path" placeholder="C:\Users\Public\document.pdf">
+          <button class="sec-btn prim" onclick="downloadFile()">DOWNLOAD</button>
+        </div>
+        <div class="file-msg" id="dl-msg"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- POWER CONTROLS -->
+  <div class="sec">
+    <div class="sec-hdr">
+      <span class="sec-title"><span class="sec-dot"></span>POWER CONTROL</span>
+      <span class="sec-id">ALLIEDNODE 2</span>
+    </div>
+    <div class="sec-body">
+      <div id="pw-grid">
+        <button class="pw-btn" id="pw-lock"     onclick="powerAct('lock')">🔒  LOCK</button>
+        <button class="pw-btn" id="pw-sleep"    onclick="powerAct('sleep')">⏾  SLEEP</button>
+        <button class="pw-btn" id="pw-restart"  onclick="powerActConfirm('restart')">↺  RESTART</button>
+        <button class="pw-btn" id="pw-shutdown" onclick="powerActConfirm('shutdown')">⏻  SHUTDOWN</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- SYSTEM INFO -->
+  <div class="sec">
+    <div class="sec-hdr">
+      <span class="sec-title"><span class="sec-dot"></span>SYSTEM INFO</span>
+      <div style="display:flex;gap:8px">
+        <span class="sec-id" id="si-hostname"></span>
+        <button class="sec-btn" onclick="loadSysInfo()">↻ REFRESH</button>
+      </div>
+    </div>
+    <div class="sec-body">
+      <div id="si-grid">
+        <div class="si-card"><div class="si-lbl">OPERATING SYSTEM</div><div class="si-val" id="si-os">—</div></div>
+        <div class="si-card"><div class="si-lbl">CPU</div><div class="si-val" id="si-cpu">—</div></div>
+        <div class="si-card"><div class="si-lbl">CORES</div><div class="si-val big" id="si-cores">—</div></div>
+        <div class="si-card"><div class="si-lbl">RAM TOTAL</div><div class="si-val big" id="si-ram">—</div></div>
+        <div class="si-card"><div class="si-lbl">UPTIME</div><div class="si-val" id="si-uptime">—</div></div>
+        <div class="si-card" id="si-bat-card" style="display:none">
+          <div class="si-lbl">BATTERY</div>
+          <div class="si-val big" id="si-bat-pct">—</div>
+          <div class="bat-bar"><div class="bat-fill" id="si-bat-bar" style="width:0%"></div></div>
+          <div style="font-size:7px;color:var(--text-dim);margin-top:3px" id="si-bat-plug"></div>
+        </div>
+      </div>
+      <div id="si-net">
+        <div style="font-size:7.5px;letter-spacing:.22em;color:var(--text-dim);margin-bottom:8px">NETWORK INTERFACES</div>
+        <div id="si-ifaces" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- LIVE GRAPHS -->
+  <div class="sec">
+    <div class="sec-hdr">
+      <span class="sec-title"><span class="sec-dot"></span>LIVE GRAPHS</span>
+      <span class="sec-id" id="graph-interval-lbl">POLLING 4s</span>
+    </div>
+    <div class="sec-body">
+      <div class="graph-grid">
+        <div class="graph-card">
+          <div class="graph-hdr"><span class="graph-lbl">CPU LOAD</span><span class="graph-val" id="gv-cpu">—</span></div>
+          <canvas class="graph-canvas" id="gc-cpu"></canvas>
+        </div>
+        <div class="graph-card">
+          <div class="graph-hdr"><span class="graph-lbl">MEMORY</span><span class="graph-val" id="gv-ram">—</span></div>
+          <canvas class="graph-canvas" id="gc-ram"></canvas>
+        </div>
+        <div class="graph-card">
+          <div class="graph-hdr"><span class="graph-lbl">DISK  C:</span><span class="graph-val" id="gv-disk">—</span></div>
+          <canvas class="graph-canvas" id="gc-disk"></canvas>
+        </div>
+        <div class="graph-card">
+          <div class="graph-hdr"><span class="graph-lbl">NETWORK  ↓↑</span><span class="graph-val" id="gv-net">—</span></div>
+          <canvas class="graph-canvas" id="gc-net"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- FILE BROWSER -->
+  <div class="sec">
+    <div class="sec-hdr">
+      <span class="sec-title"><span class="sec-dot"></span>FILE BROWSER</span>
+      <div style="display:flex;gap:8px">
+        <button class="sec-btn" id="fb-parent-btn" onclick="fbGoParent()" style="display:none">↑ UP</button>
+        <button class="sec-btn" onclick="fbMkdir()">+ FOLDER</button>
+      </div>
+    </div>
+    <div class="sec-body">
+      <div id="fb-path-bar">
+        <input class="file-in" id="fb-path-in" placeholder="C:\" value="C:\" onkeydown="if(event.key==='Enter')browseTo(this.value)">
+        <button class="sec-btn prim" onclick="browseTo(document.getElementById('fb-path-in').value)">GO</button>
+        <button class="sec-btn" onclick="browseTo('C:\\')">C:\</button>
+        <button class="sec-btn" onclick="browseTo('C:\\Users')">Users</button>
+        <button class="sec-btn" onclick="browseTo('C:\\Users\\Public\\Downloads')">Downloads</button>
+      </div>
+      <div id="fb-list">
+        <div style="font-size:8px;color:var(--text-dim);padding:12px 0;letter-spacing:.15em">CLICK GO TO BROWSE</div>
+      </div>
+      <div id="fb-viewer">
+        <div id="fb-view-name"></div>
+        <div style="display:flex;justify-content:flex-end;margin-bottom:4px">
+          <button class="sec-btn" onclick="document.getElementById('fb-viewer').style.display='none'">✕ CLOSE</button>
+        </div>
+        <div id="fb-view-content"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- iZACH BRIDGE -->
+  <div class="sec">
+    <div class="sec-hdr">
+      <span class="sec-title"><span class="sec-dot"></span>iZACH BRIDGE</span>
+      <div style="display:flex;gap:8px">
+        <span class="sec-id" id="bridge-ts"></span>
+        <button class="sec-btn" onclick="loadBridge()">↻ REFRESH</button>
+      </div>
+    </div>
+    <div class="sec-body">
+      <div id="bridge-status-row">
+        <div id="bridge-dot"></div>
+        <span id="bridge-lbl">CHECKING ALLIEDNODE...</span>
+      </div>
+      <div id="bridge-grid">
+        <div class="bridge-card"><div class="bridge-card-lbl">CPU</div><div class="bridge-card-val" id="bc-cpu">—</div></div>
+        <div class="bridge-card"><div class="bridge-card-lbl">RAM</div><div class="bridge-card-val" id="bc-ram">—</div></div>
+        <div class="bridge-card"><div class="bridge-card-lbl">WHATSAPP</div><div class="bridge-card-val" id="bc-wa">—</div></div>
+      </div>
+      <div id="bridge-last-cmd">
+        <div class="bridge-cmd-lbl">LAST COMMAND</div>
+        <div id="bridge-cmd-val">—</div>
+      </div>
+      <div class="bridge-notify-row">
+        <input class="file-in" id="bridge-notif-in" placeholder="send notification to AlliedNode 2 screen..." style="font-size:9px">
+        <button class="sec-btn prim" onclick="sendNotif()">NOTIFY</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- REMOTE INPUT -->
+  <div class="sec">
+    <div class="sec-hdr">
+      <span class="sec-title"><span class="sec-dot"></span>REMOTE INPUT</span>
+      <span class="sec-id" style="color:rgba(255,179,0,0.5)">TYPES ON ALLIEDNODE 2</span>
+    </div>
+    <div class="sec-body">
+      <!-- Hotkeys -->
+      <div class="ri-section">
+        <div class="ri-section-lbl">HOTKEYS</div>
+        <div class="ri-hotkeys">
+          <button class="hk-btn" onclick="sendHotkey(['ctrl','c'])">Ctrl+C</button>
+          <button class="hk-btn" onclick="sendHotkey(['ctrl','v'])">Ctrl+V</button>
+          <button class="hk-btn" onclick="sendHotkey(['ctrl','x'])">Ctrl+X</button>
+          <button class="hk-btn" onclick="sendHotkey(['ctrl','z'])">Ctrl+Z</button>
+          <button class="hk-btn" onclick="sendHotkey(['ctrl','a'])">Ctrl+A</button>
+          <button class="hk-btn" onclick="sendHotkey(['ctrl','s'])">Ctrl+S</button>
+          <button class="hk-btn" onclick="sendHotkey(['alt','tab'])">Alt+Tab</button>
+          <button class="hk-btn" onclick="sendHotkey(['alt','F4'])">Alt+F4</button>
+          <button class="hk-btn" onclick="sendHotkey(['win','d'])">Win+D</button>
+          <button class="hk-btn" onclick="sendHotkey(['win','l'])">Win+L</button>
+          <button class="hk-btn" onclick="sendKey('enter')">Enter</button>
+          <button class="hk-btn" onclick="sendKey('escape')">Esc</button>
+          <button class="hk-btn" onclick="sendKey('delete')">Delete</button>
+          <button class="hk-btn" onclick="sendKey('printscreen')">PrtSc</button>
+          <button class="hk-btn" onclick="sendHotkey(['ctrl','shift','esc'])">Task Mgr</button>
+          <button class="hk-btn" onclick="sendHotkey(['win'])">Start</button>
+        </div>
+        <!-- Custom hotkey -->
+        <div style="display:flex;gap:8px;align-items:center">
+          <input class="file-in" id="ri-custom-keys" placeholder="ctrl+shift+n  (+ separated)" style="font-size:9px">
+          <button class="sec-btn prim" onclick="sendCustomHotkey()">SEND</button>
+        </div>
+      </div>
+      <!-- Type text -->
+      <div class="ri-section">
+        <div class="ri-section-lbl">TYPE TEXT ON ALLIEDNODE 2</div>
+        <textarea id="ri-text-area" placeholder="Text to type on the remote machine..."></textarea>
+        <div class="ri-send-row">
+          <span style="font-size:8px;color:var(--text-dim);letter-spacing:.1em">DELAY</span>
+          <input class="file-in" id="ri-delay" value="2" type="number" min="0" max="30" style="width:55px;font-size:9px;text-align:center">
+          <span style="font-size:8px;color:var(--text-dim)">sec before typing</span>
+          <button class="sec-btn prim" onclick="sendText()">TYPE</button>
+          <span id="ri-status"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ACTIVITY FEED -->
+  <div class="sec">
+    <div class="sec-hdr">
+      <span class="sec-title"><span class="sec-dot"></span>ACTIVITY FEED</span>
+      <button class="sec-btn" onclick="clearFeed()">CLEAR</button>
+    </div>
+    <div class="sec-body" style="padding:8px 14px">
+      <div id="feed-list">
+        <div id="feed-empty" style="font-size:8px;color:var(--text-dim);letter-spacing:.15em">NO ACTIVITY YET</div>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<!-- ── TOASTS ── -->
+<div id="toast-wrap"></div>
+
+<script>
+// ── CONFIG ──────────────────────────────────────────────
+const API   = 'http://localhost:9797';
+const TOKEN = 'izach-node-2026';
+const HDR   = { 'X-iZACH-Token': TOKEN, 'Content-Type': 'application/json' };
+
+// ── HELPERS ─────────────────────────────────────────────
+async function get(path) {
+  const r = await fetch(API + path, { headers: { 'X-iZACH-Token': TOKEN } });
+  return r.json();
+}
+async function post(path, body) {
+  const r = await fetch(API + path, { method: 'POST', headers: HDR, body: JSON.stringify(body) });
+  return r.json();
+}
+
+function toast(msg, type='') {
+  const w = document.getElementById('toast-wrap');
+  const el = document.createElement('div');
+  el.className = 'toast' + (type ? ' '+type : '');
+  el.textContent = msg;
+  w.appendChild(el);
+  setTimeout(() => { el.style.opacity='0'; el.style.transition='opacity .3s'; }, 2800);
+  setTimeout(() => el.remove(), 3200);
+}
+
+function feed(tag, body, type='') {
+  const list = document.getElementById('feed-list');
+  const empty = document.getElementById('feed-empty');
+  if (empty) empty.remove();
+  const now = new Date();
+  const ts = String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0')+':'+String(now.getSeconds()).padStart(2,'0');
+  const row = document.createElement('div');
+  row.className = 'feed-row';
+  row.innerHTML = `<span class="feed-ts">${ts}</span><span class="feed-tag">${tag}</span><span class="feed-body${type?' '+type:''}">${body}</span>`;
+  list.insertBefore(row, list.firstChild);
+  while (list.children.length > 30) list.removeChild(list.lastChild);
+}
+
+// ── CLOCK ───────────────────────────────────────────────
+function tick() {
+  const n = new Date();
+  const t = String(n.getHours()).padStart(2,'0')+':'+String(n.getMinutes()).padStart(2,'0')+':'+String(n.getSeconds()).padStart(2,'0');
+  document.getElementById('hdr-time').textContent = t;
+}
+tick(); setInterval(tick, 1000);
+
+// ── CONNECTION CHECK ─────────────────────────────────────
+async function checkConn() {
+  const dot = document.getElementById('conn-dot');
+  const lbl = document.getElementById('conn-lbl');
+  try {
+    const d = await get('/ping');
+    if (d.status === 'alive') {
+      dot.classList.add('on');
+      lbl.textContent = 'ONLINE · ' + (d.node || 'NODE');
+      return;
+    }
+  } catch(e) {}
+  dot.classList.remove('on');
+  lbl.textContent = 'OFFLINE';
+}
+checkConn(); setInterval(checkConn, 12000);
+
+// ── VITALS ──────────────────────────────────────────────
+function _barClass(pct) {
+  return pct >= 90 ? 'c' : pct >= 70 ? 'w' : '';
+}
+function _setBar(id, pct) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.style.width = Math.min(100, pct) + '%';
+  el.className = 'vbar-f ' + _barClass(pct);
+}
+
+async function pollVitals() {
+  try {
+    const d = await get('/vitals');
+    // CPU
+    document.getElementById('v-cpu').textContent   = d.cpu_percent + '%';
+    document.getElementById('v-cpu-sub').textContent = '';
+    _setBar('vb-cpu', d.cpu_percent);
+    // RAM
+    document.getElementById('v-ram').textContent   = d.ram_percent + '%';
+    document.getElementById('v-ram-sub').textContent = d.ram_used_gb + ' / ' + d.ram_total_gb + ' GB';
+    _setBar('vb-ram', d.ram_percent);
+    // Disk
+    document.getElementById('v-disk').textContent   = d.disk_percent + '%';
+    document.getElementById('v-disk-sub').textContent = d.disk_used_gb + ' / ' + d.disk_total_gb + ' GB';
+    _setBar('vb-disk', d.disk_percent);
+    // Temp
+    const temps = d.temps_c || {};
+    const keys = Object.keys(temps);
+    if (keys.length) {
+      const key = keys[0];
+      const val = temps[key];
+      document.getElementById('v-temp').textContent    = val + '°C';
+      document.getElementById('v-temp-sub').textContent = key.toUpperCase().substring(0,14);
+      _setBar('vb-temp', Math.min(100, (val / 100) * 100));
+    } else {
+      document.getElementById('v-temp').textContent    = '—';
+      document.getElementById('v-temp-sub').textContent = 'NO SENSOR';
+    }
+    // Timestamp
+    const now = new Date();
+    document.getElementById('vitals-ts').textContent =
+      'UPDATED ' + String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0')+':'+String(now.getSeconds()).padStart(2,'0');
+  } catch(e) {
+    document.getElementById('vitals-ts').textContent = 'FETCH ERROR';
+  }
+}
+pollVitals(); setInterval(pollVitals, 4000);
+
+// ── SCREENSHOT ──────────────────────────────────────────
+let _snapInterval = null;
+
+async function takeSnap() {
+  try {
+    const d = await get('/screenshot');
+    if (d.screenshot) {
+      const img = document.getElementById('snap-img');
+      const box = document.getElementById('snap-img-box');
+      const ph  = document.getElementById('snap-placeholder');
+      img.src = 'data:image/jpeg;base64,' + d.screenshot;
+      box.style.display = 'block';
+      if (ph) ph.style.display = 'none';
+      const now = new Date();
+      document.getElementById('snap-ts').textContent =
+        d.width + '×' + d.height + '  ·  ' +
+        String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0')+':'+String(now.getSeconds()).padStart(2,'0');
+      feed('SNAP', d.width+'×'+d.height+' captured', 'ok');
+    } else {
+      toast(d.error || 'Screenshot failed', 'err');
+    }
+  } catch(e) {
+    toast('Backend error — screenshot failed', 'err');
+  }
+}
+
+function toggleSnapAuto() {
+  const on = document.getElementById('snap-auto').checked;
+  if (on) {
+    takeSnap();
+    _snapInterval = setInterval(takeSnap, 5000);
+    toast('Auto-snapshot ON · every 5s');
+  } else {
+    clearInterval(_snapInterval);
+    _snapInterval = null;
+    toast('Auto-snapshot OFF');
+  }
+}
+
+// ── PROCESSES ───────────────────────────────────────────
+async function loadProcesses() {
+  const wrap = document.getElementById('proc-wrap');
+  wrap.innerHTML = '<div class="pt-empty" style="padding:16px 14px"><span class="spin"></span>LOADING...</div>';
+  try {
+    const d = await get('/processes?top=25');
+    const procs = d.processes || [];
+    document.getElementById('proc-count').textContent = procs.length + ' PROCESSES';
+    if (!procs.length) {
+      wrap.innerHTML = '<div class="pt-empty" style="padding:16px 14px">NO PROCESSES</div>';
+      return;
+    }
+    const tbl = document.createElement('table');
+    tbl.className = 'pt';
+    tbl.innerHTML = `<thead><tr>
+      <th>PID</th><th>NAME</th><th>MEM %</th><th>STATUS</th><th></th>
+    </tr></thead>`;
+    const tb = document.createElement('tbody');
+    procs.forEach(p => {
+      const tr = document.createElement('tr');
+      const mem = (p.memory_percent || 0).toFixed(1);
+      const status = (p.status || 'unknown').toLowerCase();
+      const isSlp = status === 'sleeping' || status === 'idle';
+      tr.innerHTML =
+        `<td style="color:var(--text-dim)">${p.pid}</td>`+
+        `<td class="p-name">${p.name||'?'}</td>`+
+        `<td class="p-mem">${mem}%</td>`+
+        `<td><span style="font-size:7.5px;letter-spacing:.1em;color:${isSlp?'var(--text-dim)':'rgba(29,185,84,0.7)'}">${status.toUpperCase()}</span></td>`+
+        `<td><button class="p-kill" onclick="killProc('${(p.name||'').replace(/'/g,"\\'")}')">KILL</button></td>`;
+      tb.appendChild(tr);
+    });
+    tbl.appendChild(tb);
+    wrap.innerHTML = '';
+    wrap.appendChild(tbl);
+    feed('PROCS', procs.length + ' processes loaded');
+  } catch(e) {
+    wrap.innerHTML = '<div class="pt-empty" style="padding:16px 14px;color:rgba(255,100,100,0.6)">FETCH ERROR</div>';
+  }
+}
+
+async function killProc(name) {
+  if (!confirm('Kill process "' + name + '"?')) return;
+  try {
+    const d = await post('/system_control', { action:'kill_process', process: name });
+    if (d.status === 'killed') {
+      toast('Killed ' + name + ' (' + d.count + ')', 'ok');
+      feed('KILL', name + ' · ' + d.count + ' killed', 'err');
+      loadProcesses();
+    } else {
+      toast(d.error || 'Kill failed', 'err');
+    }
+  } catch(e) {
+    toast('Backend error', 'err');
+  }
+}
+
+// ── TERMINAL ────────────────────────────────────────────
+let _termHistory = [];
+let _termIdx = -1;
+
+function clearTerm() {
+  document.getElementById('term-out').innerHTML = '<div class="tl-sys">Terminal cleared.</div>';
+}
+
+function _termAppend(html) {
+  const el = document.getElementById('term-out');
+  el.insertAdjacentHTML('beforeend', html);
+  el.scrollTop = el.scrollHeight;
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  const inp = document.getElementById('term-in');
+  if (inp) {
+    inp.addEventListener('keydown', e => {
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (_termHistory.length && _termIdx < _termHistory.length - 1) {
+          _termIdx++;
+          inp.value = _termHistory[_termHistory.length - 1 - _termIdx];
+        }
+      } else if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        if (_termIdx > 0) { _termIdx--; inp.value = _termHistory[_termHistory.length - 1 - _termIdx]; }
+        else { _termIdx = -1; inp.value = ''; }
+      }
+    });
+  }
+});
+
+async function runCmd() {
+  const inp = document.getElementById('term-in');
+  const cmd = inp.value.trim();
+  if (!cmd) return;
+  inp.value = '';
+  _termHistory.push(cmd);
+  _termIdx = -1;
+  _termAppend(`<div class="tl-cmd">PS C:\\&gt; ${escHtml(cmd)}</div>`);
+  try {
+    const d = await post('/execute', { command: cmd });
+    if (d.stdout) _termAppend(`<div class="tl-out">${escHtml(d.stdout)}</div>`);
+    if (d.stderr) _termAppend(`<div class="tl-err">${escHtml(d.stderr)}</div>`);
+    if (!d.stdout && !d.stderr) _termAppend(`<div class="tl-sys">exit ${d.returncode ?? 0}</div>`);
+    feed('TERM', cmd.substring(0,40), d.returncode ? 'err' : 'ok');
+  } catch(e) {
+    _termAppend(`<div class="tl-err">Backend error — is receiver running?</div>`);
+  }
+}
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ── FILE TRANSFER ────────────────────────────────────────
+let _uploadFile = null;
+
+function handleFileSelect(input) {
+  _uploadFile = input.files[0] || null;
+  document.getElementById('upload-file-name').textContent = _uploadFile ? _uploadFile.name : '';
+  // Auto-fill dest path if empty
+  const pathEl = document.getElementById('upload-path');
+  if (_uploadFile && !pathEl.value) {
+    pathEl.value = 'C:\\Users\\Public\\Downloads\\' + _uploadFile.name;
+  }
+}
+
+async function uploadFile() {
+  const path = document.getElementById('upload-path').value.trim();
+  const msg  = document.getElementById('upload-msg');
+  if (!_uploadFile) { msg.textContent = 'No file chosen.'; msg.className='file-msg err'; return; }
+  if (!path)         { msg.textContent = 'Dest path required.'; msg.className='file-msg err'; return; }
+  msg.textContent = 'Uploading...'; msg.className='file-msg';
+  const btn = document.getElementById('upload-btn');
+  btn.disabled = true;
+  try {
+    const ab  = await _uploadFile.arrayBuffer();
+    const b64 = btoa(String.fromCharCode(...new Uint8Array(ab)));
+    const d   = await post('/upload', { path, content: b64 });
+    if (d.status === 'saved') {
+      msg.textContent = 'Saved · ' + (d.size||0) + ' bytes → ' + path;
+      msg.className = 'file-msg ok';
+      toast('Uploaded: ' + _uploadFile.name, 'ok');
+      feed('UPLOAD', _uploadFile.name + ' → ' + path.split('\\').pop(), 'ok');
+    } else {
+      msg.textContent = d.error || 'Upload failed.';
+      msg.className = 'file-msg err';
+    }
+  } catch(e) {
+    msg.textContent = 'Backend error.'; msg.className='file-msg err';
+  }
+  btn.disabled = false;
+}
+
+async function downloadFile() {
+  const path = document.getElementById('dl-path').value.trim();
+  const msg  = document.getElementById('dl-msg');
+  if (!path) { msg.textContent='Enter file path.'; msg.className='file-msg err'; return; }
+  msg.textContent='Fetching...'; msg.className='file-msg';
+  try {
+    const r = await fetch(API + '/download/' + encodeURIComponent(path), {
+      headers:{ 'X-iZACH-Token': TOKEN }
+    });
+    if (!r.ok) {
+      const err = await r.json().catch(()=>({error:'Not found'}));
+      msg.textContent = err.error||'Download failed'; msg.className='file-msg err'; return;
+    }
+    const blob = await r.blob();
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = path.split(/[\\/]/).pop() || 'download';
+    a.click();
+    URL.revokeObjectURL(url);
+    msg.textContent = 'Download started.'; msg.className='file-msg ok';
+    feed('DL', a.download, 'ok');
+  } catch(e) {
+    msg.textContent='Backend error.'; msg.className='file-msg err';
+  }
+}
+
+// ── APP LAUNCHER ─────────────────────────────────────────
+async function launchApp(app) {
+  try {
+    const d = await post('/open_app', { app });
+    if (d.status === 'launched') {
+      toast('Launched: ' + app.split('.')[0].toUpperCase(), 'ok');
+      feed('LAUNCH', app, 'ok');
+    } else {
+      toast(d.error || 'Launch failed', 'err');
+    }
+  } catch(e) {
+    toast('Backend error', 'err');
+  }
+}
+
+function launchCustomApp() {
+  const val = document.getElementById('app-custom').value.trim();
+  if (!val) return;
+  launchApp(val);
+}
+
+// ── POWER CONTROLS ───────────────────────────────────────
+async function powerAct(action) {
+  try {
+    const d = await post('/system_control', { action });
+    toast(d.status || action + ' sent', action === 'lock' ? '' : 'ok');
+    feed('POWER', action.toUpperCase(), 'ok');
+  } catch(e) {
+    toast('Backend error', 'err');
+  }
+}
+
+function powerActConfirm(action) {
+  const labels = { shutdown:'SHUTDOWN', restart:'RESTART' };
+  if (!confirm('Send ' + (labels[action]||action) + ' command to AlliedNode 2?\n\nThis will take effect in 5 seconds.')) return;
+  powerAct(action);
+}
+
+// ── FEED ─────────────────────────────────────────────────
+function clearFeed() {
+  const list = document.getElementById('feed-list');
+  list.innerHTML = '<div id="feed-empty" style="font-size:8px;color:var(--text-dim);letter-spacing:.15em">NO ACTIVITY YET</div>';
+}
+
+// ════════════════════════════════════════════════════
+// SYSTEM INFO
+// ════════════════════════════════════════════════════
+async function loadSysInfo() {
+  try {
+    const d = await get('/sysinfo');
+    if (!d.ok) return;
+    document.getElementById('si-os').textContent     = d.os || '—';
+    document.getElementById('si-cpu').textContent    = d.cpu_name || '—';
+    document.getElementById('si-cores').textContent  = (d.cpu_physical||'?') + 'P / ' + (d.cpu_logical||'?') + 'L';
+    document.getElementById('si-ram').textContent    = (d.ram_total_gb||'?') + ' GB';
+    document.getElementById('si-uptime').textContent = d.uptime || '—';
+    document.getElementById('si-hostname').textContent = d.hostname || '';
+    if (d.battery) {
+      const card = document.getElementById('si-bat-card');
+      card.style.display = 'block';
+      document.getElementById('si-bat-pct').textContent = d.battery.percent + '%';
+      document.getElementById('si-bat-plug').textContent = d.battery.plugged ? '⚡ CHARGING' : '🔋 ON BATTERY';
+      const fill = document.getElementById('si-bat-bar');
+      const pct  = d.battery.percent;
+      fill.style.width      = pct + '%';
+      fill.style.background = pct > 50 ? 'var(--green)' : pct > 20 ? 'var(--amber)' : 'var(--red)';
+    }
+    const ifaceEl = document.getElementById('si-ifaces');
+    ifaceEl.innerHTML = '';
+    const ifaces = d.net_interfaces || {};
+    for (const [name, addrs] of Object.entries(ifaces)) {
+      const ipv4 = addrs.filter(a => !a.address.includes(':') && !a.address.startsWith('fe80') && a.address !== '');
+      if (!ipv4.length) continue;
+      const div = document.createElement('div');
+      div.className = 'net-iface';
+      div.innerHTML = '<div class="net-iface-name">' + name + '</div>' +
+        ipv4.map(a => '<div class="net-addr">' + a.address + (a.netmask ? ' / ' + a.netmask : '') + '</div>').join('');
+      ifaceEl.appendChild(div);
+    }
+    feed('SYSINFO', d.hostname + ' · ' + d.os);
+  } catch(e) { feed('SYSINFO', 'fetch error', 'err'); }
+}
+loadSysInfo();
+
+// ════════════════════════════════════════════════════
+// LIVE GRAPHS  (canvas sparklines)
+// ════════════════════════════════════════════════════
+const _GRAPH_MAX = 60;
+const _gd = { cpu:[], ram:[], disk:[], ni:[], no:[] };
+let _prevIn = 0, _prevOut = 0, _netReady = false;
+
+function _sparkline(id, data, color, maxVal) {
+  const cv = document.getElementById(id);
+  if (!cv) return;
+  const W = cv.offsetWidth || 300, H = cv.offsetHeight || 48;
+  cv.width = W; cv.height = H;
+  const ctx = cv.getContext('2d');
+  ctx.clearRect(0, 0, W, H);
+  if (data.length < 2) return;
+  const step = W / (_GRAPH_MAX - 1);
+  const sy   = v => H - 2 - (Math.min(v, maxVal) / maxVal) * (H - 4);
+  ctx.beginPath();
+  ctx.moveTo(0, H);
+  data.forEach((v, i) => ctx.lineTo((i + _GRAPH_MAX - data.length) * step, sy(v)));
+  ctx.lineTo((_GRAPH_MAX - 1) * step, H);
+  ctx.closePath();
+  ctx.fillStyle = color.replace('1)', '0.1)');
+  ctx.fill();
+  ctx.beginPath();
+  data.forEach((v, i) => {
+    const x = (i + _GRAPH_MAX - data.length) * step;
+    i === 0 ? ctx.moveTo(x, sy(v)) : ctx.lineTo(x, sy(v));
+  });
+  ctx.strokeStyle = color; ctx.lineWidth = 1.5; ctx.stroke();
+}
+
+function _fmtNet(b) {
+  if (b < 1024) return b + 'B/s';
+  if (b < 1048576) return (b/1024).toFixed(1) + 'KB/s';
+  return (b/1048576).toFixed(1) + 'MB/s';
+}
+
+function _push(arr, v) { arr.push(v); if (arr.length > _GRAPH_MAX) arr.shift(); }
+
+async function updateGraphs() {
+  try {
+    const v = await get('/vitals');
+    _push(_gd.cpu, v.cpu_percent); _push(_gd.ram, v.ram_percent); _push(_gd.disk, v.disk_percent);
+    document.getElementById('gv-cpu').textContent  = v.cpu_percent + '%';
+    document.getElementById('gv-ram').textContent  = v.ram_percent + '%';
+    document.getElementById('gv-disk').textContent = v.disk_percent + '%';
+    _sparkline('gc-cpu',  _gd.cpu,  'rgba(0,148,255,1)',  100);
+    _sparkline('gc-ram',  _gd.ram,  'rgba(0,200,130,1)',  100);
+    _sparkline('gc-disk', _gd.disk, 'rgba(255,179,0,1)',  100);
+  } catch(e) {}
+  try {
+    const n = await get('/net_stats');
+    if (n.ok) {
+      if (_netReady) {
+        const ri = Math.max(0, n.bytes_recv - _prevIn)  / 4;
+        const ro = Math.max(0, n.bytes_sent - _prevOut) / 4;
+        _push(_gd.ni, ri); _push(_gd.no, ro);
+        const peak = Math.max(..._gd.ni, ..._gd.no, 1024);
+        _sparkline('gc-net', _gd.ni, 'rgba(0,148,255,1)', peak);
+        document.getElementById('gv-net').textContent = '↓' + _fmtNet(ri) + '  ↑' + _fmtNet(ro);
+      }
+      _prevIn = n.bytes_recv; _prevOut = n.bytes_sent; _netReady = true;
+    }
+  } catch(e) {}
+}
+updateGraphs();
+setInterval(updateGraphs, 4000);
+
+// ════════════════════════════════════════════════════
+// FILE BROWSER
+// ════════════════════════════════════════════════════
+let _fbPath = '';
+
+async function browseTo(path) {
+  path = (path || 'C:\\').trim();
+  document.getElementById('fb-path-in').value = path;
+  const list = document.getElementById('fb-list');
+  list.innerHTML = '<div style="padding:12px 0;font-size:8px;color:var(--text-dim);letter-spacing:.15em"><span class="spin"></span> LOADING...</div>';
+  document.getElementById('fb-viewer').style.display = 'none';
+  try {
+    const d = await get('/browse?path=' + encodeURIComponent(path));
+    if (!d.ok) { list.innerHTML = '<div style="padding:12px 0;font-size:8px;color:rgba(255,100,100,0.6)">' + (d.error||'Error') + '</div>'; return; }
+    _fbPath = d.path;
+    document.getElementById('fb-path-in').value = d.path;
+    document.getElementById('fb-parent-btn').style.display = (d.path !== d.parent) ? 'inline-block' : 'none';
+    list.innerHTML = '';
+    if (!d.entries.length) { list.innerHTML = '<div style="padding:12px 0;font-size:8px;color:var(--text-dim);letter-spacing:.15em">EMPTY DIRECTORY</div>'; return; }
+    d.entries.forEach(e => {
+      const row = document.createElement('div');
+      row.className = 'fb-row' + (e.is_dir ? ' dir' : '');
+      const fp = d.path + '\\' + e.name;
+      const fpe = fp.replace(/'/g, "\\'");
+      const ne  = e.name.replace(/'/g, "\\'");
+      row.innerHTML =
+        '<span class="fb-ic">' + (e.is_dir ? '📁' : _fbIc(e.name)) + '</span>' +
+        '<span class="fb-name">' + escHtml(e.name) + '</span>' +
+        '<span class="fb-size">' + (e.is_dir ? '' : _fbSz(e.size)) + '</span>' +
+        '<span class="fb-actions">' +
+          (e.is_dir ? '' : '<button class="fb-act" onclick="fbView(\'' + fpe + '\')">VIEW</button>') +
+          (e.is_dir ? '' : '<button class="fb-act" onclick="fbDl(\'' + fpe + '\')">DL</button>') +
+          '<button class="fb-act" onclick="fbRen(\'' + fpe + '\',\'' + ne + '\')">REN</button>' +
+          '<button class="fb-act del" onclick="fbDel(\'' + fpe + '\',' + e.is_dir + ')">DEL</button>' +
+        '</span>';
+      if (e.is_dir) row.onclick = ev => { if (!ev.target.closest('.fb-actions')) browseTo(fp); };
+      list.appendChild(row);
+    });
+  } catch(ex) { list.innerHTML = '<div style="padding:12px 0;font-size:8px;color:rgba(255,100,100,0.6)">BACKEND ERROR</div>'; }
+}
+
+function fbGoParent() {
+  const p = document.getElementById('fb-path-in').value.trim();
+  const up = p.replace(/[/\\][^/\\]+[/\\]?$/, '').replace(/[/\\]$/, '') || 'C:\\';
+  browseTo(up === p ? 'C:\\' : up);
+}
+
+function _fbSz(b) {
+  if (b == null) return '';
+  if (b < 1024) return b + 'B';
+  if (b < 1048576) return (b/1024).toFixed(1) + 'KB';
+  if (b < 1073741824) return (b/1048576).toFixed(1) + 'MB';
+  return (b/1073741824).toFixed(2) + 'GB';
+}
+
+function _fbIc(n) {
+  const e = n.split('.').pop().toLowerCase();
+  return {txt:'📄',md:'📄',log:'📄',py:'🐍',
+    js:'📜',html:'📜',json:'📜',
+    exe:'⚙️',bat:'⚙️',ps1:'⚙️',
+    zip:'🗜️',rar:'🗜️',
+    jpg:'🖼️',png:'🖼️',gif:'🖼️',
+    mp4:'🎬',mp3:'🎵',
+    pdf:'📕',docx:'📘',xlsx:'📗'}[e] || '📄';
+}
+
+async function fbView(path) {
+  const viewer = document.getElementById('fb-viewer');
+  document.getElementById('fb-view-name').textContent = path.split(/[\\/]/).pop();
+  const content = document.getElementById('fb-view-content');
+  content.textContent = 'Loading...';
+  viewer.style.display = 'block';
+  viewer.scrollIntoView({ behavior:'smooth', block:'nearest' });
+  try {
+    const d = await get('/file_read?path=' + encodeURIComponent(path));
+    content.textContent = d.ok ? d.content : ('Error: ' + (d.error||'unknown'));
+  } catch(e) { content.textContent = 'Backend error.'; }
+}
+
+function fbDl(path) { document.getElementById('dl-path').value = path; downloadFile(); }
+
+async function fbDel(path, isDir) {
+  const name = path.split(/[\\/]/).pop();
+  if (!confirm((isDir ? 'Delete folder' : 'Delete file') + ':\n"' + name + '"\n\nCannot be undone.')) return;
+  try {
+    const d = await post('/file_action', { action:'delete', path });
+    if (d.status === 'deleted') { toast('Deleted: ' + name, 'ok'); feed('DELETE', name, 'err'); browseTo(_fbPath); }
+    else toast(d.error || 'Delete failed', 'err');
+  } catch(e) { toast('Backend error', 'err'); }
+}
+
+async function fbRen(path, oldName) {
+  const newName = prompt('Rename "' + oldName + '" to:', oldName);
+  if (!newName || newName === oldName) return;
+  try {
+    const d = await post('/file_action', { action:'rename', path, new_name: newName });
+    if (d.status === 'renamed') { toast('Renamed to ' + newName, 'ok'); feed('RENAME', oldName + ' -> ' + newName); browseTo(_fbPath); }
+    else toast(d.error || 'Rename failed', 'err');
+  } catch(e) { toast('Backend error', 'err'); }
+}
+
+async function fbMkdir() {
+  if (!_fbPath) { toast('Browse to a folder first', 'err'); return; }
+  const name = prompt('New folder name:');
+  if (!name) return;
+  try {
+    const d = await post('/file_action', { action:'mkdir', path: _fbPath + '\\' + name });
+    if (d.status === 'created') { toast('Created: ' + name, 'ok'); feed('MKDIR', _fbPath + '\\' + name); browseTo(_fbPath); }
+    else toast(d.error || 'Failed', 'err');
+  } catch(e) { toast('Backend error', 'err'); }
+}
+
+// ════════════════════════════════════════════════════
+// iZACH BRIDGE
+// ════════════════════════════════════════════════════
+async function loadBridge() {
+  const dot = document.getElementById('bridge-dot');
+  const lbl = document.getElementById('bridge-lbl');
+  const ts  = document.getElementById('bridge-ts');
+  try {
+    const d   = await get('/izach_bridge');
+    const now = new Date();
+    ts.textContent = String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0')+':'+String(now.getSeconds()).padStart(2,'0');
+    if (d.online && d.data) {
+      dot.classList.add('on'); lbl.textContent = 'ALLIEDNODE ONLINE';
+      const x = d.data;
+      document.getElementById('bc-cpu').textContent = (x.cpu ?? '—') + '%';
+      document.getElementById('bc-ram').textContent = (x.ram ?? '—') + '%';
+      document.getElementById('bc-wa').textContent  = x.whatsapp ? 'ON' : 'OFF';
+    } else {
+      dot.classList.remove('on'); lbl.textContent = 'ALLIEDNODE OFFLINE';
+      ['bc-cpu','bc-ram','bc-wa'].forEach(id => document.getElementById(id).textContent = '—');
+    }
+  } catch(e) { dot.classList.remove('on'); lbl.textContent = 'BRIDGE ERROR'; }
+}
+loadBridge();
+setInterval(loadBridge, 15000);
+
+async function sendNotif() {
+  const msg = document.getElementById('bridge-notif-in').value.trim();
+  if (!msg) return;
+  try {
+    const d = await post('/notify', { message: msg, title: 'iZACH Bridge' });
+    if (d.status === 'sent') { toast('Notification sent', 'ok'); feed('NOTIFY', msg.substring(0,40), 'ok'); document.getElementById('bridge-notif-in').value = ''; }
+    else toast(d.error || 'Failed', 'err');
+  } catch(e) { toast('Backend error', 'err'); }
+}
+
+// ════════════════════════════════════════════════════
+// REMOTE INPUT
+// ════════════════════════════════════════════════════
+async function sendHotkey(keys) {
+  try {
+    const d = await post('/remote_input', { action:'hotkey', keys });
+    if (d.status === 'hotkey') { document.getElementById('ri-status').textContent = keys.join('+') + ' sent'; feed('INPUT', 'hotkey: ' + keys.join('+'), 'ok'); setTimeout(()=>document.getElementById('ri-status').textContent='', 2000); }
+    else toast(d.error || 'Failed', 'err');
+  } catch(e) { toast('pyautogui not installed on AlliedNode 2', 'err'); }
+}
+
+async function sendKey(key) {
+  try {
+    const d = await post('/remote_input', { action:'key', key });
+    if (d.status !== 'key') toast(d.error || 'Failed', 'err');
+    else feed('INPUT', 'key: ' + key, 'ok');
+  } catch(e) { toast('Backend error', 'err'); }
+}
+
+function sendCustomHotkey() {
+  const val = document.getElementById('ri-custom-keys').value.trim();
+  if (!val) return;
+  const keys = val.split('+').map(k => k.trim()).filter(Boolean);
+  keys.length === 1 ? sendKey(keys[0]) : sendHotkey(keys);
+}
+
+async function sendText() {
+  const text  = document.getElementById('ri-text-area').value;
+  const delay = parseInt(document.getElementById('ri-delay').value) || 0;
+  const st    = document.getElementById('ri-status');
+  if (!text) return;
+  if (delay > 0) {
+    st.textContent = 'Sending in ' + delay + 's...'; st.style.color = 'rgba(255,179,0,0.8)';
+    await new Promise(r => setTimeout(r, delay * 1000));
+  }
+  st.textContent = 'Typing...'; st.style.color = 'rgba(0,220,110,0.7)';
+  try {
+    const d = await post('/remote_input', { action:'type', text });
+    if (d.status === 'typed' || d.status === 'pasted') {
+      st.textContent = d.chars + ' chars sent'; feed('INPUT', 'typed ' + d.chars + ' chars', 'ok');
+      setTimeout(() => { st.textContent = ''; }, 3000);
+    } else { st.textContent = d.error || 'Failed'; st.style.color = 'rgba(255,100,100,0.7)'; toast(d.error || 'Failed', 'err'); }
+  } catch(e) { st.textContent = 'Backend error'; st.style.color = 'rgba(255,100,100,0.7)'; toast('pyautogui missing?', 'err'); }
+}
+</script>
+</body>
+</html>

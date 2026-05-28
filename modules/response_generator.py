@@ -204,27 +204,33 @@ class ResponseGenerator:
             return resp.choices[0].message.content.strip()
         except Exception as e:
             if "429" in str(e) or "rate" in str(e).lower():
+                print(f"[RG] Groq rate-limited, falling back to Gemini: {e}")
                 time.sleep(2)
-            pass
+            else:
+                print(f"[RG] Groq error, falling back to Gemini: {e}")
 
         # Gemini fallback
-        for _ in range(len(self._gemini_keys)):
-            try:
-                from google.genai import types
-                resp = self._gemini.models.generate_content(
-                    model="gemini-1.5-flash",
-                    contents=prompt,
-                    config=types.GenerateContentConfig(
-                        system_instruction=RESPONSE_SYSTEM_PROMPT,
-                        max_output_tokens=80
+        if self._gemini is None:
+            print("[RG] Gemini client not initialised — skipping Gemini fallback")
+        else:
+            for _ in range(len(self._gemini_keys)):
+                try:
+                    from google.genai import types
+                    resp = self._gemini.models.generate_content(
+                        model="gemini-2.0-flash",
+                        contents=prompt,
+                        config=types.GenerateContentConfig(
+                            system_instruction=RESPONSE_SYSTEM_PROMPT,
+                            max_output_tokens=80
+                        )
                     )
-                )
-                return resp.text.strip()
-            except Exception as e:
-                if "429" in str(e) or "quota" in str(e).lower():
-                    self._rotate_gemini()
-                else:
-                    break
+                    return resp.text.strip()
+                except Exception as e:
+                    if "429" in str(e) or "quota" in str(e).lower():
+                        self._rotate_gemini()
+                    else:
+                        print(f"[RG] Gemini error: {e}")
+                        break
 
         # Hard fallback — static responses
         status = context.get("status", "success")

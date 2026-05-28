@@ -45,6 +45,7 @@ class SettingsActivity : AppCompatActivity() {
 
         binding.etBackendUrl.setText(api.baseUrl())
         binding.etWsHost.setText(api.wsHost())
+        binding.etAlliedUrl.setText(api.alliedBaseUrl())
 
         binding.btnScanQr.setOnClickListener {
             val options = ScanOptions()
@@ -66,6 +67,11 @@ class SettingsActivity : AppCompatActivity() {
         // Load security prefs
         binding.swBiometric.isChecked = prefs.getBoolean("biometric_lock", false)
         binding.swFloatMic.isChecked  = prefs.getBoolean("float_mic_enabled", false)
+
+        // Auto-DND schedule
+        binding.swAutoDnd.isChecked    = prefs.getBoolean("auto_dnd_enabled", false)
+        binding.etDndStart.setText(prefs.getString("auto_dnd_start", "22:00"))
+        binding.etDndEnd.setText(prefs.getString("auto_dnd_end",   "08:00"))
 
         binding.swFloatMic.setOnCheckedChangeListener { _, isChecked ->
             if (isChecked) {
@@ -93,15 +99,32 @@ class SettingsActivity : AppCompatActivity() {
             api.saveBackendUrl(url)
             api.saveWsHost(wsHost)
 
+            val alliedUrl = binding.etAlliedUrl.text.toString().trim().trimEnd('/')
+            if (alliedUrl.isNotBlank()) api.saveAlliedUrl(alliedUrl)
+
+            val dndStart = binding.etDndStart.text.toString().trim().ifBlank { "22:00" }
+            val dndEnd   = binding.etDndEnd.text.toString().trim().ifBlank { "08:00" }
+
             prefs.edit()
-                .putBoolean("notif_system",    binding.swNotifSystem.isChecked)
-                .putBoolean("notif_downloads", binding.swNotifDownloads.isChecked)
-                .putBoolean("notif_transfers", binding.swNotifTransfers.isChecked)
-                .putBoolean("notif_automation", binding.swNotifAutomation.isChecked)
-                .putBoolean("notif_alerts",    binding.swNotifAlerts.isChecked)
-                .putBoolean("biometric_lock",  binding.swBiometric.isChecked)
+                .putBoolean("notif_system",      binding.swNotifSystem.isChecked)
+                .putBoolean("notif_downloads",   binding.swNotifDownloads.isChecked)
+                .putBoolean("notif_transfers",   binding.swNotifTransfers.isChecked)
+                .putBoolean("notif_automation",  binding.swNotifAutomation.isChecked)
+                .putBoolean("notif_alerts",      binding.swNotifAlerts.isChecked)
+                .putBoolean("biometric_lock",    binding.swBiometric.isChecked)
                 .putBoolean("float_mic_enabled", binding.swFloatMic.isChecked)
+                .putBoolean("auto_dnd_enabled",  binding.swAutoDnd.isChecked)
+                .putString("auto_dnd_start",     dndStart)
+                .putString("auto_dnd_end",       dndEnd)
                 .apply()
+
+            // Push schedule to backend
+            val schedEnabled = binding.swAutoDnd.isChecked
+            val (sh, sm) = dndStart.split(":").let { (it.getOrNull(0)?.toIntOrNull() ?: 22) to (it.getOrNull(1)?.toIntOrNull() ?: 0) }
+            val (eh, em) = dndEnd.split(":").let { (it.getOrNull(0)?.toIntOrNull() ?: 8) to (it.getOrNull(1)?.toIntOrNull() ?: 0) }
+            lifecycleScope.launch {
+                api.pushDndSchedule(schedEnabled, sh, sm, eh, em)
+            }
 
             toast("Saved. Restart app to reconnect.")
             finish()

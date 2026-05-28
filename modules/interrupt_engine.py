@@ -12,6 +12,7 @@ import threading
 import time
 import queue
 import speech_recognition as sr
+from modules.audio_init_lock import PYAUDIO_INIT_LOCK
 
 # ─────────────────────────────────────────────
 # INTERRUPT KEYWORDS
@@ -19,9 +20,12 @@ import speech_recognition as sr
 INTERRUPT_PHRASES = [
     "okay stop", "ok stop", "stop", "okay okay", "ok ok",
     "izach stop", "izach", "enough", "shut up", "cancel",
-    "i got it", "got it", "alright", "that's enough", "okay wait", 
+    "i got it", "got it", "alright", "that's enough", "okay wait",
     "bas", "ruk", "ruko", "band kar", "acha okay", "theek hai",  # Hindi
 ]
+
+# Words that, if they appear alongside stop/cancel, mean pure interrupt (no command follows)
+_PURE_STOP_WORDS = {"stop", "cancel", "enough", "bas", "ruk", "ruko", "shut up"}
 
 # Minimum confidence to trigger interrupt from voice
 INTERRUPT_THRESHOLD = 0.6
@@ -30,26 +34,29 @@ INTERRUPT_THRESHOLD = 0.6
 class InterruptEngine:
     """
     Monitors for interruption signals while iZACH is speaking.
-    Integrates with the speech queue to stop playback immediately.
+    Two modes:
+      - Pure interrupt: "stop", "cancel" → TTS stops, no follow-up command
+      - Barge-in: "stop — open Chrome" → TTS stops, new command queued
     """
 
     def __init__(self):
-        self._interrupted    = False
-        self._is_speaking    = False
-        self._stop_fn        = None   # injected from main.py
-        self._listening      = False
-        self._voice_thread   = None
-        self._lock           = threading.Lock()
+        self._interrupted      = False
+        self._is_speaking      = False
+        self._stop_fn          = None   # injected from main.py
+        self._listening        = False
+        self._voice_thread     = None
+        self._lock             = threading.Lock()
+        self._start_lock       = threading.Lock()   # prevents overlapping thread starts
+        self._barge_in_command = None   # queued command from barge-in
 
-        # Lightweight recognizer for interrupt detection
+        # Lightweight recognizer for barge-in / interrupt detection
         self._rec = sr.Recognizer()
-        self._rec.energy_threshold        = 300
+        self._rec.energy_threshold         = 300
         self._rec.dynamic_energy_threshold = True
-        self._rec.pause_threshold         = 0.4   # fast response
-        self._rec.phrase_threshold        = 0.1
+        self._rec.pause_threshold          = 0.4
+        self._rec.phrase_threshold         = 0.1
 
     def set_stop_fn(self, fn):
-        """Inject the stop-speech function from main.py."""
         self._stop_fn = fn
 
     def is_speaking(self) -> bool:
@@ -62,17 +69,12 @@ class InterruptEngine:
             self._is_speaking = val
             self._interrupted = False
         if val:
-            # Only start voice monitor if not already conflicting with main mic
-            # The button interrupt always works regardless
-            pass  # voice monitor disabled for now — use button interrupt
+            self._start_voice_monitor()
         else:
             self._stop_voice_monitor()
 
     def trigger(self):
-        """
-        Manually trigger interrupt — called by UI button or voice detection.
-        Stops current speech immediately.
-        """
+        """Stops current TTS immediately."""
         with self._lock:
             self._interrupted = True
         if self._stop_fn:
@@ -86,63 +88,129 @@ class InterruptEngine:
         with self._lock:
             self._interrupted = False
 
-    # ─────────────────────────────────────────
-    # Voice interrupt monitor
-    # ─────────────────────────────────────────
+    # ── Barge-in command queue ────────────────────────────────
+
+    def get_barge_in_command(self) -> str | None:
+        """
+        Returns and clears any command captured during barge-in.
+        Called by main.py listen() before opening mic.
+        """
+        with self._lock:
+            cmd = self._barge_in_command
+            self._barge_in_command = None
+        return cmd
+
+    def _set_barge_in_command(self, text: str):
+        with self._lock:
+            self._barge_in_command = text
+
+    # ── Voice monitor ─────────────────────────────────────────
 
     def _start_voice_monitor(self):
-        if self._listening:
+        # Non-blocking acquire — if another thread is already starting, skip
+        if not self._start_lock.acquire(blocking=False):
             return
-        self._listening = True
-        self._voice_thread = threading.Thread(
-            target=self._voice_monitor_loop,
-            daemon=True
-        )
-        self._voice_thread.start()
+        try:
+            if self._listening:
+                return  # already running
+            # Wait for previous thread to die before starting new one
+            if self._voice_thread and self._voice_thread.is_alive():
+                self._voice_thread.join(timeout=1.0)
+            self._listening = True
+            self._voice_thread = threading.Thread(
+                target=self._voice_monitor_loop,
+                daemon=True,
+                name="interrupt-monitor",
+            )
+            self._voice_thread.start()
+        finally:
+            self._start_lock.release()
 
     def _stop_voice_monitor(self):
         self._listening = False
 
     def _voice_monitor_loop(self):
+        """
+        Keep mic context open for entire monitoring session.
+        Single open/close avoids AssertionError from SpeechRecognition's
+        'stream is already open' assertion on repeated __enter__ calls.
+        """
+        mic = None
         try:
-            # Use mic index 0 explicitly — avoids conflict with main mic
-            try:
-                mic = sr.Microphone(device_index=0)
-            except Exception:
-                mic = sr.Microphone()
-
-            with mic as source:
-                self._rec.adjust_for_ambient_noise(source, duration=0.2)
-
-            while self._listening and self._is_speaking:
+            # Try device 0 first, fallback to system default
+            # Serialize PyAudio init — concurrent Pa_Initialize() causes access violation on Windows
+            for device_idx in (0, None):
                 try:
-                    with mic as source:
+                    with PYAUDIO_INIT_LOCK:
+                        mic = sr.Microphone(device_index=device_idx)
+                    break
+                except (AssertionError, OSError, Exception):
+                    mic = None
+
+            if mic is None:
+                return  # no mic available — silently skip
+
+            # Open mic ONCE — keep context open for entire loop
+            with mic as source:
+                try:
+                    self._rec.adjust_for_ambient_noise(source, duration=0.2)
+                except (AssertionError, Exception):
+                    pass  # best-effort; non-fatal
+
+                while self._listening and self._is_speaking:
+                    try:
                         audio = self._rec.listen(
                             source,
                             timeout=1.5,
-                            phrase_time_limit=2.5
+                            phrase_time_limit=6.0,
                         )
-                    text = self._rec.recognize_google(audio).lower()
-                    print(f"[INTERRUPT MONITOR] Heard: {text}")
+                        text = self._rec.recognize_google(audio, language="en-in").lower().strip()
+                        if not text:
+                            continue
+                        print(f"[BARGE-IN MONITOR] Heard: {text!r}")
 
-                    if any(phrase in text for phrase in INTERRUPT_PHRASES):
-                        print(f"[INTERRUPT] Triggered by voice: '{text}'")
-                        self.trigger()
+                        if any(phrase in text for phrase in INTERRUPT_PHRASES):
+                            remainder = self._strip_interrupt_prefix(text)
+                            if remainder and len(remainder.split()) >= 2:
+                                print(f"[BARGE-IN] Command after interrupt: {remainder!r}")
+                                self.trigger()
+                                self._set_barge_in_command(remainder)
+                            else:
+                                print(f"[INTERRUPT] Pure stop: {text!r}")
+                                self.trigger()
+                            break
+
+                    except sr.WaitTimeoutError:
+                        continue
+                    except sr.UnknownValueError:
+                        continue
+                    except (AssertionError, OSError):
+                        # Mic stream went invalid (device disconnected, resource busy)
+                        break
+                    except Exception:
                         break
 
-                except sr.WaitTimeoutError:
-                    continue
-                except sr.UnknownValueError:
-                    continue
-                except Exception:
-                    break
+        except (AssertionError, OSError):
+            pass  # mic unavailable — normal when audio device is busy
         except Exception as e:
-            import traceback
-            print(f"[INTERRUPT ENGINE] Monitor error: {type(e).__name__}: {e}")
-            if str(e):
-                traceback.print_exc()
+            if self._listening:
+                print(f"[INTERRUPT ENGINE] Monitor error: {type(e).__name__}: {e or '(no msg)'}")
         finally:
             self._listening = False
+
+    @staticmethod
+    def _strip_interrupt_prefix(text: str) -> str:
+        """Remove leading interrupt/stop words and connectors, return remainder."""
+        import re
+        # Remove leading interrupt phrases and connectors (actually / instead / rather)
+        cleaned = re.sub(
+            r'^(okay\s+stop|ok\s+stop|stop|cancel|enough|bas|ruk|ruko|izach|'
+            r'actually|instead|no\s+wait|wait|hold\s+on|nevermind)[,\s\-–—]*',
+            '',
+            text,
+            flags=re.IGNORECASE,
+        ).strip()
+        return cleaned
 
 
 # Singleton

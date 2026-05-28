@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:paddingHorizontal="16dp"
+    android:paddingVertical="10dp"
+    android:background="?attr/selectableItemBackground">
+
+    <!-- Name + PID stacked -->
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/tvProcName"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="process.exe"
+            android:textColor="@color/text_pri"
+            android:textSize="13sp"
+            android:fontFamily="monospace"
+            android:maxLines="1"
+            android:ellipsize="end" />
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginTop="2dp">
+
+            <TextView
+                android:id="@+id/tvProcPid"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="PID 0"
+                android:textColor="@color/text_sec"
+                android:textSize="10sp"
+                android:fontFamily="monospace"
+                android:layout_marginEnd="10dp" />
+
+            <TextView
+                android:id="@+id/tvProcCpu"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text=""
+                android:textColor="#FFffb300"
+                android:textSize="10sp"
+                android:fontFamily="monospace" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- Memory -->
+    <TextView
+        android:id="@+id/tvProcMem"
+        android:layout_width="60dp"
+        android:layout_height="wrap_content"
+        android:text="— MB"
+        android:textColor="@color/cyan"
+        android:textSize="12sp"
+        android:fontFamily="monospace"
+        android:gravity="end"
+        android:layout_marginEnd="10dp" />
+
+    <!-- Kill button -->
+    <Button
+        android:id="@+id/btnKillProc"
+        android:layout_width="wrap_content"
+        android:layout_height="32dp"
+        android:text="KILL"
+        android:textColor="@color/red_neon"
+        android:backgroundTint="#20ff3d3d"
+        android:fontFamily="monospace"
+        android:textSize="10sp"
+        android:letterSpacing="0.05"
+        android:paddingHorizontal="10dp"
+        style="@style/Widget.MaterialComponents.Button.TextButton" />
+
+</LinearLayout>

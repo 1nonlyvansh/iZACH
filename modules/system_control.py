@@ -4,11 +4,18 @@ import subprocess
 import threading
 import winreg
 import datetime
+import warnings
+warnings.filterwarnings('ignore', category=UserWarning, module='pycaw')
 from pycaw.pycaw import AudioUtilities
 import screen_brightness_control as sbc
 
 
 def _init_volume():
+    try:
+        import comtypes
+        comtypes.CoInitialize()
+    except Exception:
+        pass
     try:
         return AudioUtilities.GetSpeakers().EndpointVolume
     except Exception as e:
@@ -66,7 +73,17 @@ def toggle_wifi():
 
 # ── Volume ────────────────────────────────────────────────────
 
-def _ramp_volume(volume_obj, current_pct: int, target_pct: int):
+def _ramp_volume(current_pct: int, target_pct: int):
+    # Re-initialize COM in this thread — volume COM objects are STA and
+    # cannot be called from a thread different from the one that created them.
+    try:
+        import comtypes
+        comtypes.CoInitialize()
+    except Exception:
+        pass
+    volume_obj = _init_volume()
+    if volume_obj is None:
+        return
     step = 5 if target_pct > current_pct else -5
     current = current_pct
     while (step > 0 and current < target_pct) or (step < 0 and current > target_pct):
@@ -87,7 +104,7 @@ def set_volume(target: int):
         current_pct = int(volume_obj.GetMasterVolumeLevelScalar() * 100)
     except Exception:
         current_pct = target
-    threading.Thread(target=_ramp_volume, args=(volume_obj, current_pct, target), daemon=True).start()
+    threading.Thread(target=_ramp_volume, args=(current_pct, target), daemon=True).start()
     return True, f"Volume set to {target}."
 
 
@@ -100,7 +117,7 @@ def adjust_volume(delta: int):
     except Exception:
         return False, "Could not read current volume."
     target = max(0, min(100, current_pct + delta))
-    threading.Thread(target=_ramp_volume, args=(volume_obj, current_pct, target), daemon=True).start()
+    threading.Thread(target=_ramp_volume, args=(current_pct, target), daemon=True).start()
     return True, f"Volume set to {target}."
 
 
@@ -601,6 +618,128 @@ def _get_drive_map():
         return drives
     except Exception:
         return {}
+
+
+_APP_EXE_MAP = {
+    "chrome": "chrome.exe", "google chrome": "chrome.exe",
+    "spotify": "Spotify.exe",
+    "discord": "Discord.exe",
+    "vlc": "vlc.exe",
+    "notepad": "notepad.exe",
+    "word": "WINWORD.EXE", "microsoft word": "WINWORD.EXE",
+    "excel": "EXCEL.EXE", "microsoft excel": "EXCEL.EXE",
+    "powerpoint": "POWERPNT.EXE", "microsoft powerpoint": "POWERPNT.EXE",
+    "edge": "msedge.exe", "microsoft edge": "msedge.exe",
+    "firefox": "firefox.exe",
+    "brave": "brave.exe",
+    "opera": "opera.exe",
+    "vscode": "Code.exe", "vs code": "Code.exe", "visual studio code": "Code.exe",
+    "whatsapp": "WhatsApp.exe",
+    "teams": "Teams.exe", "microsoft teams": "Teams.exe",
+    "zoom": "Zoom.exe",
+    "telegram": "Telegram.exe",
+    "steam": "steam.exe",
+    "obs": "obs64.exe",
+    "paint": "mspaint.exe",
+    "calculator": "CalculatorApp.exe",
+    "explorer": "explorer.exe", "file explorer": "explorer.exe",
+    "winrar": "WinRAR.exe",
+    "photoshop": "Photoshop.exe",
+}
+
+_KILL_SKIP_WORDS = {"tab", "this", "window", "that", "the", "it", "file"}
+
+
+def kill_app(name: str):
+    name_lower = name.lower().strip()
+    exe = _APP_EXE_MAP.get(name_lower)
+
+    if not exe:
+        try:
+            import psutil
+            _protected = {"system", "svchost.exe", "lsass.exe", "csrss.exe", "wininit.exe"}
+            matches = [
+                p.name() for p in psutil.process_iter(["name"])
+                if name_lower in p.name().lower()
+                and p.name().lower() not in _protected
+            ]
+            if matches:
+                exe = matches[0]
+            else:
+                return False, f"No app named '{name}' is running."
+        except Exception as e:
+            return False, f"Could not scan processes: {e}"
+
+    try:
+        result = subprocess.run(
+            ["taskkill", "/IM", exe, "/F"],
+            capture_output=True, text=True, timeout=5
+        )
+        if result.returncode == 0:
+            return True, f"{name.title()} closed."
+        out = (result.stdout + result.stderr).strip().lower()
+        if "not found" in out or "no tasks" in out:
+            return False, f"{name.title()} is not running."
+        return False, f"Couldn't close {name}: {(result.stdout or result.stderr).strip()}"
+    except Exception as e:
+        return False, f"Kill failed: {e}"
+
+
+def schedule_shutdown(seconds: int):
+    try:
+        subprocess.run(["shutdown", "/s", "/t", str(seconds)], capture_output=True, timeout=5)
+        minutes = seconds // 60
+        label = f"in {minutes} minute{'s' if minutes != 1 else ''}" if minutes > 0 else f"in {seconds} seconds"
+        return True, f"Shutting down {label}."
+    except Exception as e:
+        return False, f"Shutdown failed: {e}"
+
+
+def schedule_restart(seconds: int):
+    try:
+        subprocess.run(["shutdown", "/r", "/t", str(seconds)], capture_output=True, timeout=5)
+        minutes = seconds // 60
+        label = f"in {minutes} minute{'s' if minutes != 1 else ''}" if minutes > 0 else f"in {seconds} seconds"
+        return True, f"Restarting {label}."
+    except Exception as e:
+        return False, f"Restart failed: {e}"
+
+
+def cancel_shutdown():
+    try:
+        subprocess.run(["shutdown", "/a"], capture_output=True, timeout=5)
+        return True, "Scheduled shutdown cancelled."
+    except Exception as e:
+        return False, f"Cancel failed: {e}"
+
+
+def set_process_priority(app_name: str, level: str = "high"):
+    try:
+        import psutil
+        _PRIORITY_MAP = {
+            "low":      psutil.BELOW_NORMAL_PRIORITY_CLASS,
+            "normal":   psutil.NORMAL_PRIORITY_CLASS,
+            "high":     psutil.HIGH_PRIORITY_CLASS,
+            "realtime": psutil.REALTIME_PRIORITY_CLASS,
+        }
+        priority = _PRIORITY_MAP.get(level.lower(), psutil.HIGH_PRIORITY_CLASS)
+        name_lower = app_name.lower()
+        exe = _APP_EXE_MAP.get(name_lower, "").lower()
+        found = []
+        for proc in psutil.process_iter(["name", "pid"]):
+            pname = proc.name().lower()
+            if name_lower in pname or (exe and exe in pname):
+                found.append(proc)
+        if not found:
+            return False, f"No process named '{app_name}' is running."
+        for proc in found:
+            try:
+                proc.nice(priority)
+            except Exception:
+                pass
+        return True, f"Set {app_name} to {level} priority."
+    except Exception as e:
+        return False, f"Priority change failed: {e}"
 
 
 def eject_drive(identifier: str):

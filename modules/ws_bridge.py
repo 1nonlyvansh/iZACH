@@ -5,13 +5,71 @@ import time as _time
 
 _clients = set()           # all connected WS clients
 _extension_clients = set() # only chrome extension clients
-_android_clients: dict = {}  # ws -> device_name
+_android_clients = set()   # only Android app clients
 _loop = None
+
+# ── UI ready notification ─────────────────────────────────────
+import threading as _threading
+_ui_ready_event = _threading.Event()
+_ui_ready_callbacks: list = []
+
+
+def on_ui_connect(callback):
+    """Register a callback fired once when first Electron/React client connects."""
+    _ui_ready_callbacks.append(callback)
+
+async def _send_state_snapshot(ws):
+    try:
+        snapshot: dict = {"type": "state_snapshot"}
+
+        try:
+            import psutil as _ps
+            ram = _ps.virtual_memory()
+            snapshot["vitals"] = {
+                "cpu": round(_ps.cpu_percent(interval=0.1), 1),
+                "ram": round(ram.percent, 1),
+            }
+        except Exception:
+            pass
+
+        try:
+            from modules.window_watcher import get_active_window
+            snapshot["active_window"] = get_active_window()
+        except Exception:
+            pass
+
+        try:
+            from modules.location_engine import get_location
+            snapshot["location"] = get_location()
+        except Exception:
+            pass
+
+        try:
+            from modules.ui_api import _message_log
+            snapshot["last_messages"] = _message_log[-5:]
+        except Exception:
+            pass
+
+        await ws.send(json.dumps(snapshot))
+    except Exception:
+        pass
+
 
 async def _handler(ws):
     _clients.add(ws)
     identified = False
-    android_device_name = None
+
+    # Fire UI ready on first non-extension connection
+    if not _ui_ready_event.is_set():
+        _ui_ready_event.set()
+        for _cb in _ui_ready_callbacks:
+            try:
+                _threading.Thread(target=_cb, daemon=True).start()
+            except Exception:
+                pass
+
+    # Send current state to new client immediately
+    await _send_state_snapshot(ws)
 
     try:
         async for msg in ws:
@@ -24,11 +82,20 @@ async def _handler(ws):
                         identified = True
                         print("[WS] Chrome extension connected.")
                     elif data.get("name") == "android_device":
-                        android_device_name = data.get("device_name", "Android")
-                        _android_clients[ws] = android_device_name
+                        _android_clients.add(ws)
                         identified = True
-                        print(f"[WS] Android device connected: {android_device_name}")
-                        _broadcast_nowait({"type": "device_connected", "device_name": android_device_name})
+                        device_name = data.get("device_name", "Android")
+                        print(f"[WS] Android device connected: {device_name}")
+                        # Update phone status in ui_api
+                        try:
+                            from modules import ui_api as _uapi
+                            _uapi._phone_connected = True
+                            if device_name:
+                                _uapi._phone_device_name = device_name
+                        except Exception:
+                            pass
+                        # Broadcast phone_status: connected to cortex-ui (all non-android clients)
+                        _broadcast_to_non_android({"type": "phone_status", "connected": True, "device_name": device_name, "qr": None})
 
                 elif data.get("type") == "fill_result":
                     filled = data.get("filled", 0)
@@ -57,26 +124,41 @@ async def _handler(ws):
     finally:
         _clients.discard(ws)
         _extension_clients.discard(ws)
-        if android_device_name:
-            _android_clients.pop(ws, None)
-            print(f"[WS] Android device disconnected: {android_device_name}")
-            _broadcast_nowait({"type": "device_disconnected", "device_name": android_device_name})
+        was_android = ws in _android_clients
+        _android_clients.discard(ws)
+        if was_android:
+            device_name = ""
+            try:
+                from modules import ui_api as _uapi
+                device_name = _uapi._phone_device_name
+            except Exception:
+                pass
+            if not _android_clients:
+                # Last Android client disconnected
+                try:
+                    from modules import ui_api as _uapi
+                    _uapi._phone_connected = False
+                except Exception:
+                    pass
+                _broadcast_to_non_android({"type": "phone_status", "connected": False, "device_name": device_name, "qr": None})
+            print(f"[WS] Android device disconnected: {device_name}")
         elif identified:
             print("[WS] Chrome extension disconnected.")
 
 
 async def _server():
-    try:
-        from websockets.asyncio.server import serve
-        async with serve(_handler, "0.0.0.0", 5051):
-            print("[WS] Bridge running on port 5051")
-            await asyncio.Future()
-    except OSError as e:
-        print(f"[WS] Port 5051 busy, retrying in 3s: {e}")
-        await asyncio.sleep(3)
-        await _server()
-    except Exception as e:
-        print(f"[WS] Bridge error: {e}")
+    while True:
+        try:
+            from websockets.asyncio.server import serve
+            async with serve(_handler, "0.0.0.0", 5051):
+                print("[WS] Bridge running on port 5051")
+                await asyncio.Future()
+        except OSError as e:
+            print(f"[WS] Port 5051 busy, retrying in 3s: {e}")
+            await asyncio.sleep(3)
+        except Exception as e:
+            print(f"[WS] Bridge error: {e}")
+            break
 
 
 def start_ws_bridge():
@@ -91,17 +173,14 @@ def start_ws_bridge():
 def has_clients() -> bool:
     return bool(_clients)
 
-def get_android_devices() -> list:
-    return list(_android_clients.values())
-
 def _broadcast_nowait(event: dict):
     if not _loop or not _clients:
         return
     try:
         msg = json.dumps(event)
         asyncio.run_coroutine_threadsafe(_broadcast_all(msg), _loop)
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"[WS] _broadcast_nowait failed: {e}")
 
 def has_extension_client() -> bool:
     return bool(_extension_clients)
@@ -115,8 +194,8 @@ def broadcast(event: dict):
     try:
         msg = json.dumps(event)
         asyncio.run_coroutine_threadsafe(_broadcast_all(msg), _loop)
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"[WS] broadcast failed: {e}")
 
 
 def emit(event: str, source: str, payload: dict):
@@ -129,7 +208,7 @@ def emit(event: str, source: str, payload: dict):
     })
 
 async def _broadcast_all(msg: str):
-    global _clients, _extension_clients
+    global _clients, _extension_clients, _android_clients
     dead = set()
     for ws in list(_clients):
         try:
@@ -138,3 +217,30 @@ async def _broadcast_all(msg: str):
             dead.add(ws)
     _clients -= dead
     _extension_clients -= dead
+    _android_clients -= dead
+
+
+def _broadcast_to_non_android(event: dict):
+    """Broadcast to all clients except Android devices (e.g., phone_status events for cortex-ui)."""
+    if not _loop or not _clients:
+        return
+    try:
+        msg = json.dumps(event)
+        targets = _clients - _android_clients
+        if targets:
+            asyncio.run_coroutine_threadsafe(_broadcast_subset(msg, targets), _loop)
+    except Exception as e:
+        print(f"[WS] _broadcast_to_non_android failed: {e}")
+
+
+async def _broadcast_subset(msg: str, targets: set):
+    dead = set()
+    for ws in list(targets):
+        try:
+            await ws.send(msg)
+        except Exception:
+            dead.add(ws)
+    global _clients, _extension_clients, _android_clients
+    _clients -= dead
+    _extension_clients -= dead
+    _android_clients -= dead

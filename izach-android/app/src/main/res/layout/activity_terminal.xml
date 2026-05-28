@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@color/bg_deep">
+
+    <!-- Header -->
+    <LinearLayout android:id="@+id/topBar"
+        android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:minHeight="56dp" android:background="@color/bg_panel"
+        android:orientation="horizontal" android:gravity="center_vertical"
+        android:paddingHorizontal="8dp">
+        <ImageButton android:id="@+id/btnBack"
+            android:layout_width="48dp" android:layout_height="48dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@drawable/ic_back" android:contentDescription="Back" />
+        <TextView android:layout_width="0dp" android:layout_height="wrap_content"
+            android:layout_weight="1" android:text=">_ TERMINAL"
+            android:textColor="@color/green_neon" android:textSize="13sp"
+            android:fontFamily="monospace" android:letterSpacing="0.2"
+            android:textStyle="bold" android:gravity="center" />
+        <Button android:id="@+id/btnClearTerm"
+            android:layout_width="wrap_content" android:layout_height="36dp"
+            android:text="CLR"
+            android:textColor="@color/text_sec" android:backgroundTint="@color/bg_card"
+            android:fontFamily="monospace" android:textSize="11sp"
+            android:paddingHorizontal="12dp" />
+    </LinearLayout>
+
+    <!-- Output area -->
+    <ScrollView android:id="@+id/termScrollView"
+        android:layout_width="match_parent" android:layout_height="0dp"
+        android:layout_weight="1"
+        android:padding="12dp"
+        android:fillViewport="true">
+        <TextView android:id="@+id/tvTermOutput"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="iZACH Terminal — type a command below\n"
+            android:textColor="#FF7fff7f"
+            android:textSize="12sp"
+            android:fontFamily="monospace"
+            android:lineSpacingMultiplier="1.3" />
+    </ScrollView>
+
+    <!-- Divider -->
+    <View android:layout_width="match_parent" android:layout_height="1dp"
+        android:background="#FF005060" />
+
+    <!-- Input bar -->
+    <LinearLayout android:id="@+id/termInputBar"
+        android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:orientation="horizontal" android:gravity="center_vertical"
+        android:background="@color/bg_panel" android:paddingHorizontal="8dp"
+        android:paddingVertical="6dp">
+
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:text="$ " android:textColor="@color/green_neon"
+            android:textSize="14sp" android:fontFamily="monospace" />
+
+        <EditText android:id="@+id/etTermInput"
+            android:layout_width="0dp" android:layout_height="40dp"
+            android:layout_weight="1"
+            android:background="@android:color/transparent"
+            android:textColor="#FF7fff7f"
+            android:textSize="13sp" android:fontFamily="monospace"
+            android:hint="command…" android:textColorHint="#FF3a5050"
+            android:inputType="text"
+            android:imeOptions="actionSend"
+            android:paddingHorizontal="4dp" />
+
+        <Button android:id="@+id/btnSendTerm"
+            android:layout_width="44dp" android:layout_height="40dp"
+            android:text="↵"
+            android:textColor="@color/bg_deep"
+            android:backgroundTint="@color/green_neon"
+            android:fontFamily="monospace"
+            android:textSize="16sp"
+            android:paddingHorizontal="0dp" />
+    </LinearLayout>
+
+</LinearLayout>

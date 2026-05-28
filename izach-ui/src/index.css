@@ -90,8 +90,8 @@ body::before {
 }
 
 @keyframes chatFadeIn {
-  from { opacity: 0; transform: translateY(6px); }
-  to { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; transform: translateY(12px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0)    scale(1); }
 }
 
 @keyframes blink {
@@ -151,7 +151,7 @@ body::before {
 .status-online { animation: statusPulse 2s infinite; }
 .status-offline { animation: statusPulseRed 2s infinite; }
 .blink { animation: blink 1s infinite; }
-.chat-message { animation: chatFadeIn 0.25s ease-out; }
+.chat-message { animation: chatFadeIn 0.32s cubic-bezier(0.22, 1, 0.36, 1); }
 
 /* neural node lines */
 .neural-line {
@@ -184,4 +184,95 @@ body::before {
 /* button hover glow */
 .btn-glow:hover {
   box-shadow: 0 0 8px rgba(0,229,255,0.4);
+}
+
+/* ── New animations ──────────────────────────────────────────── */
+
+/* sound wave bars (NeuralOrb speaking state) */
+@keyframes soundBar {
+  0%, 100% { transform: scaleY(0.18); opacity: 0.35; }
+  50%       { transform: scaleY(1);   opacity: 1; }
+}
+
+/* tab content slide-up on mount */
+@keyframes tabEnter {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* sparkline draw */
+@keyframes sparkDraw {
+  from { stroke-dashoffset: 300; }
+  to   { stroke-dashoffset: 0; }
+}
+
+/* orb pulse ring expand */
+@keyframes orbRing {
+  0%   { transform: scale(0.95); opacity: 0.5; }
+  100% { transform: scale(1.45); opacity: 0; }
+}
+
+@keyframes orbRingPulse {
+  0%, 100% { transform: scale(1.0);  opacity: 0.35; }
+  50%       { transform: scale(1.06); opacity: 0.6;  }
+}
+
+/* shimmer sweep on hover */
+@keyframes shimmer {
+  0%   { background-position: -300px 0; }
+  100% { background-position: 300px 0; }
+}
+
+/* scroll-to-bottom button bounce */
+@keyframes bounceFadeIn {
+  0%   { opacity: 0; transform: translateY(6px); }
+  60%  { transform: translateY(-2px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+.tab-content {
+  animation: tabEnter 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.sound-bar {
+  transform-origin: bottom center;
+}
+
+.sparkline-path {
+  stroke-dasharray: 300;
+  animation: sparkDraw 0.7s ease-out forwards;
+}
+
+.orb-ring {
+  animation: orbRing 1.6s ease-out infinite;
+}
+
+.scroll-fab {
+  animation: bounceFadeIn 0.2s ease-out;
+}
+
+/* chat bubble hover highlight */
+.chat-bubble:hover {
+  border-color: rgba(0, 229, 255, 0.18) !important;
+  transition: border-color 0.15s;
+}
+
+/* ── Enhancement animations ──────────────────────────────────── */
+
+/* Command palette drop-in */
+@keyframes paletteSlideIn {
+  from { opacity: 0; transform: translateY(-14px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0)     scale(1); }
+}
+
+/* Suggestion chips fade up */
+@keyframes chipFadeIn {
+  from { opacity: 0; transform: translateY(5px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Agent pill snap-in */
+@keyframes agentPillIn {
+  from { opacity: 0; transform: scale(0.88); }
+  to   { opacity: 1; transform: scale(1); }
 }

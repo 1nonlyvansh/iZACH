@@ -1,16 +1,30 @@
 const { app, BrowserWindow, ipcMain } = require('electron')
 const path = require('path')
+const fs = require('fs')
 
 const isDev = process.env.NODE_ENV !== 'production'
 
+function getUIMode() {
+  try {
+    const settingsPath = path.join(__dirname, '../../api_keys.json')
+    const data = JSON.parse(fs.readFileSync(settingsPath, 'utf8'))
+    return data.ui || 'classic'
+  } catch (e) {
+    return 'classic'
+  }
+}
+
 function createWindow() {
+  const uiMode = getUIMode()
+  const isSciFi = uiMode === 'scifi'
+
   const win = new BrowserWindow({
     width: 1440,
     height: 860,
     minWidth: 1200,
     minHeight: 700,
     frame: false,
-    backgroundColor: '#050d1a',
+    backgroundColor: isSciFi ? '#010814' : '#050d1a',
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
@@ -21,7 +35,9 @@ function createWindow() {
     titleBarStyle: 'hidden',
   })
 
-  if (isDev) {
+  if (isSciFi) {
+    win.loadFile(path.join(__dirname, '../../cortex-ui.html'))
+  } else if (isDev) {
     // Wait for Vite to be ready before loading
     const tryLoad = (attempts) => {
       const http = require('http')
@@ -51,6 +67,17 @@ function createWindow() {
 
 app.whenReady().then(() => {
   createWindow()
+
+  // Grant microphone permission for waveform visualizer
+  const { session } = require('electron')
+  session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
+    if (permission === 'media' || permission === 'microphone') {
+      callback(true)
+    } else {
+      callback(false)
+    }
+  })
+
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })

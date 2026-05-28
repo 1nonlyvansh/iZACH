@@ -25,12 +25,16 @@ def get_active_window_safe(window_title_keyword, timeout=10):
         if target_windows:
             target_win = target_windows[0]
             try:
-                if target_win.isMinimized:
+                try:
+                    _is_min = bool(target_win.isMinimized)
+                except Exception:
+                    _is_min = False  # Stale handle — assume not minimised
+                if _is_min:
                     target_win.restore()
-                
+
                 target_win.activate()
                 time.sleep(1.0) # Buffer for UI thread stabilization
-                
+
                 if target_win.isActive:
                     logger.info(f"[SUCCESS] {target_win.title} is focused.")
                     return True
@@ -56,6 +60,24 @@ def open_app(app_name):
 
     # Verify window exists before returning
     return get_active_window_safe(app_name)
+
+
+def snap_window(direction: str):
+    """
+    Snap the foreground window using Win+Arrow hotkeys.
+    direction: 'left' | 'right' | 'maximize' | 'minimize'
+    Call after open_app(); includes a 1.5s settle delay.
+    """
+    time.sleep(1.5)
+    d = direction.lower().strip()
+    if d in ("left", "left half", "at left", "on the left", "snap left"):
+        pyautogui.hotkey("win", "left")
+    elif d in ("right", "right half", "at right", "on the right", "snap right"):
+        pyautogui.hotkey("win", "right")
+    elif d in ("maximize", "max", "full", "fullscreen", "center"):
+        pyautogui.hotkey("win", "up")
+    elif d in ("minimize", "min"):
+        pyautogui.hotkey("win", "down")
 
 def navigate_to_url(url, browser_name="chrome"):
     """

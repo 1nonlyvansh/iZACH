@@ -159,9 +159,7 @@ function ResultOverlay({ state }) {
 }
 
 export default function CameraPanel({ faceState = 'idle' }) {
-  const [camOn, setCamOn]             = useState(false)
-  const [gestureLabel, setGestureLabel] = useState('')
-  const [gestureMode, setGestureMode] = useState('desktop')
+  const [camOn, setCamOn] = useState(false)
 
   // Auto-enable camera when face auth starts
   useEffect(() => {
@@ -169,10 +167,6 @@ export default function CameraPanel({ faceState = 'idle' }) {
       setCamOn(true)
     }
   }, [faceState])
-
-  function toggleMode() {
-    setGestureMode(prev => prev === 'desktop' ? 'music' : 'desktop')
-  }
 
   const CORNERS = ['tl', 'tr', 'bl', 'br']
   function cornerStyle(pos) {
@@ -229,20 +223,6 @@ export default function CameraPanel({ faceState = 'idle' }) {
         </div>
 
         <div className="flex items-center gap-1">
-          <button
-            onClick={toggleMode}
-            style={{
-              background: gestureMode === 'music' ? 'rgba(255,179,0,0.1)' : 'rgba(0,229,255,0.06)',
-              color: gestureMode === 'music' ? '#ffb300' : '#3a6070',
-              border: `1px solid ${gestureMode === 'music' ? 'rgba(255,179,0,0.3)' : '#0d2a3a'}`,
-              fontFamily: "'Share Tech Mono'",
-              fontSize: '9px', padding: '2px 6px',
-              borderRadius: 3, cursor: 'pointer', letterSpacing: '0.1em',
-            }}
-          >
-            {gestureMode === 'music' ? '♪ MUSIC' : '⊞ DESK'}
-          </button>
-
           <button
             title="Switch camera"
             style={{
@@ -311,19 +291,6 @@ export default function CameraPanel({ faceState = 'idle' }) {
           {/* Result overlay (success / failed) */}
           {isFaceResult && <ResultOverlay state={faceState} />}
 
-          {/* Gesture label */}
-          {gestureLabel && !isFaceActive && !isFaceResult && (
-            <div style={{
-              position: 'absolute', bottom: 6, left: '50%', transform: 'translateX(-50%)',
-              background: 'rgba(0,229,255,0.15)',
-              border: '1px solid rgba(0,229,255,0.35)',
-              color: '#00e5ff', fontFamily: "'JetBrains Mono'",
-              fontSize: '9px', padding: '2px 8px',
-              borderRadius: 3, whiteSpace: 'nowrap',
-            }}>
-              ▶ {gestureLabel}
-            </div>
-          )}
 
           {/* LIVE indicator */}
           {camOn && (

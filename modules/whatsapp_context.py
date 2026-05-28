@@ -159,3 +159,16 @@ def _mark_processed(msg_id: str):
         ids = set(list(ids)[-MAX_STORED_IDS:])
     with open(PROCESSED_FILE, "w") as f:
         json.dump(list(ids), f)
+
+
+def get_unread_count() -> int:
+    """Return count of unread WhatsApp messages via the bridge. Returns 0 on failure."""
+    try:
+        r = requests.get(f"{WA_BRIDGE_URL}/messages/history", params={"hours": 12}, timeout=5)
+        data = r.json()
+        msgs = data if isinstance(data, list) else data.get("messages", [])
+        processed = _load_processed_ids()
+        unread = [m for m in msgs if m.get("id") and m["id"] not in processed and not m.get("fromMe", True)]
+        return len(unread)
+    except Exception:
+        return 0

@@ -66,8 +66,10 @@ print("="*55)
 # E1: Failed rows excluded
 print("\n[E1] Failed rows excluded from analysis")
 cleanup()
-rows = make_rows("play jazz music", hour=10, count=5, span=28, status="success")
-rows += make_rows("play jazz music", hour=10, count=5, span=28, status="error")
+rows = make_weekly_rows("play jazz music", hour=10)
+err = make_weekly_rows("play jazz music", hour=10)
+for r in err: r[5] = "error"
+rows += err
 write_csv(rows)
 for f in ["patterns.json","pattern_last_run.json"]:
     if os.path.exists(f): os.remove(f)

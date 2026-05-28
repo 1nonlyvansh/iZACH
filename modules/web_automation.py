@@ -24,6 +24,7 @@ import os
 import json
 import threading
 import time
+import subprocess
 
 _playwright_instance = None
 _browser = None
@@ -62,6 +63,12 @@ def _idle_watcher():
 threading.Thread(target=_idle_watcher, daemon=True).start()
 
 
+def restart_browser():
+    """Close and reopen the browser — clears CAPTCHA-flagged sessions."""
+    close_browser()
+    _get_context()
+
+
 def close_browser():
     """Immediately close Playwright browser and free memory."""
     global _browser, _context, _playwright_instance, _last_used
@@ -87,21 +94,121 @@ def close_browser():
     print("[WEB] Playwright browser closed.")
 
 _SHORTNAMES = {
-    "youtube":  "https://www.youtube.com",
-    "google":   "https://www.google.com",
-    "github":   "https://www.github.com",
-    "gmail":    "https://mail.google.com",
-    "reddit":   "https://www.reddit.com",
-    "twitter":  "https://www.twitter.com",
-    "x":        "https://www.x.com",
-    "instagram":"https://www.instagram.com",
-    "linkedin": "https://www.linkedin.com",
-    "netflix":  "https://www.netflix.com",
-    "amazon":   "https://www.amazon.in",
-    "flipkart": "https://www.flipkart.com",
+    "youtube":      "https://www.youtube.com",
+    "google":       "https://www.google.com",
+    "github":       "https://www.github.com",
+    "gmail":        "https://mail.google.com",
+    "reddit":       "https://www.reddit.com",
+    "twitter":      "https://www.twitter.com",
+    "x":            "https://www.x.com",
+    "instagram":    "https://www.instagram.com",
+    "linkedin":     "https://www.linkedin.com",
+    "netflix":      "https://www.netflix.com",
+    "amazon":       "https://www.amazon.in",
+    "flipkart":     "https://www.flipkart.com",
+    "chatgpt":      "https://chatgpt.com",
+    "chat gpt":     "https://chatgpt.com",
+    "claude":       "https://claude.ai",
+    "perplexity":   "https://www.perplexity.ai",
+    "pinterest":    "https://www.pinterest.com",
+    "google slides": "https://slides.google.com",
+    "slides":       "https://slides.google.com",
+    "google colab": "https://colab.research.google.com",
+    "colab":        "https://colab.research.google.com",
 }
 
+# Services that may have a desktop app installed alongside their website.
+# packages: partial Windows Store package names (matched with Get-AppxPackage -Name *<name>*)
+# paths: filesystem paths to check for traditional desktop installs
+_APP_CAPABLE = {
+    "youtube":   {"packages": ["YouTube"],    "paths": []},
+    "github":    {"packages": [],             "paths": [
+        os.path.expandvars(r"%LOCALAPPDATA%\GitHubDesktop\GitHubDesktop.exe"),
+        r"C:\Program Files\GitHub Desktop\GitHubDesktop.exe",
+    ]},
+    "instagram": {"packages": ["Instagram"],  "paths": []},
+    "pinterest": {"packages": ["Pinterest"],  "paths": []},
+}
+
+
+def _load_custom_websites():
+    """Merge user-defined websites from custom_websites.json into _SHORTNAMES."""
+    try:
+        import json as _json
+        with open("custom_websites.json") as _f:
+            for site in _json.load(_f):
+                _SHORTNAMES[site["key"]] = site["url"]
+    except Exception:
+        pass
+
+
+def _load_custom_links():
+    """Merge user-defined Custom Links (from Cortex UI settings) into _SHORTNAMES."""
+    try:
+        import json as _json, os as _os
+        _path = _os.path.join(_os.path.dirname(_os.path.dirname(__file__)), "custom_links.json")
+        with open(_path, encoding="utf-8") as _f:
+            for lk in _json.load(_f):
+                title = lk.get("title", "").strip().lower()
+                url   = lk.get("url", "").strip()
+                if title and url:
+                    _SHORTNAMES[title] = url
+    except Exception:
+        pass
+
+
+_load_custom_websites()
+_load_custom_links()
+
+
+def is_app_installed(service: str) -> bool:
+    """Return True if a native desktop/Store app exists for the given service key."""
+    info = _APP_CAPABLE.get(service.lower())
+    if not info:
+        return False
+    for path in info["paths"]:
+        if os.path.exists(path):
+            return True
+    for pkg in info["packages"]:
+        try:
+            result = subprocess.run(
+                ["powershell", "-Command", f"Get-AppxPackage -Name '*{pkg}*' | Select-Object -First 1 Name"],
+                capture_output=True, text=True, timeout=6,
+            )
+            if result.stdout.strip():
+                return True
+        except Exception:
+            pass
+    return False
+
 _USER_PROFILE_PATH = "user_profile.json"
+
+
+_STEALTH_JS = """
+    Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
+    Object.defineProperty(navigator, 'plugins', {get: () => [1, 2, 3, 4, 5]});
+    Object.defineProperty(navigator, 'languages', {get: () => ['en-IN', 'en-US', 'en']});
+    window.chrome = {runtime: {}, loadTimes: function(){}, csi: function(){}, app: {}};
+    const origQuery = window.navigator.permissions.query;
+    window.navigator.permissions.query = (p) =>
+        p.name === 'notifications'
+            ? Promise.resolve({state: Notification.permission})
+            : origQuery(p);
+"""
+
+_LAUNCH_ARGS = [
+    "--disable-blink-features=AutomationControlled",
+    "--no-sandbox",
+    "--disable-infobars",
+    "--disable-dev-shm-usage",
+    "--disable-extensions",
+]
+
+_USER_AGENT = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/124.0.0.0 Safari/537.36"
+)
 
 
 def _get_context():
@@ -110,8 +217,22 @@ def _get_context():
         if _context is None:
             from playwright.sync_api import sync_playwright
             _playwright_instance = sync_playwright().start()
-            _browser = _playwright_instance.chromium.launch(headless=False)
-            _context = _browser.new_context()
+            # Prefer real Chrome (channel) — much harder to fingerprint than bare Chromium
+            try:
+                _browser = _playwright_instance.chromium.launch(
+                    headless=False, channel="chrome", args=_LAUNCH_ARGS
+                )
+            except Exception:
+                _browser = _playwright_instance.chromium.launch(
+                    headless=False, args=_LAUNCH_ARGS
+                )
+            _context = _browser.new_context(
+                user_agent=_USER_AGENT,
+                viewport={"width": 1366, "height": 768},
+                locale="en-IN",
+                timezone_id="Asia/Kolkata",
+            )
+            _context.add_init_script(_STEALTH_JS)
         _last_used = time.time()
     return _context
 
@@ -169,15 +290,15 @@ def open_website(target: str):
 
 
 def search_google(query: str):
+    """Search via DuckDuckGo — avoids Google CAPTCHA while returning equivalent results."""
     try:
         page = _get_page()
-        page.goto("https://www.google.com", timeout=10000)
-        page.wait_for_selector("textarea[name='q']", timeout=5000)
-        page.fill("textarea[name='q']", query)
-        page.press("textarea[name='q']", "Enter")
+        url = "https://duckduckgo.com/?q=" + query.replace(" ", "+") + "&ia=web"
+        page.goto(url, timeout=12000)
+        page.wait_for_load_state("domcontentloaded", timeout=8000)
         return True, f"Searching for {query}."
     except Exception as e:
-        return False, f"Google search failed: {e}"
+        return False, f"Search failed: {e}"
 
 
 # ── Summarize page ────────────────────────────────────────────
@@ -353,10 +474,8 @@ def open_multiple_tabs(tab_actions: list):
                 _active_tab_idx = len(ctx.pages) - 1
 
             if action == "search":
-                page.goto("https://www.google.com", timeout=10000)
-                page.wait_for_selector("textarea[name='q']", timeout=5000)
-                page.fill("textarea[name='q']", target)
-                page.press("textarea[name='q']", "Enter")
+                url = "https://duckduckgo.com/?q=" + target.replace(" ", "+") + "&ia=web"
+                page.goto(url, timeout=12000)
                 results.append(f"tab {i+1}: searching {target}")
             else:
                 url = _resolve_url(target)
@@ -432,7 +551,7 @@ def lookup_price(product: str):
     try:
         page = _get_page()
         page.goto(
-            "https://www.google.com/search?q=" + product.replace(" ", "+") + "+price+india",
+            "https://duckduckgo.com/?q=" + product.replace(" ", "+") + "+price+india&ia=shopping",
             timeout=15000,
         )
         page.wait_for_timeout(2000)

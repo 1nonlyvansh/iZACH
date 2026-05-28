@@ -33,7 +33,7 @@ class WakeWordDetector:
         self.ACTIVE_WINDOW = 8.0
 
     def start(self):
-        print("[WAKE WORD] Active — say 'Hey iZACH' to activate.")
+        pass  # startup message printed by caller in main.py
 
     def stop(self):
         self._activated = False

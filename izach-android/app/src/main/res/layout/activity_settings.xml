@@ -266,6 +266,106 @@
                 android:checked="false" />
         </LinearLayout>
 
+        <!-- AlliedNode 2 section -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="ALLIEDNODE 2"
+            android:textColor="@color/cyan"
+            android:textSize="11sp"
+            android:fontFamily="monospace"
+            android:letterSpacing="0.2"
+            android:layout_marginTop="24dp"
+            android:layout_marginBottom="6dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Secondary PC URL"
+            android:textColor="@color/text_sec"
+            android:textSize="11sp"
+            android:fontFamily="monospace"
+            android:letterSpacing="0.1"
+            android:layout_marginBottom="6dp" />
+
+        <EditText
+            android:id="@+id/etAlliedUrl"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:background="@drawable/bg_input"
+            android:hint="http://192.168.1.101:5050"
+            android:textColor="@color/text_pri"
+            android:textSize="13sp"
+            android:fontFamily="monospace"
+            android:paddingHorizontal="12dp"
+            android:inputType="textUri"
+            android:layout_marginBottom="24dp" />
+
+        <!-- Auto-DND Schedule section -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="AUTO-DND SCHEDULE"
+            android:textColor="@color/cyan"
+            android:textSize="11sp"
+            android:fontFamily="monospace"
+            android:letterSpacing="0.2"
+            android:layout_marginBottom="12dp" />
+
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:orientation="horizontal" android:gravity="center_vertical"
+            android:layout_marginBottom="12dp">
+            <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content"
+                android:layout_weight="1" android:orientation="vertical">
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                    android:text="Enable Auto-DND"
+                    android:textColor="@color/text_pri" android:textSize="13sp" android:fontFamily="monospace" />
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                    android:text="DND turns on/off on schedule"
+                    android:textColor="@color/text_sec" android:textSize="11sp" android:fontFamily="monospace" />
+            </LinearLayout>
+            <androidx.appcompat.widget.SwitchCompat android:id="@+id/swAutoDnd"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:checked="false" />
+        </LinearLayout>
+
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:orientation="horizontal" android:gravity="center_vertical"
+            android:layout_marginBottom="8dp">
+
+            <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content"
+                android:layout_weight="1" android:orientation="vertical">
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                    android:text="DND Start (24h)"
+                    android:textColor="@color/text_sec" android:textSize="11sp" android:fontFamily="monospace"
+                    android:layout_marginBottom="4dp" />
+                <EditText android:id="@+id/etDndStart"
+                    android:layout_width="match_parent" android:layout_height="44dp"
+                    android:background="@drawable/bg_input"
+                    android:hint="22:00" android:textColor="@color/text_pri"
+                    android:textSize="13sp" android:fontFamily="monospace"
+                    android:paddingHorizontal="10dp"
+                    android:inputType="time" />
+            </LinearLayout>
+
+            <View android:layout_width="16dp" android:layout_height="1dp" />
+
+            <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content"
+                android:layout_weight="1" android:orientation="vertical">
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                    android:text="DND End (24h)"
+                    android:textColor="@color/text_sec" android:textSize="11sp" android:fontFamily="monospace"
+                    android:layout_marginBottom="4dp" />
+                <EditText android:id="@+id/etDndEnd"
+                    android:layout_width="match_parent" android:layout_height="44dp"
+                    android:background="@drawable/bg_input"
+                    android:hint="08:00" android:textColor="@color/text_pri"
+                    android:textSize="13sp" android:fontFamily="monospace"
+                    android:paddingHorizontal="10dp"
+                    android:inputType="time" />
+            </LinearLayout>
+        </LinearLayout>
+
         <Button
             android:id="@+id/btnSave"
             android:layout_width="match_parent"

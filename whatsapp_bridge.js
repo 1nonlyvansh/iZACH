@@ -44,7 +44,12 @@ function createClient() {
         console.log(`[WHATSAPP] Disconnected: ${reason}. Restarting...`);
         notifyIZACH('/whatsapp/status', { status: 'disconnected' });
         setTimeout(() => {
-            client.destroy().then(() => createClient());
+            client.destroy()
+                .then(() => createClient())
+                .catch(err => {
+                    console.log(`[BRIDGE] Destroy/restart error: ${err.message}`);
+                    createClient();
+                });
         }, 5000);
     });
 
@@ -53,7 +58,17 @@ function createClient() {
             const contact = await client.getContactById(call.from);
             const name = contact.pushname || contact.name || contact.number;
             console.log(`[BRIDGE] Incoming call from: ${name}`);
-            await notifyIZACH('/whatsapp/call', { caller: name, number: call.from, type: 'call' });
+            // Notify iZACH — returns { decline: true } when DND is active
+            const resp = await fetch('http://127.0.0.1:5050/whatsapp/call', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ caller: name, number: call.from, type: 'call' })
+            });
+            const data = await resp.json().catch(() => ({}));
+            if (data.decline) {
+                await call.reject();
+                console.log(`[BRIDGE] Call from ${name} rejected (DND active)`);
+            }
         } catch (e) {
             console.log(`[BRIDGE] Call event error: ${e.message}`);
         }
@@ -64,6 +79,15 @@ function createClient() {
         if (msg.from === 'status@broadcast') return;
         if (msg.fromMe) return;
         if (!acceptMessages) return;
+        // Skip group chats
+        if (msg.from.endsWith('@g.us')) return;
+        // Skip media messages (photos, video, audio, documents)
+        if (msg.hasMedia) {
+            console.log(`[BRIDGE] Skipping media message from ${msg.from}`);
+            return;
+        }
+        // Skip empty body
+        if (!msg.body || !msg.body.trim()) return;
         try {
             const contact = await msg.getContact();
             const name = contact.pushname || contact.name || contact.number || msg.from;
@@ -191,7 +215,7 @@ function createClient() {
 
 async function notifyIZACH(endpoint, data) {
     try {
-        await fetch(`http://localhost:5050${endpoint}`, {
+        await fetch(`http://127.0.0.1:5050${endpoint}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(data)

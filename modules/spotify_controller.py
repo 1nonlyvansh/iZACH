@@ -4,8 +4,28 @@ import os
 import re
 import logging
 import json
+import threading
 from rapidfuzz import process, fuzz
 from dotenv import load_dotenv
+
+_MOOD_MAP = {
+    "chill": "chill lofi relaxing",
+    "relaxing": "chill lofi relaxing",
+    "lofi": "lofi hip hop study",
+    "study": "study lofi concentration",
+    "focus": "focus concentration deep work",
+    "energetic": "energetic upbeat workout",
+    "workout": "gym workout motivational",
+    "happy": "happy feel good pop",
+    "sad": "sad emotional ballad",
+    "party": "party dance hits",
+    "sleep": "sleep calm ambient",
+    "morning": "morning upbeat fresh",
+    "night": "night chill late night",
+    "romantic": "romantic love songs",
+    "jazz": "jazz smooth instrumental",
+    "classical": "classical instrumental calm",
+}
 
 
 load_dotenv()
@@ -36,11 +56,14 @@ class SpotifyController:
             self.last_device_id = None
             self.last_device_name = None
 
+        self._sleep_timer = None
+
         self.scope = (
             "user-modify-playback-state "
             "user-read-playback-state "
             "playlist-read-private "
-            "user-library-read"
+            "user-library-read "
+            "user-read-recently-played"
         )
 
         try:
@@ -542,6 +565,59 @@ class SpotifyController:
     # ─────────────────────────────────────────────
     # DEVICE LIST
     # ─────────────────────────────────────────────
+
+    def play_mood(self, mood: str) -> str:
+        if not self.sp:
+            return "Spotify is not active right now."
+        try:
+            device_id = self.last_device_id or self._get_active_device()
+            if not device_id:
+                return "No active Spotify device."
+            query = _MOOD_MAP.get(mood.lower().strip(), mood)
+            results = self.sp.search(q=query, limit=10, type='playlist')
+            playlists = results.get('playlists', {}).get('items', [])
+            if not playlists:
+                return f"No playlists found for '{mood}'."
+            playlist = playlists[0]
+            self.sp.start_playback(device_id=device_id, context_uri=playlist['uri'])
+            return f"Playing {playlist['name']} for a {mood} vibe."
+        except Exception as e:
+            logger.error(f"[SPOTIFY] Mood play error: {e}")
+            return "Error starting mood playlist."
+
+    def sleep_timer(self, minutes: int) -> str:
+        if self._sleep_timer and self._sleep_timer.is_alive():
+            self._sleep_timer.cancel()
+        def _pause():
+            self.pause_music()
+        self._sleep_timer = threading.Timer(minutes * 60, _pause)
+        self._sleep_timer.daemon = True
+        self._sleep_timer.start()
+        return f"Music will stop in {minutes} minute{'s' if minutes != 1 else ''}."
+
+    def cancel_sleep_timer(self) -> str:
+        if self._sleep_timer and self._sleep_timer.is_alive():
+            self._sleep_timer.cancel()
+            self._sleep_timer = None
+            return "Sleep timer cancelled."
+        return "No active sleep timer."
+
+    def get_recently_played(self) -> str:
+        if not self.sp:
+            return "Spotify is not active right now."
+        try:
+            results = self.sp.current_user_recently_played(limit=5)
+            items = results.get('items', [])
+            if not items:
+                return "No recently played tracks."
+            names = [
+                f"{i['track']['name']} by {i['track']['artists'][0]['name']}"
+                for i in items
+            ]
+            return "Recently played: " + ", then ".join(names) + "."
+        except Exception as e:
+            logger.error(f"[SPOTIFY] Recently played error: {e}")
+            return "Could not fetch recently played tracks."
 
     def list_devices(self):
         if not self.sp:

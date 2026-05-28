@@ -67,9 +67,22 @@ export function useIZACH() {
   // calendar events — next 3 days
   const [calendarEvents, setCalendarEvents] = useState([])
 
+  // active agent pill — set by agent_active WS event, auto-clears after 3s
+  const [activeAgent, setActiveAgent] = useState(null)
+
+  // DND state
+  const [dndActive, setDndActive]   = useState(false)
+  const [dndAlert,  setDndAlert]    = useState(null)   // current alert item | null
+
+  // Busy mode state
+  const [busyActive, setBusyActive]     = useState(false)
+  const [busyReason, setBusyReason]     = useState('manual')
+  const [busyBriefing, setBusyBriefing] = useState(null)   // post-busy summary | null
+
   const chatBottomRef = useRef(null)
   const wsRef         = useRef(null)
   const liveTimer     = useRef(null)
+  const agentTimer    = useRef(null)
 
   // ── WebSocket — voice chat + live text + notifications ────
   useEffect(() => {
@@ -144,6 +157,45 @@ export function useIZACH() {
             }
             else if (data.type === 'device_disconnected') {
               setAndroidDevices(prev => prev.filter(d => d !== data.device_name))
+            }
+            else if (data.type === 'agent_active') {
+              if (agentTimer.current) clearTimeout(agentTimer.current)
+              setActiveAgent({ domain: data.domain, confidence: data.confidence })
+              agentTimer.current = setTimeout(() => setActiveAgent(null), 3000)
+            }
+            else if (data.type === 'dnd_status') {
+              setDndActive(!!data.active)
+            }
+            else if (data.type === 'dnd_alert') {
+              setDndActive(true)
+              setDndAlert(data)
+            }
+            else if (data.type === 'dnd_off') {
+              setDndActive(false)
+            }
+            else if (data.type === 'urgent_alert') {
+              setDndAlert({ ...data, urgent: true })
+            }
+            else if (data.type === 'busy_status') {
+              setBusyActive(!!data.active)
+              setBusyReason(data.reason || 'manual')
+            }
+            else if (data.type === 'busy_briefing') {
+              setBusyActive(false)
+              setBusyBriefing(data)
+              // auto-dismiss after 15s
+              setTimeout(() => setBusyBriefing(null), 15000)
+            }
+            else if (data.type === 'call_log_update') {
+              // trigger a pulse in the UI — just a notification
+              setNotifications(prev => [
+                ...prev.slice(-9),
+                {
+                  text: `📞 ${data.caller || 'Unknown'} called (${data.action || 'declined'})`,
+                  ts: nowStr(),
+                  source: 'call_log',
+                }
+              ])
             }
           } catch {}
         }
@@ -440,6 +492,83 @@ export function useIZACH() {
     } catch {}
   }, [])
 
+  // ── DND toggle ────────────────────────────────────────────
+  const toggleDnd = useCallback(async () => {
+    const action = dndActive ? 'off' : 'on'
+    try {
+      await safeFetch(`${BASE}/dnd`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, reason: 'manual' }),
+      }, 4000)
+      setDndActive(!dndActive)
+    } catch {}
+  }, [dndActive])
+
+  const handleDndAlert = useCallback(async (idx) => {
+    try {
+      await safeFetch(`${BASE}/dnd/handle`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ index: idx }),
+      }, 5000)
+    } catch {}
+    setDndAlert(null)
+  }, [])
+
+  const busyDndAlert = useCallback(async (idx) => {
+    try {
+      await safeFetch(`${BASE}/dnd/busy`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ index: idx }),
+      }, 5000)
+    } catch {}
+    setDndAlert(null)
+  }, [])
+
+  // ── DND alert dismiss ─────────────────────────────────────
+  const dismissDndAlert = useCallback(() => setDndAlert(null), [])
+
+  // ── Load initial DND state ────────────────────────────────
+  useEffect(() => {
+    safeFetch(`${BASE}/dnd`, {}, 3000)
+      .then(r => r.json())
+      .then(d => { if (d.ok) setDndActive(!!d.active) })
+      .catch(() => {})
+  }, [])
+
+  // ── Busy mode toggle ──────────────────────────────────────
+  const toggleBusy = useCallback(async (reason = 'manual', durationMin = null) => {
+    const action = busyActive ? 'off' : 'on'
+    try {
+      const body = { action, reason }
+      if (durationMin) body.duration_min = durationMin
+      await safeFetch(`${BASE}/busy`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      }, 4000)
+      setBusyActive(!busyActive)
+      if (action === 'on') setBusyReason(reason)
+    } catch {}
+  }, [busyActive])
+
+  const dismissBusyBriefing = useCallback(() => setBusyBriefing(null), [])
+
+  // ── Load initial busy state ───────────────────────────────
+  useEffect(() => {
+    safeFetch(`${BASE}/busy`, {}, 3000)
+      .then(r => r.json())
+      .then(d => {
+        if (d.ok) {
+          setBusyActive(!!d.active)
+          setBusyReason(d.reason || 'manual')
+        }
+      })
+      .catch(() => {})
+  }, [])
+
   // ── Mic toggle ────────────────────────────────────────────
   const toggleMic = useCallback(async () => {
     const newState = !micActive
@@ -469,6 +598,9 @@ export function useIZACH() {
     calendarEvents, setCalendarEvents,
     shellConfirm, setShellConfirm,
     shellOutput,  setShellOutput,
+    activeAgent,
+    dndActive, dndAlert, toggleDnd, dismissDndAlert, handleDndAlert, busyDndAlert,
+    busyActive, busyReason, busyBriefing, toggleBusy, dismissBusyBriefing,
     chatBottomRef,
     send, stopSpeech,
   }

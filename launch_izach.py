@@ -49,7 +49,7 @@ kernel.SetConsoleMode(kernel.GetStdHandle(-11), 7)
 BANNER = f"""
 {C}╔══════════════════════════════════════════════════════════════╗
 ║  {BOLD}iZACH  —  Neural System Launcher{RST}{C}                            ║
-║  {DIM}Intelligent Zenith Adaptive Cognitive Handler{RST}{C}                ║
+║  {DIM}Intent Zenith Adaptive Cognitive Handler{RST}{C}                     ║
 ╚══════════════════════════════════════════════════════════════╝{RST}
 """
 print(BANNER)

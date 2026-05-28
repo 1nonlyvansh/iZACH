@@ -66,6 +66,24 @@
 
 
 
+### Session — 2026-05-18 11:44
+- Total commands: **114**
+- Success rate: **100.0%**
+- Avg response time: **0.0s**
+- Most used command: **play coding playlist on spotify**
+- Voice commands: 114 | Text commands: 0
+
+
+
+### Session — 2026-05-26 14:34
+- Total commands: **63**
+- Success rate: **96.8%**
+- Avg response time: **0.0s**
+- Most used command: **introduce yourself**
+- Voice commands: 63 | Text commands: 0
+
+
+
 ## 2026-04-19 17:33
 
 - Intent: open_app
@@ -652,6 +670,150 @@
 ---
 
 ## 2026-05-14 09:07
+
+- Intent: open_app
+- Command: open chrome
+- Response: Brought chrome to the front.
+
+
+---
+
+## 2026-05-14 17:25
+
+- Intent: open_app
+- Command: open chat gpd
+- Response: I tried launching chat gpd, but it's not showing up.
+
+
+---
+
+## 2026-05-14 17:25
+
+- Intent: open_app
+- Command: open chat gpt
+- Response: Brought chat gpt to the front.
+
+
+---
+
+## 2026-05-14 19:42
+
+- Intent: open_app
+- Command: open android studio
+- Response: I tried launching android studio, but it's not showing up.
+
+
+---
+
+## 2026-05-14 19:42
+
+- Intent: open_app
+- Command: don't worry it's already opened
+- Response: Brought don't worry it's already ed to the front.
+
+
+---
+
+## 2026-05-14 19:45
+
+- Intent: open_app
+- Command: like to talk to chat gpt voice
+- Response: Brought chat gpt voice to the front.
+
+
+---
+
+## 2026-05-14 20:44
+
+- Intent: open_app
+- Command: open chat gbd
+- Response: I tried launching chat gbd, but it's not showing up.
+
+
+---
+
+## 2026-05-15 22:20
+
+- Intent: open_app
+- Command: open whatsapp
+- Response: Brought whatsapp to the front.
+
+
+---
+
+## 2026-05-19 23:27
+
+- Intent: open_app
+- Command: chrome
+- Response: Brought chrome to the front.
+
+
+---
+
+## 2026-05-20 23:49
+
+- Intent: open_app
+- Command: open chrome
+- Response: Brought chrome to the front.
+
+
+---
+
+## 2026-05-21 12:48
+
+- Intent: open_app
+- Command: open chrome
+- Response: Brought chrome to the front.
+
+
+---
+
+## 2026-05-21 12:48
+
+- Intent: open_app
+- Command: open chrome
+- Response: Brought chrome to the front.
+
+
+---
+
+## 2026-05-21 12:49
+
+- Intent: open_app
+- Command: install bittorrent
+- Response: Brought bittorrent to the front.
+
+
+---
+
+## 2026-05-25 20:06
+
+- Intent: open_app
+- Command: balotra open source code spotify
+- Response: Brought balotra source code spotify to the front.
+
+
+---
+
+## 2026-05-26 10:51
+
+- Intent: open_app
+- Command: open chrome
+- Response: Brought chrome to the front.
+
+
+---
+
+## 2026-05-26 13:58
+
+- Intent: open_app
+- Command: open chrome
+- Response: Brought chrome to the front.
+
+
+---
+
+## 2026-05-28 15:32
 
 - Intent: open_app
 - Command: open chrome

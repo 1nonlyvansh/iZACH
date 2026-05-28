@@ -4,11 +4,29 @@ import httpx
 from groq import Groq
 from google import genai
 from google.genai import types
+from modules import rag_memory
 
 _HTTP_LIMITS = httpx.Limits(max_connections=5, max_keepalive_connections=2)
 
 _style_cache: dict = {}
 _STYLE_TTL = 30  # seconds
+
+_connectivity_cache: dict = {"online": None, "ts": 0}
+_CONNECTIVITY_TTL = 15  # seconds — recheck every 15s
+
+
+def _check_internet() -> bool:
+    global _connectivity_cache
+    now = time.time()
+    if _connectivity_cache["online"] is not None and now - _connectivity_cache["ts"] < _CONNECTIVITY_TTL:
+        return _connectivity_cache["online"]
+    try:
+        httpx.get("https://www.google.com", timeout=3.0)
+        _connectivity_cache = {"online": True, "ts": now}
+        return True
+    except Exception:
+        _connectivity_cache = {"online": False, "ts": now}
+        return False
 
 
 class AIProvider:
@@ -19,6 +37,20 @@ class AIProvider:
         self.gemini_client = None
         self.gemini_chat = None
         self._init_gemini()
+
+    def reload_keys(self, groq_key: str = None, gemini_keys: list = None):
+        """Hot-swap API keys at runtime. Rebuilds underlying clients."""
+        if groq_key:
+            try:
+                self.groq_client = Groq(api_key=groq_key, http_client=httpx.Client(limits=_HTTP_LIMITS))
+                print(f"[AIProvider] Groq client rebuilt with new key ({groq_key[:8]}...).")
+            except Exception as e:
+                print(f"[AIProvider] Groq reload failed: {e}")
+        if gemini_keys:
+            self.gemini_keys = gemini_keys
+            self.current_gem_idx = 0
+            self._init_gemini()
+            print(f"[AIProvider] Gemini keys reloaded ({len([k for k in gemini_keys if k])} active).")
 
     def _init_gemini(self):
         try:
@@ -31,23 +63,36 @@ class AIProvider:
             print(f"[SYSTEM] Gemini Init Failed: {e}")
 
     def send_message(self, query):
-        """Primary Logic: Groq -> Gemini Fallback"""
+        """Online cloud providers only: Groq → Gemini."""
+        online = _check_internet()
+        if not online:
+            return "Offline — cloud providers unreachable."
+
+        response = None
+
         # 1. TRY GROQ (Primary)
         try:
-            return self._call_groq(query)
+            response = self._call_groq(query)
         except Exception as e:
             if self._is_rate_limit(e):
-                return self._handle_429(query, "groq")
-            print(f"[GROQ ERROR]: {e}")
+                response = self._handle_429(query, "groq")
+            else:
+                print(f"[GROQ ERROR]: {e}")
 
         # 2. FALLBACK TO GEMINI
-        print("[SYSTEM] Groq failed. Falling back to Gemini...")
-        try:
-            return self._call_gemini(query)
-        except Exception as e:
-            if self._is_rate_limit(e):
-                return self._handle_429(query, "gemini")
-            return "Neural link instability. Both providers offline."
+        if response is None:
+            print("[SYSTEM] Groq failed. Falling back to Gemini...")
+            try:
+                response = self._call_gemini(query)
+            except Exception as e:
+                if self._is_rate_limit(e):
+                    response = self._handle_429(query, "gemini")
+                else:
+                    print(f"[GEMINI ERROR]: {e}")
+
+        if response:
+            rag_memory.add_conversation(query, response)
+        return response or "Neural link instability. All providers offline."
 
     @staticmethod
     def _style_instruction() -> str:
@@ -76,12 +121,41 @@ class AIProvider:
         _style_cache = {"value": result, "ts": now}
         return result
 
-    def _call_groq(self, query):
+    @staticmethod
+    def _datetime_context() -> str:
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
+        now = datetime.now(tz=ZoneInfo("Asia/Kolkata"))
+        return now.strftime("Current date and time: %A, %d %B %Y, %I:%M %p IST.")
+
+    # Structured data rendering instruction — injected into every system prompt
+    _TABLE_INSTR = (
+        "When presenting structured or comparative data — college comparisons, rankings, "
+        "differences between two things, feature comparisons, schedules, price lists, "
+        "admission criteria, or any multi-attribute list — format it as a markdown table "
+        "with clear column headers. After the table, explain the key takeaway in one "
+        "conversational sentence. Do NOT read out each table row individually. "
+        "For non-structured responses (single facts, opinions, actions), use plain prose."
+    )
+
+    def _build_system_prompt(self, query: str) -> str:
         style = self._style_instruction()
-        messages = []
+        dt_ctx = self._datetime_context()
+        base = f"You are iZACH, a concise AI assistant. {dt_ctx}"
+        parts = [base, self._TABLE_INSTR]
         if style:
-            messages.append({"role": "system", "content": style})
-        messages.append({"role": "user", "content": query})
+            parts.append(style)
+        ctx = rag_memory.get_relevant_context(query)
+        if ctx:
+            parts.append(ctx)
+        return " ".join(parts)
+
+    def _call_groq(self, query):
+        system_content = self._build_system_prompt(query)
+        messages = [
+            {"role": "system", "content": system_content},
+            {"role": "user", "content": query},
+        ]
         completion = self.groq_client.chat.completions.create(
             model="llama-3.3-70b-versatile",
             messages=messages,
@@ -89,11 +163,9 @@ class AIProvider:
         return completion.choices[0].message.content
 
     def _call_gemini(self, query):
-        base_instruction = "You are iZACH, a concise AI assistant."
-        style = self._style_instruction()
-        system_instr = f"{base_instruction} {style}".strip()
+        system_instr = self._build_system_prompt(query)
         response = self.gemini_client.models.generate_content(
-            model="gemini-1.5-flash",
+            model="gemini-2.0-flash",
             contents=query,
             config=types.GenerateContentConfig(
                 system_instruction=system_instr
@@ -119,7 +191,7 @@ class AIProvider:
                 return self._call_groq(query)
             else:
                 return self._call_gemini(query)
-        except:
+        except Exception:
             # If retry fails, pivot to the other provider
             if provider_type == "groq":
                 print("[SYSTEM] Groq retry failed. Pivoting to Gemini.")

@@ -44,11 +44,88 @@ os.makedirs(SHARED_DIR, exist_ok=True)
 
 ui_bp = Blueprint("ui_api", __name__)
 
+
+def _friendly_error(exc: Exception) -> str:
+    """
+    Convert raw provider errors (Groq/Gemini/OpenRouter) into short, human
+    messages so the chat UI doesn't dump 2 KB of JSON at the user.
+    """
+    s = str(exc)
+    s_low = s.lower()
+    # Gemini quota
+    if "resource_exhausted" in s_low or ("429" in s and ("gemini" in s_low or "generativelanguage" in s_low)):
+        return "All Gemini keys are exhausted. Add a new key in Settings → Keys & IDs."
+    # Groq quota
+    if "429" in s and "groq" in s_low:
+        return "Groq key is exhausted. Add a new key in Settings → Keys & IDs."
+    if "429" in s and ("rate_limit_exceeded" in s_low or "tokens per minute" in s_low or "requests per minute" in s_low):
+        return "API rate-limit hit. Wait a minute or add a fresh Groq/Gemini key."
+    if "401" in s and ("groq" in s_low or "gemini" in s_low):
+        return "API key invalid or expired. Update it in Settings → Keys & IDs."
+    if "openrouter" in s_low and "401" in s:
+        return "OpenRouter key invalid. Update it in Settings → Keys & IDs."
+    # Network failures
+    if any(t in s_low for t in ("connection refused", "max retries", "timeout", "timed out")):
+        return "Cannot reach AI provider — check your internet."
+    if "ssl" in s_low and "error" in s_low:
+        return "SSL error reaching AI provider. Check system clock / network."
+    # Default — short type + first sentence only
+    msg = s.split("\n")[0].split(". ")[0]
+    return f"{type(exc).__name__}: {msg[:160]}"
+
+
 # ── injected at startup ───────────────────────────────────────
 _chain_fn    = None
 _speak_fn    = None
 _get_resp    = None
 _spotify_api = None     # SpotifyController instance
+
+# ── WhatsApp DND dedicated Groq client ────────────────────────
+_wa_groq_client = None   # Groq(api_key=GROQ_WA_KEY) — built lazily
+
+def _get_wa_groq_client():
+    """Return dedicated WA Groq client if GROQ_WA_KEY is set, else None."""
+    global _wa_groq_client
+    if _wa_groq_client:
+        return _wa_groq_client
+    key = os.getenv("GROQ_WA_KEY", "").strip()
+    if not key:
+        # Try reading from api_keys.json directly (hot-saved keys)
+        try:
+            with open("api_keys.json") as _f:
+                import json as _j
+                key = _j.load(_f).get("GROQ_WA_KEY", "").strip()
+        except Exception:
+            pass
+    if key:
+        try:
+            from groq import Groq as _Groq
+            _wa_groq_client = _Groq(api_key=key)
+            print("[UI API] WhatsApp Groq client ready (dedicated key)")
+        except Exception as e:
+            print(f"[UI API] WA Groq client init failed: {e}")
+    return _wa_groq_client
+
+
+def _wa_ai_call(prompt: str) -> str:
+    """Call AI using WA-dedicated key if available, else fall back to main _get_resp."""
+    client = _get_wa_groq_client()
+    if client:
+        try:
+            r = client.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=200,
+                temperature=0.7,
+            )
+            return r.choices[0].message.content.strip()
+        except Exception as e:
+            # Key exhausted or error — fall through to main key
+            print(f"[UI API] WA Groq key failed: {e} — falling back to main key")
+    # Fall back to main response generator
+    if _get_resp:
+        return _get_resp(prompt) or ""
+    return ""
 
 # ── in-process message log ────────────────────────────────────
 _message_log: list[dict] = []
@@ -114,11 +191,30 @@ def ui_command():
 
     data = request.get_json(silent=True) or {}
     text = (data.get("text") or data.get("command") or "").strip()
+    source = str(data.get("source", "")).lower().strip()
 
     if not text:
         return jsonify({"ok": False, "error": "Empty command"}), 400
 
     _log_message("YOU", text)
+
+    # DND: if active, tag text so command_chain injects concise AI prefix
+    # We pass the flag via a thread-local or just let command_chain check dnd_mode directly.
+    # Also allow DND toggle commands to pass through normally.
+    _dnd_active = False
+    try:
+        from modules import dnd_mode as _dnd_ui
+        _dnd_active = _dnd_ui.is_active()
+    except Exception:
+        pass
+
+    # If command came from the Android app, auto-mark phone connected and
+    # push to the phone command history ring for the PHONE widget.
+    if source == "phone":
+        try:
+            _record_phone_command(text, device_name=str(data.get("device_name", "")))
+        except Exception as _pe:
+            print(f"[UI API] phone command record failed: {_pe}")
     # UI already adds the YOU message locally — no WS echo needed
 
     # File-related voice command shortcuts — handled before chain
@@ -147,14 +243,25 @@ def ui_command():
         return jsonify({"ok": True, "response": reply, "ts": time.strftime("%H:%M")})
 
     # PC context voice commands
-    if any(k in _lc for k in ("ram", "memory usage", "cpu", "battery", "disk space",
-                               "storage left", "internet status", "wifi status",
-                               "what's running", "running apps", "where is my",
-                               "find my", "recent files", "how much storage")):
+    # Use word-boundary regex for short ambiguous keywords (ram, cpu) to avoid
+    # matching them as substrings inside other words ("ram" in "instagram"!).
+    import re as _re_pc
+    _pc_word_kw = ("ram", "cpu", "battery")
+    _pc_phrase_kw = ("memory usage", "disk space", "storage left", "internet status",
+                     "wifi status", "what's running", "running apps", "where is my",
+                     "find my", "recent files", "how much storage")
+    _pc_match = (
+        any(_re_pc.search(rf"\b{k}\b", _lc) for k in _pc_word_kw) or
+        any(k in _lc for k in _pc_phrase_kw)
+    )
+    if _pc_match:
         try:
             from modules.pc_context import answer as _pc_answer
             result = _pc_answer(text)
-            reply = result.get("text") or "Could not determine answer."
+            if isinstance(result, dict):
+                reply = result.get("text") or "Could not determine answer."
+            else:
+                reply = str(result) if result else "Could not determine answer."
         except Exception as _e:
             reply = f"PC context error: {_e}"
         _log_message("iZACH", reply)
@@ -229,6 +336,20 @@ def ui_command():
         response_text = " ".join(captured).strip() or "Done."
         _log_message("iZACH", response_text)
 
+        # For phone commands: broadcast both the user command and iZACH response
+        # to cortex-ui's chat feed so PC chatbox reflects the phone conversation.
+        if source == "phone":
+            try:
+                from modules.ws_bridge import _broadcast_to_non_android
+                _broadcast_to_non_android({
+                    "type": "chat",
+                    "sender": "iZACH",
+                    "text": response_text,
+                    "ts": time.strftime("%H:%M"),
+                })
+            except Exception:
+                pass
+
         return jsonify({
             "ok":       True,
             "response": response_text,
@@ -236,8 +357,8 @@ def ui_command():
         })
 
     except Exception as e:
-        err = f"Backend error: {type(e).__name__}: {e}"
-        print(f"[UI API] /command error: {err}")
+        err = _friendly_error(e)
+        print(f"[UI API] /command error: {type(e).__name__}: {str(e)[:200]}")
         return jsonify({"ok": False, "error": err}), 500
 
 
@@ -368,7 +489,18 @@ def ui_spotify():
         if _spotify_api is None:
             return jsonify({"ok": False, "error": "Spotify not initialised"}), 503
 
-        pb = _spotify_api.sp.current_playback() if _spotify_api.sp else None
+        # current_playback() can block indefinitely on slow network.
+        # Run with 5 s timeout to prevent hanging a Flask worker thread.
+        import concurrent.futures as _cf_sp
+        pb = None
+        if _spotify_api.sp:
+            try:
+                with _cf_sp.ThreadPoolExecutor(max_workers=1) as _spex:
+                    pb = _spex.submit(_spotify_api.sp.current_playback).result(timeout=5)
+            except _cf_sp.TimeoutError:
+                return jsonify({"ok": False, "error": "Spotify timeout"}), 504
+            except Exception as _spe:
+                return jsonify({"ok": False, "error": str(_spe)}), 500
 
         if pb is None or not pb.get("is_playing"):
             return jsonify({
@@ -453,6 +585,128 @@ def memory_delete(key):
 
 
 # ─────────────────────────────────────────────────────────────
+# SMART MEMORY — /smart-memory
+#   GET    /smart-memory            list (category=, search=, include_disabled=)
+#   POST   /smart-memory            add  {category, content, [raw_input]}
+#   PATCH  /smart-memory/<id>       edit {content?, enabled?}
+#   DELETE /smart-memory/<id>       delete
+#   POST   /smart-memory/import     import text from ChatGPT/Claude
+#   GET    /smart-memory/export     export all as text
+#   POST   /smart-memory/obsidian-sync  sync all to Obsidian vault
+#   GET    /smart-memory/jobs       list APScheduler jobs
+# ─────────────────────────────────────────────────────────────
+
+@ui_bp.route("/smart-memory", methods=["GET"])
+def smart_memory_list():
+    try:
+        from modules.smart_memory import list_smart_memories
+        cat     = request.args.get("category", "")
+        search  = request.args.get("search", "")
+        inc_dis = request.args.get("include_disabled", "false").lower() == "true"
+        items   = list_smart_memories(
+            category=cat or None,
+            include_disabled=inc_dis,
+            search=search,
+        )
+        return jsonify({"ok": True, "data": items, "total": len(items)})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@ui_bp.route("/smart-memory", methods=["POST"])
+def smart_memory_add():
+    try:
+        from modules.smart_memory import add_smart_memory, _classify_memory, _parse_schedule_from_text
+        data     = request.get_json(silent=True) or {}
+        content  = (data.get("content") or "").strip()
+        category = (data.get("category") or "").strip()
+        raw_in   = (data.get("raw_input") or content).strip()
+
+        if not content:
+            return jsonify({"ok": False, "error": "content required"}), 400
+        if not category:
+            category = _classify_memory(content)
+
+        auto_sched = None
+        if category == "automation":
+            auto_sched = _parse_schedule_from_text(content)
+
+        entry = add_smart_memory(category, content, raw_input=raw_in, auto_schedule=auto_sched)
+        return jsonify({"ok": True, "data": entry})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@ui_bp.route("/smart-memory/import", methods=["POST"])
+def smart_memory_import():
+    try:
+        from modules.smart_memory import import_from_text
+        data    = request.get_json(silent=True) or {}
+        raw     = (data.get("text") or "").strip()
+        if not raw:
+            return jsonify({"ok": False, "error": "text required"}), 400
+        imported = import_from_text(raw)
+        return jsonify({"ok": True, "imported": len(imported), "data": imported})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@ui_bp.route("/smart-memory/export", methods=["GET"])
+def smart_memory_export():
+    try:
+        from modules.smart_memory import export_to_text
+        inc_dis = request.args.get("include_disabled", "false").lower() == "true"
+        text    = export_to_text(include_disabled=inc_dis)
+        return jsonify({"ok": True, "text": text})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@ui_bp.route("/smart-memory/obsidian-sync", methods=["POST"])
+def smart_memory_obsidian_sync():
+    try:
+        from modules.smart_memory import sync_all_to_obsidian
+        count = sync_all_to_obsidian()
+        return jsonify({"ok": True, "synced": count})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@ui_bp.route("/smart-memory/jobs", methods=["GET"])
+def smart_memory_jobs():
+    try:
+        from modules.automation_scheduler import list_jobs
+        return jsonify({"ok": True, "jobs": list_jobs()})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@ui_bp.route("/smart-memory/<string:mid>", methods=["PATCH"])
+def smart_memory_update(mid):
+    try:
+        from modules.smart_memory import update_smart_memory
+        data    = request.get_json(silent=True) or {}
+        content = data.get("content")
+        enabled = data.get("enabled")
+        if content is not None:
+            content = content.strip()
+        ok = update_smart_memory(mid, content=content, enabled=enabled)
+        return jsonify({"ok": ok, "error": None if ok else "Not found"})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@ui_bp.route("/smart-memory/<string:mid>", methods=["DELETE"])
+def smart_memory_delete(mid):
+    try:
+        from modules.smart_memory import delete_smart_memory
+        ok = delete_smart_memory(mid)
+        return jsonify({"ok": ok, "error": None if ok else "Not found"})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+# ─────────────────────────────────────────────────────────────
 # GET  /settings          — read api_keys.json
 # POST /settings          — write api_keys.json
 # ─────────────────────────────────────────────────────────────
@@ -520,8 +774,15 @@ def settings_post():
 # ─────────────────────────────────────────────────────────────
 
 _MUTABLE_KEYS = [
+    # Chat / commands
     "GROQ_API_KEY",
     "GEMINI_KEY_1", "GEMINI_KEY_2", "GEMINI_KEY_3",
+    # Vision / camera / screen analysis (separate quota pool)
+    "GROQ_VISION_KEY",
+    "GEMINI_VISION_KEY_1", "GEMINI_VISION_KEY_2", "GEMINI_VISION_KEY_3",
+    # WhatsApp DND automation (separate quota pool — N8N AI replies)
+    "GROQ_WA_KEY",
+    # Other services
     "SPOTIPY_CLIENT_ID", "SPOTIPY_CLIENT_SECRET", "SPOTIPY_REDIRECT_URI",
     "OPENROUTER_API_KEY",
     "EDAMAM_APP_ID", "EDAMAM_APP_KEY",
@@ -603,14 +864,27 @@ def api_keys_post():
         # Hot-reload module-level vars where possible
         try:
             import modules.camera_vision as _cv
+            import os as _os_hr
             for k, v in updates.items():
-                if k == "GROQ_API_KEY":
-                    _cv.GROQ_KEY = v
-                elif k == "GEMINI_KEY_1":
+                # Vision-specific keys take precedence; chat keys are only
+                # used by vision as a fallback when vision keys are unset.
+                if k == "GROQ_VISION_KEY":
+                    _cv.GROQ_KEY = v or _os_hr.getenv("GROQ_API_KEY", "")
+                elif k == "GROQ_API_KEY":
+                    # Only update vision Groq key if no dedicated vision key set
+                    if not _os_hr.getenv("GROQ_VISION_KEY", "").strip():
+                        _cv.GROQ_KEY = v
+                elif k == "GEMINI_VISION_KEY_1":
+                    _cv.GEMINI_KEYS[0] = v or _os_hr.getenv("GEMINI_KEY_1", "")
+                elif k == "GEMINI_VISION_KEY_2":
+                    _cv.GEMINI_KEYS[1] = v or _os_hr.getenv("GEMINI_KEY_2", "")
+                elif k == "GEMINI_VISION_KEY_3":
+                    _cv.GEMINI_KEYS[2] = v or _os_hr.getenv("GEMINI_KEY_3", "")
+                elif k == "GEMINI_KEY_1" and not _os_hr.getenv("GEMINI_VISION_KEY_1", "").strip():
                     _cv.GEMINI_KEYS[0] = v
-                elif k == "GEMINI_KEY_2":
+                elif k == "GEMINI_KEY_2" and not _os_hr.getenv("GEMINI_VISION_KEY_2", "").strip():
                     _cv.GEMINI_KEYS[1] = v
-                elif k == "GEMINI_KEY_3":
+                elif k == "GEMINI_KEY_3" and not _os_hr.getenv("GEMINI_VISION_KEY_3", "").strip():
                     _cv.GEMINI_KEYS[2] = v
                 elif k == "OPENROUTER_API_KEY":
                     _cv.OPENROUTER_KEY = v
@@ -620,19 +894,507 @@ def api_keys_post():
                     _cv.EDAMAM_APP_KEY = v
         except Exception:
             pass
-        # Groq key also used in ai_handler — reload its env
+        # Hot-reload WA Groq client when GROQ_WA_KEY is updated
+        if "GROQ_WA_KEY" in updates:
+            global _wa_groq_client
+            _wa_groq_client = None   # force rebuild on next _get_wa_groq_client() call
+            os.environ["GROQ_WA_KEY"] = updates["GROQ_WA_KEY"]
+
+        # Groq + Gemini keys cached inside live AIProvider / OrchestratorAgent
+        # instances built at startup — must rebuild their underlying HTTP clients.
         if any(k in updates for k in ("GROQ_API_KEY", "GEMINI_KEY_1", "GEMINI_KEY_2", "GEMINI_KEY_3")):
             try:
                 import os as _os
                 from dotenv import load_dotenv as _ld
-                _ld(override=True)
-                import modules.ai_handler as _ah
-                if hasattr(_ah, "GROQ_API_KEY") and "GROQ_API_KEY" in updates:
-                    _ah.GROQ_API_KEY = updates["GROQ_API_KEY"]
-            except Exception:
-                pass
+                _ld(override=True)  # refresh process env from disk
+
+                # Collect the new key values (prefer just-saved updates, fall back to env)
+                _new_groq = updates.get("GROQ_API_KEY") or _os.getenv("GROQ_API_KEY", "")
+                _new_gem  = [
+                    updates.get("GEMINI_KEY_1") or _os.getenv("GEMINI_KEY_1", ""),
+                    updates.get("GEMINI_KEY_2") or _os.getenv("GEMINI_KEY_2", ""),
+                    updates.get("GEMINI_KEY_3") or _os.getenv("GEMINI_KEY_3", ""),
+                ]
+
+                import sys as _sys
+                _main = _sys.modules.get("__main__")
+
+                # Update module-level constants in main.py
+                if _main is not None:
+                    if "GROQ_API_KEY" in updates:
+                        setattr(_main, "GROQ_KEY", _new_groq)
+                    if any(k in updates for k in ("GEMINI_KEY_1", "GEMINI_KEY_2", "GEMINI_KEY_3")):
+                        setattr(_main, "GEMINI_KEYS", _new_gem)
+
+                # Hot-swap inside the live AIProvider singleton
+                _ai_mgr = getattr(_main, "ai_manager", None) if _main is not None else None
+                if _ai_mgr is not None and hasattr(_ai_mgr, "reload_keys"):
+                    _ai_mgr.reload_keys(
+                        groq_key=_new_groq if "GROQ_API_KEY" in updates else None,
+                        gemini_keys=_new_gem if any(k in updates for k in ("GEMINI_KEY_1", "GEMINI_KEY_2", "GEMINI_KEY_3")) else None,
+                    )
+
+                # Hot-swap inside the OrchestratorAgent singleton
+                if "GROQ_API_KEY" in updates:
+                    _orch = getattr(_main, "agent_orch", None) if _main is not None else None
+                    if _orch is not None and hasattr(_orch, "reload_key"):
+                        _orch.reload_key(_new_groq)
+
+                # Other modules cache Groq clients at module level
+                # (event_extractor, realtime_data, research_agent). Rebuild them.
+                if "GROQ_API_KEY" in updates and _new_groq:
+                    try:
+                        from groq import Groq as _Groq
+                        for _mod_name in ("modules.event_extractor",
+                                          "modules.realtime_data",
+                                          "modules.research_agent"):
+                            _m = _sys.modules.get(_mod_name)
+                            if _m is not None and hasattr(_m, "_groq_client"):
+                                try:
+                                    _m._groq_client = _Groq(api_key=_new_groq)
+                                    print(f"[api-keys] Rebuilt Groq client in {_mod_name}.")
+                                except Exception as _me:
+                                    print(f"[api-keys] {_mod_name} client rebuild failed: {_me}")
+                    except Exception:
+                        pass
+            except Exception as _hot_err:
+                print(f"[api-keys] Hot-reload partial failure: {_hot_err}")
+                import traceback as _tb
+                _tb.print_exc()
 
         return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+# ─────────────────────────────────────────────────────────────
+# DND — Do Not Disturb endpoints
+# GET  /dnd              → { active, reason, queue_count }
+# POST /dnd              → { action: "on"|"off", reason?: str }
+# GET  /dnd/queue        → { ok, queue: [...] }
+# POST /dnd/handle       → { index: N }
+# POST /dnd/busy         → { index: N }
+# POST /dnd/clear        → clears queue
+# ─────────────────────────────────────────────────────────────
+
+@ui_bp.route("/dnd", methods=["GET"])
+def dnd_status():
+    try:
+        from modules import dnd_mode as _dnd
+        return jsonify({"ok": True, **_dnd.get_status()})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@ui_bp.route("/dnd", methods=["POST"])
+def dnd_toggle():
+    try:
+        from modules import dnd_mode as _dnd
+        data   = request.get_json(silent=True) or {}
+        action = data.get("action", "").lower()
+        reason = data.get("reason", "manual")
+        if action == "on":
+            _dnd.turn_on(reason)
+        elif action == "off":
+            _dnd.turn_off()
+        else:
+            return jsonify({"ok": False, "error": "action must be 'on' or 'off'"}), 400
+        return jsonify({"ok": True, **_dnd.get_status()})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@ui_bp.route("/dnd/queue", methods=["GET"])
+def dnd_queue():
+    try:
+        from modules import dnd_mode as _dnd
+        return jsonify({"ok": True, "queue": _dnd.get_queue()})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@ui_bp.route("/dnd/handle", methods=["POST"])
+def dnd_handle():
+    try:
+        from modules import dnd_mode as _dnd
+        idx = int((request.get_json(silent=True) or {}).get("index", -1))
+        ok  = _dnd.mark_handle(idx)
+        return jsonify({"ok": ok})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@ui_bp.route("/dnd/busy", methods=["POST"])
+def dnd_busy():
+    try:
+        from modules import dnd_mode as _dnd
+        idx = int((request.get_json(silent=True) or {}).get("index", -1))
+        ok  = _dnd.mark_busy(idx)
+        return jsonify({"ok": ok})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@ui_bp.route("/dnd/clear", methods=["POST"])
+def dnd_clear():
+    try:
+        from modules import dnd_mode as _dnd
+        _dnd.clear_queue()
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+_DND_ACTION_HTML = """<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>iZACH</title>
+<style>body{{background:#050d1a;color:#00e5ff;font-family:monospace;display:flex;
+align-items:center;justify-content:center;height:100vh;margin:0;font-size:14px;}}</style>
+</head><body><p>{msg}</p>
+<script>setTimeout(()=>window.close(),1200);</script></body></html>"""
+
+
+@ui_bp.route("/dnd/config", methods=["GET"])
+def dnd_config_get():
+    """Return DND config (priority contacts list)."""
+    try:
+        with open("api_keys.json") as f:
+            import json as _j
+            cfg = _j.load(f)
+        return jsonify({"ok": True, "priority_contacts": cfg.get("dnd_priority_contacts", [])})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@ui_bp.route("/dnd/config", methods=["POST"])
+def dnd_config_set():
+    """Update DND config (priority contacts list)."""
+    try:
+        data = request.get_json(silent=True) or {}
+        contacts = data.get("priority_contacts", [])
+        import json as _j
+        try:
+            with open("api_keys.json") as f:
+                cfg = _j.load(f)
+        except Exception:
+            cfg = {}
+        cfg["dnd_priority_contacts"] = contacts
+        with open("api_keys.json", "w") as f:
+            _j.dump(cfg, f, indent=2)
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@ui_bp.route("/dnd/action/handle/<int:item_id>", methods=["GET"])
+def dnd_action_handle(item_id):
+    """Browser-openable endpoint triggered by Windows toast 'Handle' button."""
+    try:
+        from modules import dnd_mode as _dnd
+        ok = _dnd.mark_handle(item_id)
+        msg = "✅ Marked to handle — N8N agent will follow up." if ok else "⚠ Alert not found."
+    except Exception as e:
+        msg = f"Error: {e}"
+    from flask import make_response
+    r = make_response(_DND_ACTION_HTML.format(msg=msg))
+    r.headers["Content-Type"] = "text/html"
+    return r
+
+
+@ui_bp.route("/dnd/action/busy/<int:item_id>", methods=["GET"])
+def dnd_action_busy(item_id):
+    """Browser-openable endpoint triggered by Windows toast 'I'm Busy' button."""
+    try:
+        from modules import dnd_mode as _dnd
+        ok = _dnd.mark_busy(item_id)
+        msg = "🔕 Auto-replied as busy." if ok else "⚠ Alert not found."
+    except Exception as e:
+        msg = f"Error: {e}"
+    from flask import make_response
+    r = make_response(_DND_ACTION_HTML.format(msg=msg))
+    r.headers["Content-Type"] = "text/html"
+    return r
+
+
+# ─────────────────────────────────────────────────────────────
+# BUSY MODE ENDPOINTS  (Phase 2)
+# GET  /busy              → status
+# POST /busy              → { action: "on"|"off", reason: "gym", duration_min: 90 }
+# GET  /busy/log          → list of recent busy sessions
+# ─────────────────────────────────────────────────────────────
+
+@ui_bp.route("/busy", methods=["GET"])
+def busy_status():
+    try:
+        from modules import busy_mode as _busy
+        return jsonify({"ok": True, **_busy.get_status()})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@ui_bp.route("/busy", methods=["POST"])
+def busy_toggle():
+    try:
+        from modules import busy_mode as _busy
+        data     = request.get_json(silent=True) or {}
+        action   = data.get("action", "").lower()
+        reason   = data.get("reason", "manual")
+        duration = data.get("duration_min")
+
+        if action == "on":
+            # Smart overlap: if DND active, just note busy reason but don't conflict
+            _busy.turn_on(reason=reason, duration_min=duration)
+        elif action == "off":
+            _busy.turn_off()
+        else:
+            return jsonify({"ok": False, "error": "action must be 'on' or 'off'"}), 400
+
+        return jsonify({"ok": True, **_busy.get_status()})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@ui_bp.route("/busy/log", methods=["GET"])
+def busy_log():
+    try:
+        from modules import busy_mode as _busy
+        return jsonify({"ok": True, "log": _busy.get_log()})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+# ─────────────────────────────────────────────────────────────
+# WA CALL LOG ENDPOINTS (WhatsApp calls, kept separate)
+# GET  /calls             → WA call log entries
+# POST /calls/callback    → { index: N, time: "4:30 PM" }
+# ─────────────────────────────────────────────────────────────
+
+@ui_bp.route("/calls", methods=["GET"])
+def call_log():
+    try:
+        from modules import dnd_mode as _dnd
+        return jsonify({"ok": True, "calls": _dnd.get_call_log()})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@ui_bp.route("/calls/callback", methods=["POST"])
+def call_schedule_callback():
+    """Schedule a Google Calendar callback event for a WA missed call."""
+    try:
+        from modules import dnd_mode as _dnd
+        data  = request.get_json(silent=True) or {}
+        calls = _dnd.get_call_log()
+        idx   = int(data.get("index", -1))
+        t_str = data.get("time", "").strip()
+
+        if idx < 0 or idx >= len(calls):
+            return jsonify({"ok": False, "error": "Invalid call index"}), 400
+
+        call_id = calls[idx].get("id")
+        raw = [c for c in _dnd.get_call_log() if c.get("id") == call_id]
+        if not raw:
+            return jsonify({"ok": False, "error": "Call not found"}), 404
+
+        entry = raw[0]
+        ev_id = _dnd.schedule_call_callback(
+            entry.get("number", ""),
+            entry.get("caller", "Unknown"),
+            t_str or None,
+        )
+        return jsonify({"ok": bool(ev_id), "event_id": ev_id})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+# ─────────────────────────────────────────────────────────────
+# N8N-FACING ENDPOINTS
+# POST /ai/respond     — N8N → iZACH AI generates reply (DND agent persona)
+# POST /notes/save     — N8N → append transcript line to Obsidian call log
+# POST /whatsapp/send  — N8N → send WA message via bridge
+# ─────────────────────────────────────────────────────────────
+
+_N8N_TOKEN = os.getenv("N8N_SHARED_TOKEN", "izach-n8n-2024")
+
+
+def _check_n8n_token() -> bool:
+    auth = request.headers.get("X-N8N-Token", "")
+    return auth == _N8N_TOKEN
+
+
+@ui_bp.route("/ai/respond", methods=["POST"])
+def n8n_ai_respond():
+    """
+    N8N calls this to generate a DND auto-reply.
+    Body: { "from": "Arjun", "number": "91XXXXXXXXXX",
+            "message": "bhai kab milega", "lang_hint": "hinglish" }
+    Returns: { "ok": true, "reply": "...", "lang": "hinglish" }
+    """
+    if not _check_n8n_token():
+        return jsonify({"ok": False, "error": "Unauthorized"}), 401
+
+    data    = request.get_json(silent=True) or {}
+    sender  = data.get("from", "Someone")
+    message = data.get("message", "").strip()
+    lang    = data.get("lang_hint", "hinglish").lower()
+
+    if not message:
+        return jsonify({"ok": False, "error": "message required"}), 400
+
+    if not _get_resp and not _get_wa_groq_client():
+        return jsonify({"ok": False, "error": "AI not ready"}), 503
+
+    owner = os.getenv("OWNER_NAME", "Vansh")
+
+    # DND persona prompt — Hinglish-aware
+    lang_instruction = (
+        "Reply in Hinglish (mix of Hindi and English, Roman script). Match the sender's language style."
+        if "hindi" in lang or "hinglish" in lang
+        else "Reply in English."
+    )
+
+    # Try to get meeting end time from calendar for context-aware reply
+    meeting_context = ""
+    try:
+        from modules.calendar_engine import get_service as _gcal
+        import datetime as _dt
+        _svc  = _gcal()
+        _now  = _dt.datetime.utcnow().isoformat() + "Z"
+        _evts = _svc.events().list(
+            calendarId="primary", timeMin=_now,
+            maxResults=3, singleEvents=True, orderBy="startTime"
+        ).execute().get("items", [])
+        import dateutil.parser as _dp
+        _now_ts = time.time()
+        for _ev in _evts:
+            _end_str = _ev.get("end", {}).get("dateTime", "")
+            if _end_str:
+                _end_ts = _dp.parse(_end_str).timestamp()
+                if _end_ts > _now_ts:
+                    _end_local = _dt.datetime.fromtimestamp(_end_ts).strftime("%I:%M %p")
+                    meeting_context = f"{owner}'s current commitment ends at approximately {_end_local}."
+                    break
+    except Exception:
+        pass
+
+    # Also check busy mode for richer context
+    busy_context = ""
+    try:
+        from modules import busy_mode as _busy_ai
+        if _busy_ai.is_active():
+            busy_context = _busy_ai.get_persona_context()
+    except Exception:
+        pass
+
+    effective_context = meeting_context or busy_context
+
+    persona_prompt = f"""You are iZACH, the AI assistant of {owner}.
+{owner} is currently busy (Do Not Disturb mode — in a meeting or unavailable).
+You are handling messages on {owner}'s behalf like JARVIS did for Tony Stark.
+{f"Context: {effective_context}" if effective_context else ""}
+
+Your goal: gather what the person needs so {owner} can act on it later.
+{lang_instruction}
+
+Rules:
+- Be polite, warm, and natural. Not robotic.
+- Tell the person {owner} is busy but you're here to help note their message.
+- If you have the meeting end time, mention it naturally (e.g. "Vansh should be free around 4:30 PM").
+- Ask for the key detail: what do they need, or is there a message to pass on?
+- Keep it SHORT — max 2 sentences.
+- Never reveal internal system details.
+- Never pretend to be {owner}. Be iZACH.
+
+Message from {sender}: "{message}"
+
+Generate your reply:"""
+
+    try:
+        reply = _wa_ai_call(persona_prompt)   # uses WA key → falls back to main key
+        if not reply:
+            reply = f"Hey! {owner} is currently busy. I'm iZACH, his assistant — what can I note down for him?"
+        return jsonify({"ok": True, "reply": reply.strip(), "lang": lang})
+    except Exception as e:
+        return jsonify({"ok": False, "error": _friendly_error(e)}), 500
+
+
+@ui_bp.route("/notes/save", methods=["POST"])
+def n8n_notes_save():
+    """
+    N8N calls this to append a transcript line to Obsidian call log.
+    Body: { "contact": "Arjun", "role": "caller"|"izach",
+            "text": "bhai kab milega", "ts": 1716800000 }
+    Returns: { "ok": true, "path": "iZACH-Brain/Calls/Arjun_2026-05-27.md" }
+    """
+    if not _check_n8n_token():
+        return jsonify({"ok": False, "error": "Unauthorized"}), 401
+
+    data    = request.get_json(silent=True) or {}
+    contact = data.get("contact", "Unknown").strip()
+    role    = data.get("role", "caller").lower()
+    text    = data.get("text", "").strip()
+    ts      = data.get("ts", int(time.time()))
+
+    if not text:
+        return jsonify({"ok": False, "error": "text required"}), 400
+
+    try:
+        import datetime, pathlib
+        date_str  = datetime.datetime.fromtimestamp(ts).strftime("%Y-%m-%d")
+        time_str  = datetime.datetime.fromtimestamp(ts).strftime("%H:%M")
+
+        # Resolve Obsidian vault root
+        vault_root = os.getenv("OBSIDIAN_VAULT", os.path.join(os.path.dirname(os.path.dirname(__file__)), "iZACH-Brain"))
+        calls_dir  = pathlib.Path(vault_root) / "Calls"
+        calls_dir.mkdir(parents=True, exist_ok=True)
+
+        filename   = f"{contact}_{date_str}.md"
+        filepath   = calls_dir / filename
+        rel_path   = f"iZACH-Brain/Calls/{filename}"
+
+        # Role label
+        label = "📱 Caller" if role == "caller" else "🤖 iZACH"
+        line  = f"**[{time_str}] {label}:** {text}\n"
+
+        # Create file with header if new
+        if not filepath.exists():
+            header = (
+                f"# 📞 Call/Message Log — {contact}\n"
+                f"**Date:** {date_str}  \n"
+                f"**Handled by:** iZACH (DND auto-reply)\n\n"
+                f"---\n\n"
+            )
+            filepath.write_text(header, encoding="utf-8")
+
+        with open(filepath, "a", encoding="utf-8") as f:
+            f.write(line)
+
+        return jsonify({"ok": True, "path": rel_path})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@ui_bp.route("/whatsapp/send", methods=["POST"])
+def n8n_whatsapp_send():
+    """
+    N8N calls this to send a WhatsApp message.
+    Body: { "number": "91XXXXXXXXXX", "text": "...", "name": "Arjun" }
+    Returns: { "ok": true, "status": "Message sent to Arjun." }
+    """
+    if not _check_n8n_token():
+        return jsonify({"ok": False, "error": "Unauthorized"}), 401
+
+    data   = request.get_json(silent=True) or {}
+    number = data.get("number", "").strip()
+    text   = data.get("text", "").strip()
+    name   = data.get("name", "")
+
+    if not number or not text:
+        return jsonify({"ok": False, "error": "number and text required"}), 400
+
+    try:
+        from modules.whatsapp_sender import send_message as _wa_send
+        ok, status = _wa_send(number, text, name)
+        return jsonify({"ok": ok, "status": status})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
 
@@ -712,6 +1474,61 @@ def websites_delete(key):
 
 
 # ─────────────────────────────────────────────────────────────
+# CUSTOM LINKS  (used by Cortex UI settings tab)
+# GET  /api/custom_links   → [{title, url}, ...]
+# POST /api/custom_links   → save full list (replaces)
+# ─────────────────────────────────────────────────────────────
+_CUSTOM_LINKS_FILE = os.path.join(os.path.dirname(os.path.dirname(__file__)), "custom_links.json")
+
+
+def _read_custom_links() -> list:
+    try:
+        with open(_CUSTOM_LINKS_FILE, encoding="utf-8") as f:
+            return _json.load(f)
+    except Exception:
+        return []
+
+
+def _write_custom_links(links: list):
+    with open(_CUSTOM_LINKS_FILE, "w", encoding="utf-8") as f:
+        _json.dump(links, f, indent=2, ensure_ascii=False)
+    # Live-sync into web_automation shortnames so voice commands work immediately
+    try:
+        from modules import web_automation as _wa
+        for lk in links:
+            title = lk.get("title", "").strip().lower()
+            url   = lk.get("url", "").strip()
+            if title and url:
+                _wa._SHORTNAMES[title] = url
+    except Exception:
+        pass
+
+
+@ui_bp.route("/api/custom_links", methods=["GET"])
+def custom_links_get():
+    return jsonify(_read_custom_links())
+
+
+@ui_bp.route("/api/custom_links", methods=["POST"])
+def custom_links_post():
+    try:
+        data = request.get_json(silent=True)
+        if not isinstance(data, list):
+            return jsonify({"ok": False, "error": "Expected JSON array"}), 400
+        # Validate each entry
+        cleaned = []
+        for item in data:
+            title = (item.get("title") or "").strip()
+            url   = (item.get("url")   or "").strip()
+            if title and url:
+                cleaned.append({"title": title, "url": url})
+        _write_custom_links(cleaned)
+        return jsonify({"ok": True, "count": len(cleaned)})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+# ─────────────────────────────────────────────────────────────
 # GET /history
 # ─────────────────────────────────────────────────────────────
 
@@ -751,6 +1568,51 @@ def ui_mic():
         _mic_active = bool(data.get("active", True))
         return jsonify({"ok": True, "mic_active": _mic_active})
     return jsonify({"ok": True, "mic_active": _mic_active})
+
+
+@ui_bp.route("/diagnostics/voice", methods=["GET"])
+def diagnostics_voice():
+    """Surface why iZACH might not be listening — flags blocking voice_loop."""
+    info = {"mic_active": _mic_active}
+    try:
+        from modules import voice_id as _vid
+        info["voice_enrolling"] = getattr(_vid, "_enrolling", False)
+        info["voice_enrolled"]  = _vid.is_enrolled()
+    except Exception:
+        pass
+    try:
+        from modules import face_auth as _fa
+        info["face_enrolling"] = getattr(_fa, "_enrolling", False)
+    except Exception:
+        pass
+    try:
+        from modules.speaker_diarization import list_enrolled, MIN_ENERGY_RMS
+        info["diarization_profiles"] = list_enrolled()
+        info["diarization_min_rms"]  = MIN_ENERGY_RMS
+    except Exception:
+        pass
+    return jsonify({"ok": True, **info})
+
+
+@ui_bp.route("/diagnostics/voice/reset", methods=["POST"])
+def diagnostics_voice_reset():
+    """Force-reset stuck enrollment flags so voice_loop resumes."""
+    cleared = []
+    try:
+        from modules import voice_id as _vid
+        if getattr(_vid, "_enrolling", False):
+            _vid._enrolling = False
+            cleared.append("voice_id._enrolling")
+    except Exception:
+        pass
+    try:
+        from modules import face_auth as _fa
+        if getattr(_fa, "_enrolling", False):
+            _fa._enrolling = False
+            cleared.append("face_auth._enrolling")
+    except Exception:
+        pass
+    return jsonify({"ok": True, "cleared": cleared})
 
 def is_mic_active():
     return _mic_active
@@ -859,37 +1721,6 @@ def cache_sizes():
     sizes["pycache"] = f"{_fmt(pc_total)}  ·  {pc_count} files" if pc_count else "empty"
 
     return jsonify({"ok": True, "sizes": sizes})
-
-
-# GET /ollama/stats  — training + model stats
-# POST /ollama/rebuild  — force rebuild custom izach model
-@ui_bp.route("/ollama/stats", methods=["GET"])
-def ollama_stats():
-    try:
-        from modules import ollama_trainer, training_collector
-        stats = ollama_trainer.get_stats()
-        tc = training_collector.get_stats()
-        stats["total_samples"] = tc["total_samples"]
-        stats["training_size_kb"] = tc["size_kb"]
-        return jsonify({"ok": True, **stats})
-    except Exception as e:
-        return jsonify({"ok": False, "error": str(e)})
-
-
-@ui_bp.route("/ollama/rebuild", methods=["POST"])
-def ollama_rebuild():
-    try:
-        import threading
-        from modules import ollama_trainer, training_collector
-        def _run():
-            from modules.ollama_trainer import _save_last_built, create_model
-            success = create_model()
-            if success:
-                _save_last_built(training_collector.get_stats()["total_samples"])
-        threading.Thread(target=_run, daemon=True, name="ollama-force-rebuild").start()
-        return jsonify({"ok": True, "message": "Rebuild started in background"})
-    except Exception as e:
-        return jsonify({"ok": False, "error": str(e)})
 
 
 @ui_bp.route("/cache/clear", methods=["POST"])
@@ -1033,13 +1864,62 @@ def cache_clear():
 _phone_connected = False
 _phone_device_name = ""
 _phone_qr_b64 = None
+_phone_commands: list[dict] = []
+_phone_last_seen_ts: float = 0.0
+_PHONE_HEARTBEAT_WINDOW = 60.0  # seconds — auto-mark disconnected after silence
+
+
+def _phone_is_live() -> bool:
+    """True if either explicit POST set connected OR a phone command arrived recently."""
+    if _phone_connected:
+        return True
+    return (time.time() - _phone_last_seen_ts) < _PHONE_HEARTBEAT_WINDOW
+
+
+def _record_phone_command(text: str, device_name: str = ""):
+    """Record a command that came from the Android app + broadcast to UI."""
+    global _phone_commands, _phone_last_seen_ts, _phone_device_name, _phone_connected
+    _phone_last_seen_ts = time.time()
+    _phone_connected = True
+    if device_name:
+        _phone_device_name = device_name
+    entry = {
+        "text":   text[:200],
+        "ts":     time.strftime("%H:%M:%S"),
+        "epoch":  _phone_last_seen_ts,
+    }
+    _phone_commands.append(entry)
+    if len(_phone_commands) > 30:
+        _phone_commands = _phone_commands[-30:]
+    try:
+        from modules.ws_bridge import broadcast
+        broadcast({
+            "type":        "phone_command",
+            "text":        entry["text"],
+            "ts":          entry["ts"],
+            "device_name": _phone_device_name,
+        })
+        # Also broadcast updated status so widget flips to CONNECTED instantly
+        broadcast({
+            "type":        "phone_status",
+            "connected":   True,
+            "device_name": _phone_device_name,
+            "qr":          _phone_qr_b64,
+        })
+    except Exception:
+        pass
+
+
+@ui_bp.route("/phone/commands", methods=["GET"])
+def phone_commands_get():
+    return jsonify({"ok": True, "commands": _phone_commands[-30:]})
 
 
 @ui_bp.route("/phone/status", methods=["GET"])
 def phone_status_get():
     return jsonify({
         "ok":          True,
-        "connected":   _phone_connected,
+        "connected":   _phone_is_live(),
         "device_name": _phone_device_name,
         "qr":          _phone_qr_b64,
     })
@@ -1107,7 +1987,8 @@ def ui_stop():
 def vision_cameras():
     try:
         from modules.camera_vision import list_cameras, _cam_device_index
-        cameras = list_cameras()
+        force = request.args.get("refresh", "").lower() in ("1", "true", "yes")
+        cameras = list_cameras(force_refresh=force)
         return jsonify({"ok": True, "cameras": cameras, "active": _cam_device_index})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
@@ -1186,10 +2067,51 @@ def mic_devices():
         import pyaudio
         p = pyaudio.PyAudio()
         devices = []
+        seen_names = set()
+
+        # Noise patterns to skip — virtual mappers, loopback, Steam, empty names
+        _SKIP_PATTERNS = [
+            "microsoft sound mapper",
+            "primary sound capture driver",
+            "stereo mix",
+            "pc speaker",
+            "wave out",
+            "steam streaming",
+            "loopback",
+            "what u hear",
+        ]
+
         for i in range(p.get_device_count()):
             info = p.get_device_info_by_index(i)
-            if info.get("maxInputChannels", 0) > 0:
-                devices.append({"index": i, "name": info["name"]})
+            if info.get("maxInputChannels", 0) <= 0:
+                continue
+
+            raw_name = info.get("name", "")
+            # PyAudio on some Windows builds returns bytes; always coerce to str
+            if isinstance(raw_name, bytes):
+                name = raw_name.decode("utf-8", errors="replace").strip()
+            else:
+                name = str(raw_name).strip()
+
+            # Skip empty / placeholder names like "Input ()"
+            if not name or name in ("Input ()", "Microphone ()"):
+                continue
+
+            # Skip known virtual / loopback / streaming devices
+            name_lower = name.lower()
+            if any(p_ in name_lower for p_ in _SKIP_PATTERNS):
+                continue
+
+            # De-duplicate — pyaudio lists same physical mic under multiple
+            # Windows audio API layers (MME, DirectSound, WASAPI).
+            # Keep first occurrence only.
+            norm = re.sub(r'\s*\(.*?\)\s*$', '', name).strip().lower()
+            if norm in seen_names:
+                continue
+            seen_names.add(norm)
+
+            devices.append({"index": i, "name": name})
+
         p.terminate()
         import main as _main
         active = getattr(_main, "_mic_device_index", None)
@@ -1919,17 +2841,29 @@ def voice_status():
         return jsonify({"ok": False, "error": str(e)}), 500
 
 
+@ui_bp.route("/voice/phrases", methods=["GET"])
+def voice_phrases():
+    """Return the list of guided enrollment phrases."""
+    try:
+        from modules.voice_id import ENROLLMENT_PHRASES, PHRASE_SECONDS, PREP_SECONDS
+        return jsonify({
+            "ok": True,
+            "phrases": ENROLLMENT_PHRASES,
+            "phrase_seconds": PHRASE_SECONDS,
+            "prep_seconds": PREP_SECONDS,
+        })
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
 @ui_bp.route("/voice/enroll", methods=["POST"])
 def voice_enroll():
     try:
-        from modules.voice_id import enroll_voice_async, _speak_fn
-        if _speak_fn is None:
-            from modules.voice_id import init as _vi_init
-            # speak_fn not injected yet — enroll will still work but no TTS
+        from modules.voice_id import enroll_voice_async
         data  = request.get_json(silent=True) or {}
         label = data.get("label", "owner").strip() or "owner"
         enroll_voice_async(label)
-        return jsonify({"ok": True, "message": "Enrollment started. Speak for 7 seconds."})
+        return jsonify({"ok": True, "message": "Guided enrollment started."})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
 
@@ -1959,11 +2893,24 @@ def face_status():
 def face_enroll():
     try:
         from modules import face_auth
+        # Auto-init if main.py forgot to bind speak handler
         if not face_auth._speak_func:
-            return jsonify({"ok": False, "error": "face_auth not initialized"}), 500
+            face_auth.init(lambda _msg: None)
+        # Verify face_recognition is installed before spawning subprocess
+        try:
+            import importlib
+            if importlib.util.find_spec("face_recognition") is None:
+                return jsonify({
+                    "ok": False,
+                    "error": "face_recognition package not installed. Run: pip install face-recognition"
+                }), 500
+        except Exception:
+            pass
         face_auth.enroll_owner()
         return jsonify({"ok": True, "message": "Enrollment started. Look at the camera."})
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         return jsonify({"ok": False, "error": str(e)}), 500
 
 
@@ -2168,6 +3115,28 @@ def whatsapp_logout():
         r = _req.post("http://localhost:3000/logout", timeout=10)
         data = r.json()
         if data.get("status") == "logged_out":
+            # Tell the UI to show the QR widget in 'pending' state. The Node
+            # bridge will POST a fresh QR to /whatsapp/qr within a few seconds
+            # once it re-initialises its WA client.
+            try:
+                from modules.ws_bridge import broadcast
+                broadcast({"type": "whatsapp_status", "connected": False, "pending_qr": True})
+                broadcast({"type": "whatsapp_qr", "qr": "", "pending": True})
+            except Exception:
+                pass
+            # Best-effort: poke the bridge to restart its WA client so a new QR
+            # is generated immediately. Some bridge versions expose /restart.
+            def _trigger_restart():
+                import time as _t
+                _t.sleep(0.3)
+                for path in ("/restart", "/start", "/init"):
+                    try:
+                        _req.post(f"http://localhost:3000{path}", timeout=5)
+                        return
+                    except Exception:
+                        continue
+            import threading as _thr
+            _thr.Thread(target=_trigger_restart, daemon=True).start()
             return jsonify({"ok": True})
         return jsonify({"ok": False, "error": data.get("message", "Logout failed")})
     except Exception as e:
@@ -2209,7 +3178,14 @@ def nodes_vitals():
         return jsonify({"ok": False, "error": "node required"}), 400
     try:
         from modules.remote_node import get_vitals
-        v = get_vitals(node)
+        from concurrent.futures import ThreadPoolExecutor, TimeoutError as _FutTimeout
+        # Hard 4s wall-clock timeout — prevents Flask thread hanging on offline
+        # remote nodes where OS-level TCP SYN ignores requests.timeout on Windows.
+        with ThreadPoolExecutor(max_workers=1) as _ex:
+            try:
+                v = _ex.submit(get_vitals, node).result(timeout=4)
+            except _FutTimeout:
+                return jsonify({"ok": False, "error": f"Node '{node}' unreachable (timeout)"}), 504
         if "error" in v:
             return jsonify({"ok": False, "error": v["error"]}), 503
         return jsonify({"ok": True, "vitals": v})
@@ -2451,6 +3427,28 @@ def print_update_settings():
         return jsonify({"ok": False, "error": str(e)}), 500
 
 
+@ui_bp.route("/print/open-browser", methods=["POST"])
+def print_open_browser():
+    """
+    Open a file in the user's default browser (Chrome) so they can use
+    Chrome's built-in PDF preview + print dialog. PDFs render in-place;
+    other types may download. Replaces the IPP/CUPS print path.
+    Body: { "path": "/abs/path/to/file.pdf" }
+    """
+    try:
+        data = request.json or {}
+        path = (data.get("path") or "").strip()
+        if not path or not os.path.isfile(path):
+            return jsonify({"ok": False, "error": "File not found"}), 404
+        import webbrowser as _wb
+        abs_path = os.path.abspath(path).replace("\\", "/")
+        url = "file:///" + abs_path
+        ok = _wb.open(url, new=2)
+        return jsonify({"ok": bool(ok), "url": url})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
 @ui_bp.route("/print/job", methods=["POST"])
 def print_job():
     """
@@ -2668,7 +3666,8 @@ def _run_ocr_scan():
         import time as _t
         _t.sleep(3)  # give user time to hold document steady
         from modules.camera_vision import _capture_frame, _frame_to_b64
-        frame = _capture_frame()
+        # OCR needs the raw (un-mirrored) frame so text is not flipped backward
+        frame = _capture_frame(flip_h=False)
         if frame is None:
             _ocr_state["mode"] = "idle"
             _ocr_state["enabled"] = False
@@ -2698,6 +3697,47 @@ def _run_ocr_scan():
     except Exception as e:
         _ocr_state["mode"] = "idle"
         _ocr_state["enabled"] = False
+
+
+# =============================================================================
+# ── WEATHER WIDGET ENDPOINT (structured JSON for Cortex/Forge UI) ────────────
+# =============================================================================
+
+@ui_bp.route("/weather", methods=["GET"])
+def ui_weather():
+    """Return current weather as structured JSON for the weather widget."""
+    try:
+        import requests as _req
+        # Read user's configured city from settings
+        try:
+            with open("api_keys.json") as _f:
+                _cfg = _json.load(_f)
+            city = _cfg.get("weather_city", "New Delhi").strip() or "New Delhi"
+        except Exception:
+            city = "New Delhi"
+
+        # wttr.in JSON format — free, no key
+        url = f"https://wttr.in/{city.replace(' ', '+')}?format=j1"
+        r = _req.get(url, timeout=8)
+        if r.status_code != 200:
+            return jsonify({"ok": False, "error": f"wttr {r.status_code}"}), 502
+        data = r.json() or {}
+        cur = (data.get("current_condition") or [{}])[0]
+
+        return jsonify({
+            "ok":         True,
+            "city":       city.upper(),
+            "country":    (data.get("nearest_area", [{}])[0].get("country", [{}])[0].get("value", "") or "").upper(),
+            "temp_c":     int(cur.get("temp_C", 0) or 0),
+            "feels_c":    int(cur.get("FeelsLikeC", 0) or 0),
+            "desc":       (cur.get("weatherDesc", [{}])[0].get("value", "") or "Unknown").strip(),
+            "humidity":   int(cur.get("humidity", 0) or 0),
+            "uv_index":   int(cur.get("uvIndex", 0) or 0),
+            "wind_kmh":   int(cur.get("windspeedKmph", 0) or 0),
+            "wind_dir":   cur.get("winddir16Point", "") or "",
+        })
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
 
 
 # =============================================================================

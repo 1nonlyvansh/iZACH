@@ -78,10 +78,43 @@
                 </LinearLayout>
             </LinearLayout>
 
-            <!-- Spacer balances menu button so title is truly centered -->
-            <View
-                android:layout_width="48dp"
-                android:layout_height="48dp" />
+            <!-- DND + Busy chips (right side, replaces spacer) -->
+            <LinearLayout
+                android:layout_width="72dp"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:gravity="center"
+                android:layout_marginEnd="4dp">
+
+                <TextView
+                    android:id="@+id/chipDnd"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="DND"
+                    android:textColor="#FF3a6070"
+                    android:textSize="9sp"
+                    android:fontFamily="monospace"
+                    android:textStyle="bold"
+                    android:letterSpacing="0.1"
+                    android:paddingHorizontal="6dp"
+                    android:paddingVertical="2dp"
+                    android:background="#10ff8c00"
+                    android:layout_marginBottom="3dp" />
+
+                <TextView
+                    android:id="@+id/chipBusy"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="BUSY"
+                    android:textColor="#FF3a6070"
+                    android:textSize="9sp"
+                    android:fontFamily="monospace"
+                    android:textStyle="bold"
+                    android:letterSpacing="0.1"
+                    android:paddingHorizontal="6dp"
+                    android:paddingVertical="2dp"
+                    android:background="#10ffb300" />
+            </LinearLayout>
 
         </LinearLayout>
 
@@ -281,6 +314,28 @@
                 android:fontFamily="monospace" />
         </LinearLayout>
 
+        <!-- DND Queue -->
+        <LinearLayout android:id="@+id/sidebarDnd"
+            android:layout_width="match_parent" android:layout_height="52dp"
+            android:orientation="horizontal" android:gravity="center_vertical"
+            android:paddingHorizontal="20dp"
+            android:background="?attr/selectableItemBackground">
+            <ImageView android:layout_width="20dp" android:layout_height="20dp"
+                android:src="@drawable/ic_bell" android:layout_marginEnd="16dp"
+                android:contentDescription="DND Queue"
+                android:tint="#FFff8c00" />
+            <TextView android:layout_width="0dp" android:layout_height="wrap_content"
+                android:layout_weight="1" android:text="DND Queue"
+                android:textColor="@color/text_pri" android:textSize="14sp"
+                android:fontFamily="monospace" />
+            <TextView android:id="@+id/sidebarDndBadge"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:paddingHorizontal="6dp" android:paddingVertical="2dp"
+                android:background="#30ff8c00"
+                android:textColor="#FFff8c00" android:textSize="10sp"
+                android:fontFamily="monospace" android:visibility="gone" />
+        </LinearLayout>
+
         <!-- Live Tasks -->
         <LinearLayout android:id="@+id/sidebarTasks"
             android:layout_width="match_parent" android:layout_height="52dp"
@@ -372,6 +427,29 @@
                 android:layout_weight="1" android:text="Media Remote"
                 android:textColor="@color/text_pri" android:textSize="14sp"
                 android:fontFamily="monospace" />
+        </LinearLayout>
+
+        <!-- AlliedNode 2 -->
+        <LinearLayout android:id="@+id/sidebarAlliedNode"
+            android:layout_width="match_parent" android:layout_height="52dp"
+            android:orientation="horizontal" android:gravity="center_vertical"
+            android:paddingHorizontal="20dp"
+            android:background="?attr/selectableItemBackground">
+            <ImageView android:layout_width="20dp" android:layout_height="20dp"
+                android:src="@drawable/ic_grid" android:layout_marginEnd="16dp"
+                android:contentDescription="AlliedNode 2"
+                android:tint="#FF1db954" />
+            <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content"
+                android:orientation="vertical">
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                    android:text="AlliedNode 2"
+                    android:textColor="@color/text_pri" android:textSize="14sp"
+                    android:fontFamily="monospace" />
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                    android:text="Secondary PC"
+                    android:textColor="@color/text_sec" android:textSize="10sp"
+                    android:fontFamily="monospace" />
+            </LinearLayout>
         </LinearLayout>
 
         <!-- System Dashboard -->

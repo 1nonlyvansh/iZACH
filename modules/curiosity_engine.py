@@ -5,9 +5,13 @@ moments to build a personal profile. Answers saved to MongoDB + Obsidian.
 Intercepts the next voice input as the answer; clears itself if no answer in 30s.
 """
 
+import json
 import logging
+import os
 import threading
 import time
+
+_STATE_FILE = os.path.join(os.path.dirname(os.path.dirname(__file__)), "curiosity_state.json")
 
 logger = logging.getLogger(__name__)
 
@@ -77,7 +81,7 @@ QUESTIONS = [
 
 _MONGO_KEY      = "curiosity_asked_keys"
 _IDLE_THRESHOLD = 180   # seconds idle before asking
-_ANSWER_TIMEOUT = 30    # seconds to wait for answer before giving up
+_ANSWER_TIMEOUT = 120   # seconds to wait for answer before giving up
 
 _speak_func:  object          = None
 _running:     bool            = False
@@ -118,9 +122,12 @@ def stop():
 
 
 def record_interaction():
-    """Call every time the user speaks — resets idle timer."""
+    """Call every time the user speaks — resets idle timer and extends pending answer window."""
     global _last_interaction
     _last_interaction = time.time()
+    with _pending_lock:
+        if _pending is not None and time.time() < _pending["expires_at"]:
+            _pending["expires_at"] = time.time() + _ANSWER_TIMEOUT
 
 
 def is_waiting_for_answer() -> bool:
@@ -160,12 +167,31 @@ def _clear_pending_unsafe():
     _pending = None
 
 
+def _read_state() -> dict:
+    try:
+        with open(_STATE_FILE) as f:
+            return json.load(f)
+    except Exception:
+        return {"asked_keys": []}
+
+
+def _write_state(data: dict):
+    try:
+        with open(_STATE_FILE, "w") as f:
+            json.dump(data, f, indent=2)
+    except Exception:
+        pass
+
+
 def _get_asked_keys() -> set:
+    keys: set = set()
     try:
         from modules.mongo_brain import get_preference
-        return set(get_preference(_MONGO_KEY, []))
+        keys.update(get_preference(_MONGO_KEY, []))
     except Exception:
-        return set()
+        pass
+    keys.update(_read_state().get("asked_keys", []))
+    return keys
 
 
 def _mark_asked(key: str):
@@ -177,6 +203,10 @@ def _mark_asked(key: str):
             save_preference(_MONGO_KEY, asked)
     except Exception:
         pass
+    state = _read_state()
+    if key not in state.get("asked_keys", []):
+        state.setdefault("asked_keys", []).append(key)
+        _write_state(state)
 
 
 def _save_answer(key: str, category: str, question: str, answer: str):
@@ -185,6 +215,12 @@ def _save_answer(key: str, category: str, question: str, answer: str):
         save_preference(f"learned.{key}", answer)
     except Exception:
         pass
+    # Persist answer + mark key answered in local state (survives MongoDB downtime)
+    state = _read_state()
+    if key not in state.get("asked_keys", []):
+        state.setdefault("asked_keys", []).append(key)
+    state.setdefault("answers", {})[key] = answer
+    _write_state(state)
     try:
         from modules.obsidian_brain import log_learned_fact
         log_learned_fact(key, category, question, answer)

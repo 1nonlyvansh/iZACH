@@ -6,6 +6,8 @@ import android.os.Looper
 import android.util.Log
 import com.google.gson.Gson
 import com.google.gson.JsonObject
+import com.izach.android.model.DndAlert
+import com.izach.android.model.DndStatus
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
@@ -38,6 +40,8 @@ class IZACHWebSocket(private val api: IZACHApi) {
     // New unified-event-bus callbacks
     var onPcNotification: ((title: String, body: String, category: String) -> Unit)? = null
     var onDownloadEvent: ((type: String, filename: String, size: Long, speedStr: String) -> Unit)? = null
+    var onDndAlert: ((DndAlert) -> Unit)? = null
+    var onDndStatus: ((DndStatus) -> Unit)? = null
 
     private fun scheduleReconnect() {
         if (reconnectScheduled || !shouldReconnect) return
@@ -94,6 +98,24 @@ class IZACHWebSocket(private val api: IZACHApi) {
                             val clip = json.get("text")?.asString ?: return
                             if (clip.isNotBlank()) onClipboard?.invoke(clip)
                         }
+                        "dnd_alert" -> {
+                            val id     = json.get("id")?.asInt ?: return
+                            val from   = json.get("from")?.asString ?: return
+                            val number = json.get("number")?.asString ?: return
+                            val text   = json.get("text")?.asString ?: ""
+                            val type   = json.get("alert_type")?.asString
+                                ?: json.get("type")?.asString ?: ""
+                            val ts     = json.get("ts")?.asLong ?: (System.currentTimeMillis() / 1000L)
+                            val action = if (json.has("action") && !json.get("action").isJsonNull)
+                                json.get("action").asString else null
+                            onDndAlert?.invoke(DndAlert(id, from, number, text, type, ts, action))
+                        }
+                        "dnd_status" -> {
+                            val active     = json.get("active")?.asBoolean ?: return
+                            val reason     = json.get("reason")?.asString ?: ""
+                            val queueCount = json.get("queue_count")?.asInt ?: 0
+                            onDndStatus?.invoke(DndStatus(active, reason, queueCount))
+                        }
                         "task_started", "task_progress", "task_completed", "task_failed" -> {
                             val type = json.get("type")?.asString ?: return
                             val id = json.get("id")?.asString ?: return
@@ -134,6 +156,23 @@ class IZACHWebSocket(private val api: IZACHApi) {
                 val body = payload.get("body")?.asString ?: ""
                 val category = payload.get("category")?.asString ?: "system"
                 onPcNotification?.invoke(title, body, category)
+            }
+            "dnd_alert" -> {
+                val id     = payload.get("id")?.asInt ?: return
+                val from   = payload.get("from")?.asString ?: return
+                val number = payload.get("number")?.asString ?: return
+                val text   = payload.get("text")?.asString ?: ""
+                val type   = payload.get("type")?.asString ?: ""
+                val ts     = payload.get("ts")?.asLong ?: (System.currentTimeMillis() / 1000L)
+                val action = if (payload.has("action") && !payload.get("action").isJsonNull)
+                    payload.get("action").asString else null
+                onDndAlert?.invoke(DndAlert(id, from, number, text, type, ts, action))
+            }
+            "dnd_status" -> {
+                val active     = payload.get("active")?.asBoolean ?: return
+                val reason     = payload.get("reason")?.asString ?: ""
+                val queueCount = payload.get("queue_count")?.asInt ?: 0
+                onDndStatus?.invoke(DndStatus(active, reason, queueCount))
             }
             "download_started", "download_progress", "download_completed", "download_failed" -> {
                 val filename = payload.get("filename")?.asString ?: return

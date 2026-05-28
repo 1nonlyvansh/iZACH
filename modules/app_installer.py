@@ -7,6 +7,7 @@ import os
 import re
 import winreg
 import platform
+import subprocess
 import threading
 from pathlib import Path
 
@@ -90,7 +91,7 @@ _APP_ALIASES: dict[str, list[str]] = {
     "vlc":             ["vlc media player"],
     "discord":         ["discord"],
     "steam":           ["steam"],
-    "spotify":         ["spotify"],
+    "spotify":         ["spotify", "spotify music", "spotifyab.spotifymusic"],
     "telegram":        ["telegram desktop", "telegram"],
     "whatsapp":        ["whatsapp"],
     "zoom":            ["zoom"],
@@ -140,6 +141,19 @@ _APP_ALIASES: dict[str, list[str]] = {
 }
 
 
+def _check_appx(name_lower: str) -> bool:
+    """Check if app is installed as an AppX/MSIX (Microsoft Store) package."""
+    try:
+        result = subprocess.run(
+            ["powershell", "-NoProfile", "-Command",
+             f"Get-AppxPackage -Name '*{name_lower}*' -ErrorAction SilentlyContinue | Select-Object -First 1 Name"],
+            capture_output=True, text=True, timeout=8
+        )
+        return bool(result.stdout.strip())
+    except Exception:
+        return False
+
+
 def is_app_installed(name: str) -> bool:
     name_lower = name.lower().strip()
     if name_lower in _ALWAYS_INSTALLED:
@@ -162,8 +176,14 @@ def is_app_installed(name: str) -> bool:
         os.environ.get("PROGRAMFILES", ""),
         os.environ.get("PROGRAMFILES(X86)", ""),
         os.environ.get("LOCALAPPDATA", ""),
+        os.environ.get("APPDATA", ""),
     ]:
         if base and Path(base, exe_stem + ".exe").exists():
+            return True
+
+    # AppX (Microsoft Store) check — covers Spotify, WhatsApp, etc.
+    for candidate in candidates:
+        if _check_appx(candidate):
             return True
 
     return False

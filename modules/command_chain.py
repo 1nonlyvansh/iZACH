@@ -32,7 +32,7 @@ logger = logging.getLogger(__name__)
 
 from modules.task_engine import TaskEngine, Task
 from rapidfuzz import process, fuzz
-from modules.automation import open_app, play_specific_youtube
+from modules.automation import open_app, play_specific_youtube, snap_window
 from modules.intent_router import IntentRouter
 from modules.state_engine import state
 import modules.camera_vision as vision
@@ -247,6 +247,76 @@ Output format:
         query = _re.sub(r'\s*\bdot\s+([a-z0-9]{1,5})\b', r'.\1', query)
         query = _re.sub(r'\s+\.([a-z0-9]{1,5})\b', r'.\1', query)
 
+        # ── DND (Do Not Disturb) commands — intercept before anything else ──
+        try:
+            from modules import dnd_mode as _dnd
+            _DND_ON  = re.compile(
+                r'\b(turn\s+on|enable|activate|start|begin)\b.*\b(dnd|do\s+not\s+disturb|silent\s*mode|meeting\s*mode)\b'
+                r'|\b(dnd|do\s+not\s+disturb)\b.*(on|activate|enable)',
+                re.IGNORECASE,
+            )
+            _DND_OFF = re.compile(
+                r'\b(turn\s+off|disable|deactivate|stop|end)\b.*\b(dnd|do\s+not\s+disturb|silent\s*mode|meeting\s*mode)\b'
+                r'|\b(dnd|do\s+not\s+disturb)\b.*(off|disable|deactivate)',
+                re.IGNORECASE,
+            )
+            _DND_STATUS = re.compile(r'\b(dnd|do\s+not\s+disturb)\b.*(status|on\?|active\?)', re.IGNORECASE)
+            if _DND_ON.search(query):
+                _dnd.turn_on("manual")
+                return
+            if _DND_OFF.search(query):
+                _dnd.turn_off()
+                return
+            if _DND_STATUS.search(query):
+                s = _dnd.get_status()
+                msg = f"DND is {'ON' if s['active'] else 'OFF'}. {s['queue_count']} queued alerts." if s["active"] else "Do Not Disturb is off."
+                self.speak(msg)
+                return
+        except Exception as _dnd_err:
+            logger.debug(f"[DND command] {_dnd_err}")
+
+        # ── Busy Mode commands ────────────────────────────────────
+        try:
+            from modules import busy_mode as _busy
+            import re as _re_busy
+            # "busy mode on [for 90 minutes] [reason gym]"
+            _BUSY_ON = _re_busy.compile(
+                r'\b(turn\s+on|enable|activate|start|i.?m\s+going)\b.*\b(busy\s*mode|busy)\b'
+                r'|\b(busy\s*mode|busy)\b.*(on|enable|activate)',
+                _re_busy.IGNORECASE,
+            )
+            _BUSY_OFF = _re_busy.compile(
+                r'\b(turn\s+off|disable|stop|end|i.?m\s+back|i\s+am\s+back)\b.*\b(busy\s*mode|busy)\b'
+                r'|\b(busy\s*mode|busy)\b.*(off|disable|stop)',
+                _re_busy.IGNORECASE,
+            )
+            _BUSY_STATUS = _re_busy.compile(r'\b(busy\s*mode|busy)\b.*(status|on\?|active\?)', _re_busy.IGNORECASE)
+            if _BUSY_ON.search(query):
+                # Extract reason and duration
+                _reason_m = _re_busy.search(r'\b(gym|studying|study|sleeping|sleep|eating|eat|driving|drive|meeting)\b', query, _re_busy.IGNORECASE)
+                _dur_m    = _re_busy.search(r'\b(\d+)\s*(min|minute|hour|hr)\b', query, _re_busy.IGNORECASE)
+                _reason   = _reason_m.group(1).lower() if _reason_m else "manual"
+                _dur      = None
+                if _dur_m:
+                    _val  = int(_dur_m.group(1))
+                    _unit = _dur_m.group(2).lower()
+                    _dur  = _val * 60 if _unit.startswith("h") else _val
+                _busy.turn_on(reason=_reason, duration_min=_dur)
+                return
+            if _BUSY_OFF.search(query):
+                _busy.turn_off()
+                return
+            if _BUSY_STATUS.search(query):
+                s = _busy.get_status()
+                if s["active"]:
+                    _rem = f" {int(s['remaining_sec']//60)} min left." if s.get("remaining_sec") else ""
+                    self.speak(f"Busy mode is on. Reason: {s['reason']}.{_rem} {s['msg_count']} messages handled.")
+                else:
+                    self.speak("Busy mode is off.")
+                return
+        except Exception as _busy_err:
+            logger.debug(f"[BUSY command] {_busy_err}")
+
         # ── Subconsciousness permission gate (top-level, pre-split) ──
         # Dangerous whole-query check before we split into sub-commands.
         # Bypass flag is set when permission was already granted.
@@ -265,8 +335,69 @@ Output format:
             except Exception as _sc_err:
                 logger.debug(f"[SC gate] {_sc_err}")
 
+        # ── Snap position pre-parse ───────────────────────────────
+        # Pattern: "open X at left", "open X on the right", "snap X to left"
+        _SNAP_RE = re.compile(
+            r'\b(?:open|launch|start)\s+(.+?)\s+(?:at|on\s+(?:the\s+)?|snap\s+(?:to\s+)?)(?:the\s+)?(left|right|center|full(?:screen)?|maximize)\b',
+            re.IGNORECASE,
+        )
+
+        # ── Parallel-eligible domain detector ────────────────────
+        # Commands that don't share state and can safely run concurrently
+        _PARALLEL_DOMAINS = {
+            "spotify", "dnd", "busy", "brightness", "volume", "wifi",
+            "youtube_play",  # tagged by YouTube regex
+        }
+        def _is_parallel_eligible(c: str) -> str | None:
+            """Return a domain tag if this sub-command can run in parallel, else None."""
+            c = c.lower()
+            if re.search(r'\bplay\b.*\bspotify\b|\bspotify\b.*\bplay\b', c):
+                return "spotify"
+            if re.search(r'\b(turn\s+on|enable|activate)\b.*\b(dnd|do\s+not\s+disturb)\b', c):
+                return "dnd"
+            if re.search(r'\b(turn\s+on|enable|activate)\b.*\bbusy\b', c):
+                return "busy"
+            if re.search(r'\bbrightness\b|\bvolume\b|\bwifi\b', c):
+                return "system"
+            if re.search(r'\b(?:play|stream)\s+.+\s+on\s+(?:youtube|yt)\b|\bsearch\s+(?:on\s+)?youtube\b', c, re.IGNORECASE):
+                return "youtube_play"
+            return None
+
         sub_commands = [c.strip() for c in re.split(r'\b(?:and|then)\b', query) if c.strip()]
+
+        # ── Parallel multitask detection ──────────────────────────
+        # If query has 2 sub-commands and at least ONE is parallel-eligible
+        # and the other is an app-open, run them concurrently.
+        if len(sub_commands) == 2:
+            _dom0 = _is_parallel_eligible(sub_commands[0])
+            _dom1 = _is_parallel_eligible(sub_commands[1])
+            _open0 = re.match(r'\b(open|launch|start)\b', sub_commands[0])
+            _open1 = re.match(r'\b(open|launch|start)\b', sub_commands[1])
+            # Parallel: one is open-app, other is non-open parallel domain
+            if (_open0 and _dom1 and not _open1) or (_open1 and _dom0 and not _open0):
+                import threading as _par_thr
+                def _run_sub(sc):
+                    self.process(sc, _sc_bypass=True)
+                _par_thr.Thread(target=_run_sub, args=(sub_commands[0],), daemon=True).start()
+                _par_thr.Thread(target=_run_sub, args=(sub_commands[1],), daemon=True).start()
+                return
         for cmd in sub_commands:
+            # ── Window snap intercept ─────────────────────────────
+            # "open notepad at left", "open chrome on the right"
+            _snap_m = _SNAP_RE.search(cmd)
+            if _snap_m:
+                _snap_app  = _snap_m.group(1).strip()
+                _snap_dir  = _snap_m.group(2).strip().lower()
+                import threading as _snap_thr
+                def _open_and_snap(a=_snap_app, d=_snap_dir):
+                    open_app(a)
+                    snap_window(d)
+                self.speak(f"Opening {_snap_app} on the {_snap_dir}.")
+                _snap_thr.Thread(target=_open_and_snap, daemon=True).start()
+                continue
+
+            # Reset domain context per sub-command so domain from cmd 1 doesn't bleed into cmd 2
+            self._domain_ctx = {"domain": None, "confidence": 0.0}
             _had_this = bool(re.search(r'\bthis\b', cmd))
             resolved_cmd = self._resolve_pronouns(cmd)
             _this_resolved = _had_this and resolved_cmd != cmd  # "this" was swapped for a topic
@@ -288,39 +419,6 @@ Output format:
                 self._handle_remote_node_command(resolved_cmd)
                 continue
 
-            # ── Gesture Engine control ────────────────────────────────
-            _GE_START = re.compile(
-                r'\b(start|enable|activate|launch|turn\s+on|boot)\b'
-                r'.*\b(gesture|aura)\b',
-                re.IGNORECASE,
-            )
-            _GE_STOP = re.compile(
-                r'\b(stop|disable|deactivate|kill|turn\s+off|end)\b'
-                r'.*\b(gesture|aura)\b',
-                re.IGNORECASE,
-            )
-            if _GE_START.search(resolved_cmd):
-                try:
-                    from modules import gesture_engine as _ge
-                    started = _ge.start()
-                    if started:
-                        self.speak("AURA gesture engine is now online. Show your hand to the camera.")
-                    else:
-                        self.speak("Gesture engine is already running.")
-                except Exception as _ge_err:
-                    self.speak(f"Gesture engine failed to start: {_ge_err}")
-                continue
-            if _GE_STOP.search(resolved_cmd):
-                try:
-                    from modules import gesture_engine as _ge
-                    stopped = _ge.stop()
-                    if stopped:
-                        self.speak("Gesture engine stopped.")
-                    else:
-                        self.speak("Gesture engine is not running.")
-                except Exception as _ge_err:
-                    self.speak(f"Gesture engine error: {_ge_err}")
-                continue
 
             # ── Synonym learner: pre-route known corrected phrasings ─
             _synonym_domain = None
@@ -425,6 +523,129 @@ Output format:
                     self.speak("Okay, skipping installation.")
                     continue
 
+            # ── Widget voice commands (BEFORE agent fast-paths to avoid mis-routing) ──
+            # "open spotify widget", "show whatsapp and phone widget"
+            # "close all widgets except spotify and whatsapp widgets"
+            _WIDGET_NAME_MAP = {
+                'spotify': 'p-audio', 'music': 'p-audio', 'audio': 'p-audio',
+                'chat': 'p-comm', 'comm': 'p-comm',
+                'whatsapp messages': 'p-msg', 'messages': 'p-msg', 'msg': 'p-msg',
+                'weather': 'p-wx', 'wx': 'p-wx',
+                'phone': 'p-phone', 'android': 'p-phone',
+                'system': 'p-sys', 'sysmon': 'p-sys',
+                'intel': 'p-intel', 'intelligence': 'p-intel',
+                'memory': 'p-mem', 'recall': 'p-mem',
+                'schedule': 'p-sched', 'sched': 'p-sched',
+                'relationship': 'p-rel', 'people': 'p-rel',
+                'feed': 'p-feed', 'activity': 'p-feed',
+                'history': 'p-hist',
+                'clock': 'p-clock', 'world clock': 'p-clock',
+                'fitness': 'p-fit', 'health': 'p-fit', 'steps': 'p-fit',
+                'location': 'p-loc', 'whereami': 'p-loc', 'gps': 'p-loc',
+                'ocr': 'p-ocr', 'scan document': 'p-ocr', 'document scan': 'p-ocr',
+                'printer': 'p-print', 'print': 'p-print',
+                'smart home': 'p-sh', 'home control': 'p-sh', 'iot': 'p-sh',
+                'thermostat': 'p-sh', 'nest': 'p-sh', 'chromecast': 'p-sh',
+                'instagram': 'p-ig', 'dms': 'p-ig', 'instagram inbox': 'p-ig',
+                'news': 'p-news', 'headlines': 'p-news', 'live news': 'p-news',
+                'market': 'p-news', 'stocks': 'p-news',
+            }
+            _has_widget_kw = (
+                'widget' in resolved_cmd or
+                'panel' in resolved_cmd or
+                'cortex' in resolved_cmd   # "show spotify on cortex"
+            )
+            _close_all_except = ('close all' in resolved_cmd or 'hide all' in resolved_cmd) and 'except' in resolved_cmd
+            _is_widget_cmd = _has_widget_kw and any(v in resolved_cmd for v in ('open', 'show', 'close', 'hide', 'display'))
+
+            if _is_widget_cmd or _close_all_except:
+                _wids = []
+                for _wname, _wid in sorted(_WIDGET_NAME_MAP.items(), key=lambda x: -len(x[0])):
+                    if _wname in resolved_cmd and _wid not in _wids:
+                        _wids.append(_wid)
+                try:
+                    from modules.ws_bridge import broadcast as _bc
+                    if _close_all_except:
+                        _bc({"type": "ui_command", "action": "close_all_except", "ids": _wids})
+                        self.speak("Done.")
+                    elif 'close all' in resolved_cmd or 'hide all' in resolved_cmd:
+                        _bc({"type": "ui_command", "action": "close_all_except", "ids": []})
+                        self.speak("All widgets closed.")
+                    elif ('show all' in resolved_cmd or 'open all' in resolved_cmd):
+                        _bc({"type": "ui_command", "action": "show_all"})
+                        self.speak("Opening all widgets.")
+                    elif ('close' in resolved_cmd or 'hide' in resolved_cmd) and _wids:
+                        _bc({"type": "ui_command", "action": "close_widget", "ids": _wids})
+                        self.speak("Done.")
+                    elif _wids:
+                        _bc({"type": "ui_command", "action": "show_widget", "ids": _wids})
+                        self.speak("Done.")
+                    else:
+                        self.speak("Which widget would you like me to open?")
+                except Exception:
+                    pass
+                continue
+
+            # ── Spotify device-switch fast-path ───────────────────
+            # "switch to OnePlus/TV/phone" mid-playback was mis-routed to
+            # SystemAgent as open_app. Intercept it here before agents run.
+            _SPO_SWITCH_RE = re.compile(
+                r'(?:switch|transfer|move|change|cast|play)\s+'
+                r'(?:spotify|music|playback|audio|the\s+music|it)?\s*'
+                r'(?:to|on)\s+(?:my\s+)?(.+)',
+                re.IGNORECASE,
+            )
+            _DEVICE_HINTS = {
+                'phone', 'mobile', 'tv', 'television', 'laptop', 'pc', 'computer',
+                'speaker', 'oneplus', 'samsung', 'iphone', 'android', 'tablet',
+                'allied', 'alliednode', 'echo', 'alexa', 'homepod', 'chromecast',
+            }
+            _spo_sw_m = _SPO_SWITCH_RE.match(resolved_cmd)
+            if _spo_sw_m:
+                _sw_target = _spo_sw_m.group(1).strip().lower()
+                # Only intercept if target looks like a device, not an app/website
+                _is_device_switch = any(h in _sw_target for h in _DEVICE_HINTS) or (
+                    len(_sw_target.split()) <= 3 and
+                    not any(w in _sw_target for w in ('mode', 'theme', 'tab', 'page', 'view'))
+                )
+                if _is_device_switch:
+                    # Force spotify domain and let SpotifyAgent handle it
+                    _domain = "spotify"
+                    self._domain_ctx["domain"] = "spotify"
+                    self._domain_ctx["confidence"] = 0.95
+
+            # ── Smart Home fast-path (BEFORE agents, to prevent mis-routing to open_app) ──
+            # "turn on samsung AC", "turn off LG TV", "ac on", "cool mode", etc.
+            _SH_PRE_TRIGGERS = [
+                "set ac", "turn on ac", "turn off ac", "ac on", "ac off",
+                "set temperature", "set temp", "cool mode", "heat mode",
+                "set thermostat", "fan on", "fan off", "start fan", "stop fan",
+                "pause tv", "play tv", "resume tv", "stop tv", "mute tv",
+                "cast to tv", "cast video",
+            ]
+            _SH_PRE_BRAND_RE = re.compile(
+                r'\b(turn\s+(?:on|off)|switch\s+(?:on|off)|start|stop)\b'
+                r'.*\b(?:samsung|lg|panasonic|daikin|hitachi|voltas|carrier|whirlpool|haier|'
+                r'sony|toshiba|sharp|mitsubishi|midea|tcl|hisense|oneplus|mi|xiaomi)?\s*'
+                r'(ac|air\s*conditioner|air\s*con|hvac|tv|television)\b',
+                re.IGNORECASE,
+            )
+            if any(t in resolved_cmd for t in _SH_PRE_TRIGGERS) or _SH_PRE_BRAND_RE.search(resolved_cmd):
+                try:
+                    from modules.smart_home_engine import execute_voice_command as _sh_exec
+                    _sh_result = _sh_exec(resolved_cmd)
+                    if _sh_result.get("success"):
+                        self.speak(_sh_result.get("message", "Done"))
+                        continue
+                    else:
+                        _sh_err = _sh_result.get("error", "")
+                        if _sh_err and _sh_err not in ("Command not recognized", ""):
+                            self.speak(_sh_result.get("message", _sh_err))
+                            continue
+                        # Unrecognized by smart home engine — fall through to agents
+                except Exception as _sh_pre_err:
+                    import logging as _l; _l.getLogger("iZACH.Chain").debug(f"[SH-pre] {_sh_pre_err}")
+
             # ── Agent fast-paths ──────────────────────────────────
             # Each agent returns True when it handled the command.
             # We mark _last_route_info["handled"] so the synonym learner in
@@ -457,65 +678,6 @@ Output format:
 
             if _domain == "vision" and self._vis_agent.handle(resolved_cmd, self._domain_ctx):
                 _agent_handled(); continue
-
-            # ── Widget voice commands ─────────────────────────────
-            # "open spotify widget", "show whatsapp and phone widget"
-            # "close all widgets except spotify and whatsapp widgets"
-            _WIDGET_NAME_MAP = {
-                'spotify': 'p-audio', 'music': 'p-audio', 'audio': 'p-audio',
-                'chat': 'p-comm', 'comm': 'p-comm',
-                'whatsapp messages': 'p-msg', 'messages': 'p-msg', 'msg': 'p-msg',
-                'weather': 'p-wx', 'wx': 'p-wx',
-                'phone': 'p-phone', 'android': 'p-phone',
-                'system': 'p-sys', 'sysmon': 'p-sys',
-                'intel': 'p-intel', 'intelligence': 'p-intel',
-                'memory': 'p-mem', 'recall': 'p-mem',
-                'schedule': 'p-sched', 'sched': 'p-sched',
-                'relationship': 'p-rel', 'people': 'p-rel',
-                'feed': 'p-feed', 'activity': 'p-feed',
-                'history': 'p-hist',
-                'clock': 'p-clock', 'world clock': 'p-clock',
-                'fitness': 'p-fit', 'health': 'p-fit', 'steps': 'p-fit',
-                'location': 'p-loc', 'whereami': 'p-loc', 'gps': 'p-loc',
-                'ocr': 'p-ocr', 'scan document': 'p-ocr', 'document scan': 'p-ocr',
-                'printer': 'p-print', 'print': 'p-print',
-                'smart home': 'p-sh', 'home control': 'p-sh', 'iot': 'p-sh',
-                'thermostat': 'p-sh', 'nest': 'p-sh', 'chromecast': 'p-sh',
-                'instagram': 'p-ig', 'dms': 'p-ig', 'instagram inbox': 'p-ig',
-                'news': 'p-news', 'headlines': 'p-news', 'live news': 'p-news',
-                'market': 'p-news', 'stocks': 'p-news',
-            }
-            _has_widget_kw = 'widget' in resolved_cmd or 'panel' in resolved_cmd
-            _close_all_except = ('close all' in resolved_cmd or 'hide all' in resolved_cmd) and 'except' in resolved_cmd
-            _is_widget_cmd = _has_widget_kw and any(v in resolved_cmd for v in ('open', 'show', 'close', 'hide', 'display'))
-
-            if _is_widget_cmd or _close_all_except:
-                _wids = []
-                for _wname, _wid in sorted(_WIDGET_NAME_MAP.items(), key=lambda x: -len(x[0])):
-                    if _wname in resolved_cmd and _wid not in _wids:
-                        _wids.append(_wid)
-                try:
-                    from modules.ws_bridge import broadcast as _bc
-                    if _close_all_except:
-                        _bc({"type": "ui_command", "action": "close_all_except", "ids": _wids})
-                        self.speak("Done.")
-                    elif 'close all' in resolved_cmd or 'hide all' in resolved_cmd:
-                        _bc({"type": "ui_command", "action": "close_all_except", "ids": []})
-                        self.speak("All widgets closed.")
-                    elif ('show all' in resolved_cmd or 'open all' in resolved_cmd):
-                        _bc({"type": "ui_command", "action": "show_all"})
-                        self.speak("Opening all widgets.")
-                    elif ('close' in resolved_cmd or 'hide' in resolved_cmd) and _wids:
-                        _bc({"type": "ui_command", "action": "close_widget", "ids": _wids})
-                        self.speak("Done.")
-                    elif _wids:
-                        _bc({"type": "ui_command", "action": "show_widget", "ids": _wids})
-                        self.speak("Done.")
-                    else:
-                        self.speak("Which widget would you like me to open?")
-                except Exception:
-                    pass
-                continue
 
             # Multi-tab browser command
             _MULTI_TAB_MARKERS = ["one for", "another tab", "first tab", "second tab",
@@ -560,6 +722,8 @@ Output format:
                 # youtube
                 "play on youtube", "youtube play", "search youtube for",
                 "find on youtube", "open youtube and play",
+                "play something on youtube", "play on yt", "search on youtube",
+                "search on youtube for", "find on youtube for", "youtube search",
                 # news
                 "what's in the news", "latest news", "read news",
                 "today's news", "news headlines", "what's happening",
@@ -577,7 +741,15 @@ Output format:
                 "feel the form", "feel my details",
                 "extract emails", "find emails", "scrape emails",
             ]
-            if any(t in resolved_cmd for t in _WEB_AUTOMATION_TRIGGERS):
+            # YouTube regex patterns: "play X on youtube", "search on youtube for X"
+            _YT_RE = re.compile(
+                r'\b(?:play|put on|stream)\s+.+\s+on\s+(?:youtube|yt)\b'
+                r'|\bsearch\s+(?:on\s+)?youtube\s+(?:for\s+)?'
+                r'|\bsearch\s+on\s+youtube\s+for\s+'
+                r'|\byoutube\s+search\b',
+                re.IGNORECASE,
+            )
+            if any(t in resolved_cmd for t in _WEB_AUTOMATION_TRIGGERS) or _YT_RE.search(resolved_cmd):
                 self._handle_web_automation(resolved_cmd)
                 continue
 
@@ -729,7 +901,16 @@ Output format:
                 "cast to tv", "cast video",
                 "smart home",
             ]
-            if any(t in resolved_cmd for t in _SH_TRIGGERS):
+            # Regex catches brand-prefixed devices: "turn off Samsung AC",
+            # "turn on LG AC", "turn off Samsung TV", etc.
+            _SH_BRAND_RE = re.compile(
+                r'\b(turn\s+(?:on|off)|switch\s+(?:on|off)|start|stop)\b'
+                r'.*\b(?:samsung|lg|panasonic|daikin|hitachi|voltas|carrier|whirlpool|haier|'
+                r'sony|toshiba|sharp|mitsubishi|midea|tcl|hisense|oneplus|mi|xiaomi)?\s*'
+                r'(ac|air\s*conditioner|air\s*con|hvac|tv|television)\b',
+                re.IGNORECASE,
+            )
+            if any(t in resolved_cmd for t in _SH_TRIGGERS) or _SH_BRAND_RE.search(resolved_cmd):
                 try:
                     from modules.smart_home_engine import execute_voice_command
                     result = execute_voice_command(resolved_cmd)
@@ -935,14 +1116,32 @@ Output format:
             return
 
         # ── YouTube autoplay ───────────────────────────────────
-        if any(t in cmd for t in [
+        _YT_TRIGGERS = [
             "play on youtube", "youtube play", "search youtube for",
             "find on youtube", "open youtube and play",
-        ]):
-            query = cmd
-            for phrase in ["open youtube and play", "play on youtube", "youtube play",
-                           "search youtube for", "find on youtube", "youtube"]:
-                query = query.replace(phrase, "").strip()
+            "play something on youtube", "play on yt", "search on youtube",
+            "search on youtube for", "youtube search",
+        ]
+        _YT_REGEX = re.compile(
+            r'\b(?:play|put on|stream)\s+(.+?)\s+on\s+(?:youtube|yt)\b'
+            r'|\bsearch\s+(?:on\s+)?youtube\s+(?:for\s+)?(.+)'
+            r'|\bsearch\s+on\s+youtube\s+for\s+(.+)',
+            re.IGNORECASE,
+        )
+        if any(t in cmd for t in _YT_TRIGGERS) or _YT_REGEX.search(cmd):
+            # Try regex extraction first (handles "play X on youtube")
+            _yt_m = _YT_REGEX.search(cmd)
+            if _yt_m:
+                query = next((g for g in _yt_m.groups() if g), "").strip()
+            else:
+                query = cmd
+                for phrase in sorted([
+                    "open youtube and play", "search on youtube for", "search youtube for",
+                    "play on youtube", "search on youtube", "youtube search",
+                    "youtube play", "find on youtube", "play on yt",
+                    "play something on youtube", "youtube",
+                ], key=len, reverse=True):
+                    query = query.replace(phrase, "").strip()
             if not query:
                 self.speak("What should I play on YouTube?")
                 return
@@ -1052,7 +1251,17 @@ Output format:
                     self.pending_open_service = target
                     self.speak(f"Open {target.title()} as app or website?")
                     return
-            _bg(web_automation.open_website, target, announce=f"Opening {target}.")
+            # User wants to OPEN a website — use the system default browser,
+            # not the Playwright/Chromium engine (which is reserved for
+            # research/scraping/automation flows).
+            try:
+                url = web_automation._resolve_url(target)
+                webbrowser.open(url)
+                self.speak(f"Opening {target} in your default browser.")
+            except Exception as _ow_err:
+                # Fallback to Playwright Chromium if default-browser launch fails
+                logger.warning(f"[open_website] Default browser failed: {_ow_err}")
+                _bg(web_automation.open_website, target, announce=f"Opening {target}.")
             return
 
         # ── Form fill ──────────────────────────────────────────
@@ -1302,7 +1511,7 @@ Return ONLY the JSON array. No explanation."""
             return
 
         # ── Restart ──────────────────────────────────────────────
-        if any(w in cmd for w in ["restart", "reboot"]):
+        if any(w in cmd for w in ["restart", "reboot"]) and "whatsapp" not in cmd and "bridge" not in cmd:
             r = _rn.system_control(node_name, "restart")
             self.speak(r.get("status", r.get("error", "Restart command sent to AlliedNode 2.")))
             return
@@ -2926,7 +3135,14 @@ Return ONLY JSON."""
                 open_app(app_name)
                 self.speak(f"Opening {app_name} app.")
             else:
-                _bg(web_automation.open_website, svc, announce=f"Opening {svc} in browser.")
+                # Open in user's default browser (not Playwright Chromium)
+                try:
+                    url = web_automation._resolve_url(svc)
+                    webbrowser.open(url)
+                    self.speak(f"Opening {svc} in your default browser.")
+                except Exception as _osvc_err:
+                    logger.warning(f"[open svc] Default browser failed: {_osvc_err}")
+                    _bg(web_automation.open_website, svc, announce=f"Opening {svc} in browser.")
             return
 
         # ---------------- PLATFORM CHOICE ----------------
@@ -3309,6 +3525,27 @@ Explain in one sentence what they want. Start with their name. Sound like JARVIS
             return
         
         #WhatsApp Bridge Commands
+        if any(w in cmd for w in ["restart whatsapp bridge", "restart whatsapp", "restart bridge",
+                                   "reboot whatsapp", "reconnect whatsapp bridge"]):
+            import subprocess as _subp, sys as _sys
+            self.speak("Restarting WhatsApp bridge. Give it a moment.")
+            try:
+                # Kill existing bridge process on port 3000
+                _kill = _subp.run(
+                    ["powershell", "-Command",
+                     "Get-NetTCPConnection -LocalPort 3000 -State Listen -ErrorAction SilentlyContinue | "
+                     "Select-Object -ExpandProperty OwningProcess | "
+                     "ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue }"],
+                    capture_output=True, timeout=10
+                )
+            except Exception:
+                pass
+            import time as _t; _t.sleep(2)
+            from modules.whatsapp_handler import ensure_bridge_running as _ebr
+            _ebr()
+            self.speak("WhatsApp bridge restarted. Scan the QR code in the UI if prompted.")
+            return
+
         if any(w in cmd for w in ["connect whatsapp", "start whatsapp", "launch whatsapp"]):
             from modules.whatsapp_handler import ensure_bridge_running
             ensure_bridge_running()
@@ -3415,7 +3652,7 @@ Explain in one sentence what they want. Start with their name. Sound like JARVIS
 Explain in one short sentence what they want or are saying, as if you're JARVIS briefing {owner}.
 Start with the sender's name. Do not quote the message directly."""
                 response = self._raw_ai(prompt)
-                self.speak(response)
+                self.speak(response or "Couldn't summarise that WhatsApp message.")
             else:
                 self.speak("No recent WhatsApp message to elaborate.")
             return
@@ -3570,7 +3807,14 @@ Examples:
             # Direct fallback — bypass memory/personality overhead
             try:
                 from modules.personality import PERSONALITY_PROMPT
-                direct = self._raw_ai(f"{PERSONALITY_PROMPT}\n\nUser: {cmd}")
+                _dnd_prefix = ""
+                try:
+                    from modules import dnd_mode as _dnd_fb
+                    if _dnd_fb.is_active():
+                        _dnd_prefix = _dnd_fb.concise_system_prefix()
+                except Exception:
+                    pass
+                direct = self._raw_ai(f"{_dnd_prefix}{PERSONALITY_PROMPT}\n\nUser: {cmd}")
                 if direct and not direct.strip().startswith("{"):
                     self.speak(direct)
                 else:

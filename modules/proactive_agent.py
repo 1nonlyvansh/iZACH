@@ -105,17 +105,25 @@ def _deliver_morning_briefing():
     if not _speak_func:
         return
     try:
-        from modules.calendar_agent import get_today_events, format_event_for_speech
         import psutil
-
         now = datetime.now(tz=IST)
         greeting = _time_greeting(now.hour)
 
-        events = get_today_events()
         battery = psutil.sensors_battery()
         bat_str = f"Battery at {int(battery.percent)}%." if battery else ""
 
-        if not events:
+        events = []
+        events_err = None
+        try:
+            from modules.calendar_agent import get_today_events, format_event_for_speech
+            events = get_today_events() or []
+        except Exception as ce:
+            events_err = ce
+            logger.warning(f"[ProactiveAgent] Calendar unavailable for briefing: {ce}")
+
+        if events_err:
+            msg = f"{greeting}. Calendar unavailable right now. {bat_str}".strip()
+        elif not events:
             msg = f"{greeting}. No events on your calendar today. {bat_str}".strip()
         elif len(events) == 1:
             e_str = format_event_for_speech(events[0])

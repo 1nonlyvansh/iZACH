@@ -1,3 +1,4 @@
+import logging
 import threading
 import requests
 import asyncio
@@ -5,6 +6,8 @@ import edge_tts
 import os
 from concurrent.futures import ThreadPoolExecutor
 from flask import Flask, request, jsonify
+
+logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 _OWNER = os.getenv("OWNER_NAME", "User")
@@ -29,6 +32,14 @@ def _load_contacts():
 
 def _resolve_name(number: str, fallback: str) -> str:
     return _contacts.get(number, fallback)
+
+def resolve_contact_by_name(name: str) -> str | None:
+    """Return phone number for a contact name (case-insensitive partial match)."""
+    name_lower = name.lower()
+    for number, contact_name in _contacts.items():
+        if name_lower in contact_name.lower():
+            return number
+    return None
 
 def get_last_message():
     return _last_message
@@ -103,29 +114,95 @@ def ensure_bridge_running():
 
 def _monitor_connection():
     import time, requests as req
-    time.sleep(15)  # Give bridge time to connect
+    time.sleep(30)  # Give bridge time to start + connect
     while True:
+        if not _bridge_started:
+            time.sleep(60)
+            continue
         try:
             r = req.get("http://localhost:3000/health", timeout=3)
             status = r.json().get("status")
             if status != "connected" and _speak_func:
                 _speak_func("WhatsApp is not connected.")
         except Exception:
-            if _speak_func:
-                _speak_func("WhatsApp bridge is offline.")
+            pass  # Bridge offline but not our problem to announce — status route handles it
         time.sleep(300)  # Check every 5 minutes
 
 @app.route('/whatsapp/call', methods=['POST'])
 def incoming_call():
     global _pending_call
-    data = request.json
+    data = request.json or {}
     raw_caller = data.get('caller', 'Unknown')
     number = data.get('number')
     caller = _resolve_name(number, raw_caller)
     _pending_call = {'caller': caller, 'number': number, 'type': 'call'}
+
+    # ── DND: auto-decline + queue + call log ─────────────────────
+    try:
+        from modules import dnd_mode as _dnd_call
+        if _dnd_call.is_active():
+            # Add to DND queue (shows Windows toast notification)
+            queue_item = {
+                "type":   "phone_call",
+                "from":   caller,
+                "number": number,
+                "text":   "📞 Incoming WhatsApp call",
+            }
+            _dnd_call.add_to_queue(queue_item)
+            # Log to call log (triggers escalation if 3+ calls in 10 min)
+            _dnd_call.log_call(number, caller, action="declined")
+
+            # Send call-specific declined message (not the sarcastic WA text-message reply)
+            import threading as _t
+            def _send_call_declined_msg():
+                try:
+                    from modules.whatsapp_sender import send_message as _wasm
+                    import os as _os
+                    owner = _os.getenv("OWNER_NAME", "Vansh")
+                    msg = (
+                        f"Hey {caller}! 👋 iZACH here — {owner}'s AI assistant.\n"
+                        f"{owner} is currently in Do Not Disturb mode and couldn't take your call.\n"
+                        f"He'll call you back as soon as he's free! 🙏\n\n"
+                        f"💡 If it's urgent, reply starting with *URGENT* and I'll alert him immediately."
+                    )
+                    _wasm(number, msg, caller)
+                except Exception as _ce:
+                    import logging as _lg
+                    _lg.getLogger(__name__).warning(f"[DND] Call declined msg failed: {_ce}")
+            _t.Thread(target=_send_call_declined_msg, daemon=True, name="dnd-call-reply").start()
+
+            return jsonify({'status': 'dnd_decline', 'decline': True})
+    except Exception:
+        pass
+
+    # ── Busy mode: decline call + log + notify ────────────────────
+    try:
+        from modules import busy_mode as _busy_call
+        if _busy_call.is_active():
+            from modules import dnd_mode as _dnd_call2
+            _dnd_call2.log_call(number, caller, action="busy_declined")
+            # Send a polite busy reply
+            import threading as _t2
+            def _send_busy_wa():
+                try:
+                    from modules.whatsapp_sender import send_message as _sm
+                    persona = _busy_call.get_persona_context()
+                    # get_persona_context() already returns full sentence, don't prepend "Vansh is currently"
+                    msg = (
+                        f"Hey! iZACH here 👋 {persona} "
+                        f"He'll get back to you soon. 🙏"
+                    )
+                    _sm(number, msg, caller)
+                except Exception:
+                    pass
+            _t2.Thread(target=_send_busy_wa, daemon=True).start()
+            return jsonify({'status': 'busy_decline', 'decline': True})
+    except Exception:
+        pass
+
     if _speak_func:
         _speak_func(f"{_OWNER}, {caller} is calling you on WhatsApp. Should I pick up, ignore, or reply later?")
-    return jsonify({'status': 'notified'})
+    return jsonify({'status': 'notified', 'decline': False})
 
 @app.route('/health', methods=['GET'])
 def izach_health():
@@ -147,18 +224,56 @@ def remote_command():
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
 
+_wa_state = {"connected": False, "qr": "", "qr_ts": 0}
+
+
 @app.route('/whatsapp/qr', methods=['POST'])
 def whatsapp_qr():
+    global _wa_state
+    import time as _t
     data = request.json or {}
     qr_string = data.get('qr', '')
     if qr_string:
+        # Convert raw QR string → base64 PNG so Cortex UI can render it as <img>
+        qr_b64 = _qr_to_base64(qr_string)
+        _wa_state["qr"] = qr_b64
+        _wa_state["qr_ts"] = int(_t.time())
+        _wa_state["connected"] = False
         _print_qr_terminal(qr_string)
         try:
             from modules.ws_bridge import broadcast
-            broadcast({"type": "whatsapp_qr", "qr": qr_string})
+            broadcast({"type": "whatsapp_qr", "qr": qr_b64})
+            broadcast({"type": "whatsapp_status", "connected": False, "qr": qr_b64})
         except Exception:
             pass
     return jsonify({'status': 'ok'})
+
+
+@app.route('/whatsapp/status', methods=['GET'])
+def whatsapp_status_get():
+    """Cortex/Forge UI polls this to render the WA widget."""
+    return jsonify({
+        "ok":         True,
+        "connected":  bool(_wa_state.get("connected")),
+        "qr":         _wa_state.get("qr", ""),
+        "qr_age_sec": int(__import__("time").time()) - int(_wa_state.get("qr_ts", 0)),
+    })
+
+def _qr_to_base64(qr_string: str) -> str:
+    """Convert raw WhatsApp QR text → base64-encoded PNG (for <img src>)."""
+    try:
+        import qrcode, io, base64 as _b64
+        qr = qrcode.QRCode(border=2, error_correction=qrcode.constants.ERROR_CORRECT_L)
+        qr.add_data(qr_string)
+        qr.make(fit=True)
+        img = qr.make_image(fill_color="black", back_color="white")
+        buf = io.BytesIO()
+        img.save(buf, format='PNG')
+        return _b64.b64encode(buf.getvalue()).decode()
+    except Exception as e:
+        logger.warning(f"[WA QR] PNG gen failed: {e}")
+        return ""  # empty — frontend checks qr.length > 0 before rendering
+
 
 def _print_qr_terminal(qr_string: str):
     try:
@@ -181,12 +296,26 @@ def _print_qr_terminal(qr_string: str):
 
 @app.route('/whatsapp/status', methods=['POST'])
 def whatsapp_status():
-    data = request.json
+    global _wa_state
+    data = request.json or {}
     status = data.get('status')
     if status == 'connected':
+        _wa_state["connected"] = True
+        _wa_state["qr"] = ""  # clear stale QR once connected
+        try:
+            from modules.ws_bridge import broadcast
+            broadcast({"type": "whatsapp_status", "connected": True, "qr": ""})
+        except Exception:
+            pass
         if _speak_func:
             _speak_func("WhatsApp connected.")
     elif status == 'disconnected':
+        _wa_state["connected"] = False
+        try:
+            from modules.ws_bridge import broadcast
+            broadcast({"type": "whatsapp_status", "connected": False, "qr": _wa_state.get("qr", "")})
+        except Exception:
+            pass
         if _speak_func:
             _speak_func(f"{_OWNER}, WhatsApp disconnected.")
     return jsonify({'status': 'ok'})
@@ -196,11 +325,21 @@ _last_message = {"sender": None, "text": None, "number": None}
 @app.route('/whatsapp/message', methods=['POST'])
 def incoming_message():
     global _last_message
-    data = request.json
+    data = request.json or {}
     raw_sender = data.get('sender', 'Unknown')
     text = data.get('text', '')
-    number = data.get('number')
+    number = data.get('number', '')
+    # Bridge-provided WA send timestamp (seconds). Used to filter pre-DND replays.
+    wa_ts = data.get("timestamp") or data.get("ts") or None
     sender = _resolve_name(number, raw_sender)
+
+    # Backup group suppression (bridge already filters, this is safety net)
+    if number and number.endswith('@g.us'):
+        return jsonify({'status': 'group_skipped'})
+
+    # Skip empty or media-only messages
+    if not text or not text.strip():
+        return jsonify({'status': 'empty_skipped'})
 
     _last_message = {"sender": sender, "text": text, "number": number}
 
@@ -214,11 +353,14 @@ def incoming_message():
 
     # Auto-register WhatsApp number in relationship memory so draft engine
     # can link name → number for future fetch.
+    # Skip unknown contacts whose "name" is just digits — prevents raw numbers
+    # from appearing as nodes in the relationship graph.
     try:
         from modules.relationship_memory import get_person, add_fact
-        person = get_person(sender)
-        if not person.get("whatsapp_number"):
-            add_fact(sender, "whatsapp_number", number)
+        if not sender.replace("+", "").replace(" ", "").isdigit():
+            person = get_person(sender)
+            if not person.get("whatsapp_number"):
+                add_fact(sender, "whatsapp_number", number)
     except Exception:
         pass
 
@@ -244,6 +386,64 @@ def incoming_message():
         import time as _t
         from modules.event_extractor import process_message as _extract_event
         _extract_event(text=text, sender=sender, msg_id=data.get("id"), timestamp=str(_t.time()))
+    except Exception:
+        pass
+
+    # DND: if active, queue the message instead of announcing it
+    try:
+        from modules import dnd_mode as _dnd_wa
+        if _dnd_wa.is_active():
+            _dnd_wa.add_to_queue({
+                "type":   "whatsapp_message",
+                "from":   sender,
+                "number": number,
+                "text":   text,
+                "wa_ts":  int(wa_ts) if wa_ts else None,
+            })
+            return jsonify({'status': 'dnd_queued'})
+    except Exception:
+        pass
+
+    # Busy mode: still announce vocally, but also trigger auto-reply via N8N or direct AI
+    try:
+        from modules import busy_mode as _busy_msg
+        if _busy_msg.is_active():
+            # Log to busy session
+            _busy_msg.log_message(sender, number, text, reply="")
+            # Fire auto-reply in background (same N8N path as DND)
+            import threading as _tbm
+            def _busy_auto_reply():
+                import requests as _req, os as _os
+                try:
+                    n8n_url  = _os.getenv("N8N_URL", "http://127.0.0.1:5678")
+                    r = _req.post(
+                        f"{n8n_url}/webhook/wa-auto-handle",
+                        json={"from": sender, "number": number, "text": text,
+                              "id": 0, "ts": int(__import__("time").time()), "mode": "busy"},
+                        timeout=12,
+                    )
+                    if r.status_code != 200:
+                        raise ValueError(f"N8N HTTP {r.status_code}")
+                except Exception:
+                    # Fallback: direct AI reply
+                    try:
+                        r2 = _req.post(
+                            "http://127.0.0.1:5050/ai/respond",
+                            json={"from": sender, "message": text, "number": number, "lang_hint": "hinglish"},
+                            headers={"X-N8N-Token": "izach-n8n-2024", "Content-Type": "application/json"},
+                            timeout=25,
+                        )
+                        reply = r2.json().get("reply", "").strip()
+                        if reply:
+                            _req.post(
+                                "http://127.0.0.1:3000/send-message",
+                                json={"number": number, "text": reply},
+                                timeout=10,
+                            )
+                            _busy_msg.log_message(sender, number, text, reply)
+                    except Exception:
+                        pass
+            _tbm.Thread(target=_busy_auto_reply, daemon=True, name="busy-auto-reply").start()
     except Exception:
         pass
 
@@ -352,3 +552,208 @@ def _generate_voice_note(text):
         await communicate.save(path)
     asyncio.run(_gen())
     return os.path.abspath(path)
+
+
+# =============================================================================
+# WhatsApp Media Context Awareness
+# =============================================================================
+
+def _extract_text_from_media(media_type: str, b64_data: str, filename: str) -> str:
+    """
+    Extract readable text from a WA media attachment.
+    image → Groq/Gemini vision
+    pdf   → PyPDF2 text extraction
+    docx  → python-docx paragraph extraction
+    Returns extracted text string (may be empty on failure).
+    """
+    import base64, tempfile, os as _os
+
+    if media_type == "image":
+        try:
+            from modules.camera_vision import _ask_vision
+            prompt = (
+                "Describe what this image shows. If it contains text (a document, notice, "
+                "assignment, grocery list, etc.), extract and list all the text exactly. "
+                "Mention any dates, deadlines, subject names, or important details you see."
+            )
+            return _ask_vision(b64_data, prompt) or ""
+        except Exception as e:
+            print(f"[WA MEDIA] Vision error: {e}")
+            return ""
+
+    raw_bytes = base64.b64decode(b64_data)
+
+    if media_type == "pdf":
+        try:
+            import io
+            from pypdf import PdfReader
+            reader = PdfReader(io.BytesIO(raw_bytes))
+            pages_text = []
+            for page in reader.pages[:5]:  # limit to first 5 pages
+                text = page.extract_text()
+                if text:
+                    pages_text.append(text.strip())
+            return "\n".join(pages_text)
+        except ImportError:
+            try:
+                import PyPDF2, io
+                reader = PyPDF2.PdfReader(io.BytesIO(raw_bytes))
+                return "\n".join(
+                    p.extract_text() for p in reader.pages[:5] if p.extract_text()
+                )
+            except Exception as e:
+                print(f"[WA MEDIA] PDF extract error: {e}")
+                return ""
+        except Exception as e:
+            print(f"[WA MEDIA] PDF extract error: {e}")
+            return ""
+
+    if media_type in ("docx", "doc"):
+        try:
+            import io
+            from docx import Document
+            doc = Document(io.BytesIO(raw_bytes))
+            return "\n".join(p.text for p in doc.paragraphs if p.text.strip())
+        except Exception as e:
+            print(f"[WA MEDIA] DOCX extract error: {e}")
+            return ""
+
+    return ""
+
+
+def _announce_media_context(sender: str, media_type: str, filename: str, extracted_text: str, number: str):
+    """
+    Uses AI to summarise extracted media content, detect deadlines,
+    announce to user, and trigger calendar event extraction if deadline found.
+    """
+    if not _speak_func or not _ai_func:
+        return
+
+    try:
+        label_map = {"image": "an image", "pdf": "a PDF file", "docx": "a Word document", "doc": "a Word document"}
+        label = label_map.get(media_type, "a file")
+
+        if not extracted_text.strip():
+            _speak_func(f"{sender} sent {label} named {filename}.")
+            return
+
+        prompt = f"""You are iZACH. {sender} sent {_OWNER} {label} via WhatsApp.
+
+Extracted content from the file:
+\"\"\"
+{extracted_text[:1500]}
+\"\"\"
+
+Do these two things:
+1. Announce in ONE short English sentence what the file is about and why it matters. Max 15 words. Start with the sender's name.
+2. On a NEW LINE starting with "DEADLINE:", if you find any submission deadline, exam date, or due date, write it as: DEADLINE: <subject or task> | <date string as found in text>. If no deadline found, write: DEADLINE: none
+
+Example output:
+Siddhant sent notes on Time Series Analysis for Unit 3 exam.
+DEADLINE: none
+
+or:
+
+College Teacher sent a Mathematics assignment due before 1 June.
+DEADLINE: Mathematics Assignment | 1 June"""
+
+        response = _ai_func(prompt)
+        if not response:
+            _speak_func(f"{sender} sent {label}.")
+            return
+
+        lines = response.strip().splitlines()
+        announcement = lines[0].strip().strip('"') if lines else f"{sender} sent {label}."
+        deadline_line = next((l for l in lines if l.strip().startswith("DEADLINE:")), "DEADLINE: none")
+
+        _speak_func(announcement)
+
+        # Broadcast to UI
+        try:
+            from modules.ws_bridge import broadcast
+            import time as _t
+            broadcast({
+                "type": "notification",
+                "source": "whatsapp_media",
+                "text": f"📎 {sender}: {announcement}",
+                "ts": _t.strftime("%H:%M"),
+            })
+        except Exception:
+            pass
+
+        # Extract deadline → event_extractor
+        if "none" not in deadline_line.lower():
+            parts = deadline_line.replace("DEADLINE:", "").strip().split("|")
+            if len(parts) == 2:
+                task, date_str = parts[0].strip(), parts[1].strip()
+                synthetic_text = f"{task} submission deadline is {date_str}."
+                try:
+                    import time as _t
+                    from modules.event_extractor import process_message as _extract_event
+                    _extract_event(
+                        text=synthetic_text,
+                        sender=sender,
+                        msg_id=f"media_{_t.time()}",
+                        timestamp=str(_t.time())
+                    )
+                except Exception as exc:
+                    print(f"[WA MEDIA] Event extract error: {exc}")
+
+    except Exception as e:
+        print(f"[WA MEDIA] Announce error: {e}")
+        if _speak_func:
+            _speak_func(f"{sender} sent a file.")
+
+
+@app.route('/whatsapp/media', methods=['POST'])
+def incoming_media():
+    """
+    Receives WhatsApp media attachments from the Node.js bridge.
+    Expected JSON payload:
+    {
+        "sender":     "display name or number",
+        "number":     "919XXXXXXXXX",
+        "media_type": "image" | "pdf" | "docx" | "doc" | "video" | "audio",
+        "filename":   "Assignment.pdf",
+        "data":       "<base64 encoded file bytes>"
+    }
+    """
+    data = request.json or {}
+    raw_sender  = data.get("sender", "Unknown")
+    number      = data.get("number", "")
+    media_type  = data.get("media_type", "").lower()
+    filename    = data.get("filename", "file")
+    b64_data    = data.get("data", "")
+
+    sender = _resolve_name(number, raw_sender)
+
+    # Unsupported types (video, audio) — just announce, no extraction
+    if media_type in ("video", "audio"):
+        if _speak_func:
+            label = "a video" if media_type == "video" else "a voice note"
+            _speak_func(f"{sender} sent {label}.")
+        try:
+            from modules.ws_bridge import broadcast
+            import time as _t
+            broadcast({
+                "type": "notification",
+                "source": "whatsapp_media",
+                "text": f"📎 {sender} sent {'a video' if media_type == 'video' else 'a voice note'}.",
+                "ts": _t.strftime("%H:%M"),
+            })
+        except Exception:
+            pass
+        return jsonify({"status": "announced"})
+
+    if not b64_data:
+        return jsonify({"status": "no_data"}), 400
+
+    # Run media processing in background — don't block the bridge
+    _announce_pool.submit(_process_media_async, sender, number, media_type, filename, b64_data)
+    return jsonify({"status": "processing"})
+
+
+def _process_media_async(sender: str, number: str, media_type: str, filename: str, b64_data: str):
+    """Background worker: extract text from media, then announce with context."""
+    extracted = _extract_text_from_media(media_type, b64_data, filename)
+    _announce_media_context(sender, media_type, filename, extracted, number)

@@ -24,9 +24,24 @@ def _get_service():
         creds = Credentials.from_authorized_user_file(TOKEN_PATH, SCOPES)
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
-            creds.refresh(Request())
-            with open(TOKEN_PATH, "w") as f:
-                f.write(creds.to_json())
+            try:
+                creds.refresh(Request())
+                with open(TOKEN_PATH, "w") as f:
+                    f.write(creds.to_json())
+            except Exception as _refresh_err:
+                # Token revoked or expired beyond refresh — delete stale file
+                logger.warning(
+                    f"[CALENDAR] Token refresh failed ({_refresh_err}). "
+                    "Deleting token.json — re-run OAuth flow to restore Calendar access."
+                )
+                try:
+                    os.remove(TOKEN_PATH)
+                except OSError:
+                    pass
+                raise RuntimeError(
+                    "Google Calendar token revoked. Open iZACH Settings → "
+                    "re-authenticate Calendar to restore access."
+                ) from _refresh_err
         else:
             raise RuntimeError("token.json missing or invalid. Re-run OAuth flow.")
     return build("calendar", "v3", credentials=creds)
@@ -41,6 +56,12 @@ def add_event(title: str, date_str: str, time_str: str, description: str = "",
     Returns created event dict or None on failure.
     """
     try:
+        # Sanitize time_str — extractor may pass "null" / "unknown" / None
+        _bad = {"null", "unknown", "none", "", "n/a", "tbd"}
+        if not time_str or str(time_str).strip().lower() in _bad:
+            time_str = "09:00"
+        time_str = str(time_str).strip()
+
         service = _get_service()
         start_dt = datetime.strptime(f"{date_str} {time_str}", "%Y-%m-%d %H:%M")
         start_dt = start_dt.replace(tzinfo=IST)
@@ -67,7 +88,7 @@ def add_event(title: str, date_str: str, time_str: str, description: str = "",
             link=link,
         )
         return event
-    except HttpError as e:
+    except Exception as e:
         logger.error(f"Calendar add_event failed: {e}")
         return None
 
@@ -80,7 +101,7 @@ def cancel_event(calendar_event_id: str) -> bool:
         _remove_event_mapping(calendar_event_id)
         logger.info(f"Calendar event deleted: {calendar_event_id}")
         return True
-    except HttpError as e:
+    except Exception as e:
         logger.error(f"Calendar cancel_event failed: {e}")
         return False
 
@@ -121,7 +142,7 @@ def get_today_events() -> list[dict]:
             orderBy="startTime",
         ).execute()
         return result.get("items", [])
-    except HttpError as e:
+    except Exception as e:
         logger.error(f"Calendar get_today_events failed: {e}")
         return []
 
@@ -140,7 +161,7 @@ def get_upcoming_events(hours: int = 24) -> list[dict]:
             orderBy="startTime",
         ).execute()
         return result.get("items", [])
-    except HttpError as e:
+    except Exception as e:
         logger.error(f"Calendar get_upcoming_events failed: {e}")
         return []
 
@@ -184,7 +205,7 @@ def get_3day_events() -> list[dict]:
                 "htmlLink": e.get("htmlLink", ""),
             })
         return enriched
-    except HttpError as e:
+    except Exception as e:
         logger.error(f"Calendar get_3day_events failed: {e}")
         return []
 
@@ -242,7 +263,7 @@ def update_event(calendar_event_id: str, title: str = None, date_str: str = None
 
         logger.info(f"Calendar event updated: {calendar_event_id}")
         return True
-    except HttpError as e:
+    except Exception as e:
         logger.error(f"Calendar update_event failed: {e}")
         return False
 
@@ -281,7 +302,7 @@ def find_event_by_voice_cmd(title_hint: str, date_hint: str = None) -> dict | No
                 "datetime_iso": start_iso,
                 "link": _extract_link_from_desc(e.get("description", "")),
             }
-    except HttpError as ex:
+    except Exception as ex:
         logger.error(f"find_event_by_voice_cmd live search failed: {ex}")
     return None
 

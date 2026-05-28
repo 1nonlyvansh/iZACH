@@ -428,9 +428,20 @@ Example: "Time Series Analysis" or "assignment notes" or "handwritten notes"."""
                             full = os.path.join(dirpath, fname)
                             results.append(full)
                         if len(results) >= 15:
-                            return results
+                            break
             except PermissionError:
                 continue
+
+        # If multiple results, re-rank using full-path semantic scoring against
+        # the ORIGINAL query (includes folder hints like "Unit 3", "Time Series").
+        # This resolves "Assignment.pdf" ambiguity across 15 different folders.
+        if len(results) > 1 and query != name_hint:
+            reranked = self.smart_find_file(query)
+            if reranked:
+                # Prefer path-scored results; append any filename-only matches not in it
+                seen = set(reranked)
+                reranked += [r for r in results if r not in seen]
+                return reranked[:5]
 
         return results
 
@@ -460,6 +471,66 @@ Example: "Time Series Analysis" or "assignment notes" or "handwritten notes"."""
             except PermissionError:
                 continue
         return results
+
+    def smart_find_file(self, query: str, search_dir: str = None) -> list:
+        """
+        Semantic path resolver — tokenize query, score file paths by token matches.
+        "Time Series Unit 3 Assignment" → best-matching file returned first.
+        Falls back to find_file() if no tokens survive stop-word stripping.
+        """
+        import re as _re
+
+        STOP = {
+            "the", "a", "an", "in", "of", "for", "and", "or", "my", "me",
+            "file", "open", "show", "find", "get", "please", "can", "you",
+            "to", "is", "it", "this", "that", "from", "with", "send", "print",
+        }
+        raw = _re.findall(r'[a-zA-Z0-9]+', query.lower())
+        tokens = [t for t in raw if t not in STOP]
+
+        if not tokens:
+            return self.find_file(query, search_dir)
+
+        roots = [search_dir] if search_dir else self.config.get(
+            "search_roots", [os.path.expanduser("~")]
+        )
+        scored: list[tuple[float, str]] = []
+
+        for root in roots:
+            if not os.path.isdir(root):
+                continue
+            try:
+                for dirpath, dirs, files in os.walk(root):
+                    if self._is_protected(dirpath):
+                        dirs.clear()
+                        continue
+                    for fname in files:
+                        full_path = os.path.join(dirpath, fname)
+                        path_lower = full_path.lower()
+
+                        # Base score: fraction of tokens present anywhere in path
+                        base_match = sum(1 for t in tokens if t in path_lower)
+                        if base_match == 0:
+                            continue
+
+                        # Bonus: whole-word boundary matches (e.g. "unit" not inside "unitary")
+                        word_bonus = sum(
+                            0.2 for t in tokens
+                            if _re.search(r'(?<![a-z0-9])' + _re.escape(t) + r'(?![a-z0-9])', path_lower)
+                        )
+
+                        score = (base_match + word_bonus) / len(tokens)
+                        scored.append((score, full_path))
+            except PermissionError:
+                continue
+
+        scored.sort(key=lambda x: x[0], reverse=True)
+
+        # Clear winner (≥80% tokens matched with bonuses) → return just top 1
+        if scored and scored[0][0] >= 0.8:
+            return [scored[0][1]]
+        # Ambiguous → return top 5 for user to choose
+        return [path for _, path in scored[:5]]
 
     def get_latest_file(self, folder: str = None, file_type: str = None) -> Optional[str]:
         base = folder or self.current_dir

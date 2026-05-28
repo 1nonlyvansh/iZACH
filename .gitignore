@@ -12,126 +12,82 @@ __pycache__/
 venv/
 .venv/
 env/
+izach_env/
 
-# Environment variables / secrets
+# ========================
+# Environment variables / secrets (CRITICAL)
+# ========================
 .env
 .env.*
 !.env.example
 api_keys.json
 api_keys/
 
-# Logs
-*.log
-logs/
-
 # ========================
-# Node (WhatsApp bridge, UI)
-# ========================
-node_modules/
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-.wwebjs_auth/
-.cache/
-*.csv
-
-# WhatsApp auth session (CRITICAL)
-izach_messenger/.wwebjs_auth/
-
-# Build outputs
-dist/
-build/
-out/
-
-# ========================
-# Electron / React
-# ========================
-*.tsbuildinfo
-.vite/
-.cache/
-
-# ========================
-# OS junk
-# ========================
-.DS_Store
-Thumbs.db
-
-# ========================
-# IDE
-# ========================
-.vscode/
-.idea/
-
-# ========================
-# Temp / misc
-# ========================
-*.tmp
-*.bak
-*.swp
-# backups
-*.zip
-*.rar
-izach_env/
-
-# structure dumps
-*structure*.txt
-structure.txt
-
-
-# ========================
-# WhatsApp / Browser Cache
-# ========================
-.wwebjs_cache/
-.wwebjs_auth/
-
-# ========================
-# Cache
-# ========================
-.cache/
-
-# ========================
-# Logs & reports
-# ========================
-*.log
-*.csv
-*.txt
-
-# BUT allow important docs
-!README.md
-
-# ========================
-# Audio
-# ========================
-*.mp3
-
-# ========================
-# Structure dumps
-# ========================
-*structure*.txt
-
-# ========================
-# Runtime memory
-# ========================
-memory.json
-device_memory.json
-contacts.json
-
-# ========================
-# OAuth / Secrets (CRITICAL — never commit)
+# OAuth / Google credentials (CRITICAL — never commit)
 # ========================
 credentials.json
 token.json
 service_account.json
+fitness_credentials.json
+fitness_token.json
+smart_home_credentials.json
 
 # ========================
-# Biometric / user data (CRITICAL)
+# Smart Home secrets (CRITICAL)
+# ========================
+smart_home_settings.json
+
+# ========================
+# Instagram / Social credentials (CRITICAL)
+# ========================
+instagram_settings.json
+
+# ========================
+# Smart Memory / AI Memory (personal data)
+# ========================
+smart_memory.json
+memory.json
+
+# ========================
+# Obsidian vault contents (personal notes, memory nodes)
+# ========================
+iZACH-Brain/Memory/
+iZACH-Brain/People/
+iZACH-Brain/Calls/
+iZACH-Brain/Learned Facts.md
+iZACH-Brain/System Weaknesses.md
+iZACH-Brain/.obsidian/workspace.json
+iZACH-Brain/.obsidian/.obsidian/
+
+# ========================
+# Device & network info (IP, MAC addresses)
+# ========================
+known_devices.json
+device_alias.json
+device_memory.json
+location_companion.html
+
+# ========================
+# User personal data
 # ========================
 users.json
+contacts.json
 owner_face.pkl
 *.pkl
+biometric/
 
 # ========================
-# Runtime state files
+# Command history & logs (CRITICAL)
+# ========================
+command_log.csv
+*.log
+logs/
+error_logs/
+*.csv
+
+# ========================
+# Runtime state / cache files
 # ========================
 config.json
 calendar_alarm_jobs.json
@@ -140,12 +96,83 @@ pattern_last_run.json
 patterns.json
 routines.json
 wa_processed_msgs.json
+curiosity_state.json
+busy_session.jsonl
+dnd_queue.json
+custom_websites.json
+news_settings.json
+print_settings.json
+file_manager_config.json
+instagram_settings.json
+
+# ========================
+# N8N workflow exports (may contain tokens)
+# ========================
+iZACH DND Auto-Reply.json
+iZACH MMA2.json
+iZACH MMA2 Hardened.json
+
+# ========================
+# WhatsApp / Browser auth cache (CRITICAL)
+# ========================
+.wwebjs_auth/
+.wwebjs_cache/
+izach_messenger/.wwebjs_auth/
+izach_messenger/.wwebjs_cache/
+izach_messenger/node_modules/
+
+# ========================
+# Node (WhatsApp bridge, UI)
+# ========================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ========================
+# Build outputs
+# ========================
+dist/
+build/
+out/
+
+# ========================
+# Electron / React / Flutter
+# ========================
+*.tsbuildinfo
+.vite/
+.cache/
+izach-flutter/.dart_tool/
+izach-flutter/build/
+izach-ui/dist/
+izach-ui/build/
+
+# ========================
+# RAG / Vector DB (may contain personal data)
+# ========================
+izach_rag_db/
+*.faiss
+*.index
+
+# ========================
+# Numba / ML cache
+# ========================
+.numba_cache/
+__numba_cache__/
 
 # ========================
 # User files (personal photos, transferred files)
 # ========================
 shared/
 screenshots/
+downloads/
+
+# ========================
+# Audio files
+# ========================
+*.mp3
+*.wav
+*.ogg
 
 # ========================
 # Android build
@@ -159,29 +186,47 @@ izach-android/build/
 *.aab
 
 # ========================
-# IDE / editor state
+# OS junk
 # ========================
-.claude/settings.local.json
-.claude/
-iZACH-Brain/.obsidian/workspace.json
-
-# ========================
-# Security-sensitive notes
-# ========================
-iZACH-Brain/System Weaknesses.md
-
-# ========================
-# Temp Office files
-# ========================
+.DS_Store
+Thumbs.db
+desktop.ini
 ~$*
 
 # ========================
-# Suspicious files
+# IDE / editor state
+# ========================
+.vscode/
+.idea/
+.claude/
+*.swp
+*.bak
+*.tmp
+
+# ========================
+# Suspicious / misc
 # ========================
 keys and ids*
-.cache
-*.log
-*.txt
+*structure*.txt
+structure.txt
+*.zip
+*.rar
+
+# ========================
+# Large binaries / executables
+# ========================
+tools/godot/
+*.exe
+*.dll
+izach-godot/
+
+# ========================
+# Allow important docs
+# ========================
 !README.md
-desktop.ini
-!qhlogs.doc
+!.env.example
+!chrome_extension/manifest.json
+!package.json
+!package-lock.json
+!izach-ui/package.json
+!izach-ui/package-lock.json

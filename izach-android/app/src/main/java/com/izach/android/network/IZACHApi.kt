@@ -2,9 +2,14 @@ package com.izach.android.network
 
 import android.content.Context
 import android.net.Uri
+import android.os.Build
 import com.google.gson.Gson
+import com.google.gson.JsonArray
 import com.google.gson.JsonObject
+import com.izach.android.model.BusyStatus
 import com.izach.android.model.CommandResponse
+import com.izach.android.model.DndAlert
+import com.izach.android.model.DndStatus
 import com.izach.android.model.FileEntry
 import com.izach.android.model.FileInfo
 import com.izach.android.model.Message
@@ -45,7 +50,8 @@ class IZACHApi(context: Context) {
 
     suspend fun sendCommand(text: String): Result<CommandResponse> = withContext(Dispatchers.IO) {
         runCatching {
-            val body = """{"text":${gson.toJson(text)}}"""
+            val deviceName = Build.MODEL
+            val body = """{"text":${gson.toJson(text)},"source":"phone","device_name":${gson.toJson(deviceName)}}"""
                 .toRequestBody("application/json".toMediaType())
             val req = Request.Builder().url("${baseUrl()}/command").post(body).build()
             val resp = client.newCall(req).execute()
@@ -333,6 +339,267 @@ class IZACHApi(context: Context) {
         }
     }
 
+    // ── N8N token header (used for WA send + AI respond) ──────────
+    private val n8nToken: String get() = prefs.getString("n8n_token", "izach-n8n-2024") ?: "izach-n8n-2024"
+    private fun Request.Builder.withN8nToken() = header("X-N8N-Token", n8nToken)
+
+    // ── DND ────────────────────────────────────────────────────────
+    suspend fun getDndStatus(): Result<DndStatus> = withContext(Dispatchers.IO) {
+        runCatching {
+            val resp = client.newCall(Request.Builder().url("${baseUrl()}/dnd").build()).execute()
+            val obj  = gson.fromJson(resp.body?.string() ?: "{}", JsonObject::class.java)
+            DndStatus(
+                active     = obj.get("active")?.asBoolean ?: false,
+                reason     = obj.get("reason")?.asString ?: "",
+                queueCount = obj.get("queue_count")?.asInt ?: 0,
+            )
+        }
+    }
+
+    suspend fun toggleDnd(action: String, reason: String = "manual"): Result<DndStatus> = withContext(Dispatchers.IO) {
+        runCatching {
+            val body = gson.toJson(mapOf("action" to action, "reason" to reason))
+                .toRequestBody("application/json".toMediaType())
+            val resp = client.newCall(Request.Builder().url("${baseUrl()}/dnd").post(body).build()).execute()
+            val obj  = gson.fromJson(resp.body?.string() ?: "{}", JsonObject::class.java)
+            DndStatus(
+                active     = obj.get("active")?.asBoolean ?: false,
+                reason     = obj.get("reason")?.asString ?: "",
+                queueCount = obj.get("queue_count")?.asInt ?: 0,
+            )
+        }
+    }
+
+    suspend fun getDndQueue(): Result<List<DndAlert>> = withContext(Dispatchers.IO) {
+        runCatching {
+            val resp = client.newCall(Request.Builder().url("${baseUrl()}/dnd/queue").build()).execute()
+            val obj  = gson.fromJson(resp.body?.string() ?: "{}", JsonObject::class.java)
+            obj.getAsJsonArray("queue")?.map { el ->
+                val o = el.asJsonObject
+                DndAlert(
+                    id     = o.get("id")?.asInt ?: 0,
+                    from   = o.get("from")?.asString ?: "Unknown",
+                    number = o.get("number")?.asString ?: "",
+                    text   = o.get("text")?.asString ?: "",
+                    type   = o.get("type")?.asString ?: "alert",
+                    ts     = o.get("ts")?.asLong ?: 0L,
+                    action = o.get("action")?.asString,
+                )
+            } ?: emptyList()
+        }
+    }
+
+    suspend fun dndHandle(index: Int): Result<Boolean> = withContext(Dispatchers.IO) {
+        runCatching {
+            val body = """{"index":$index}""".toRequestBody("application/json".toMediaType())
+            val resp = client.newCall(Request.Builder().url("${baseUrl()}/dnd/handle").post(body).build()).execute()
+            gson.fromJson(resp.body?.string() ?: "{}", JsonObject::class.java).get("ok")?.asBoolean ?: false
+        }
+    }
+
+    suspend fun dndBusy(index: Int): Result<Boolean> = withContext(Dispatchers.IO) {
+        runCatching {
+            val body = """{"index":$index}""".toRequestBody("application/json".toMediaType())
+            val resp = client.newCall(Request.Builder().url("${baseUrl()}/dnd/busy").post(body).build()).execute()
+            gson.fromJson(resp.body?.string() ?: "{}", JsonObject::class.java).get("ok")?.asBoolean ?: false
+        }
+    }
+
+    // ── Busy mode ──────────────────────────────────────────────────
+    suspend fun getBusyStatus(): Result<BusyStatus> = withContext(Dispatchers.IO) {
+        runCatching {
+            val resp = client.newCall(Request.Builder().url("${baseUrl()}/busy").build()).execute()
+            val obj  = gson.fromJson(resp.body?.string() ?: "{}", JsonObject::class.java)
+            BusyStatus(
+                active  = obj.get("active")?.asBoolean ?: false,
+                reason  = obj.get("reason")?.asString ?: "",
+                persona = obj.get("persona")?.asString ?: "",
+            )
+        }
+    }
+
+    suspend fun toggleBusy(action: String, reason: String = "manual"): Result<BusyStatus> = withContext(Dispatchers.IO) {
+        runCatching {
+            val body = gson.toJson(mapOf("action" to action, "reason" to reason, "duration_min" to 60))
+                .toRequestBody("application/json".toMediaType())
+            val resp = client.newCall(Request.Builder().url("${baseUrl()}/busy").post(body).build()).execute()
+            val obj  = gson.fromJson(resp.body?.string() ?: "{}", JsonObject::class.java)
+            BusyStatus(
+                active  = obj.get("active")?.asBoolean ?: false,
+                reason  = obj.get("reason")?.asString ?: "",
+                persona = obj.get("persona")?.asString ?: "",
+            )
+        }
+    }
+
+    // ── WhatsApp quick reply (via iZACH bridge) ────────────────────
+    suspend fun waSendMessage(number: String, text: String, name: String = ""): Result<Boolean> = withContext(Dispatchers.IO) {
+        runCatching {
+            val body = gson.toJson(mapOf("number" to number, "text" to text, "name" to name))
+                .toRequestBody("application/json".toMediaType())
+            val resp = client.newCall(
+                Request.Builder().url("${baseUrl()}/whatsapp/send").post(body).withN8nToken().build()
+            ).execute()
+            gson.fromJson(resp.body?.string() ?: "{}", JsonObject::class.java).get("ok")?.asBoolean ?: false
+        }
+    }
+
+    suspend fun waAiDraft(from: String, message: String): Result<String> = withContext(Dispatchers.IO) {
+        runCatching {
+            val body = gson.toJson(mapOf("from" to from, "message" to message, "lang_hint" to "hinglish"))
+                .toRequestBody("application/json".toMediaType())
+            val resp = client.newCall(
+                Request.Builder().url("${baseUrl()}/ai/respond").post(body).withN8nToken().build()
+            ).execute()
+            val obj = gson.fromJson(resp.body?.string() ?: "{}", JsonObject::class.java)
+            obj.get("reply")?.asString ?: ""
+        }
+    }
+
+    // ── PC power actions (Phase 2) ─────────────────────────────────
+    suspend fun pcPower(action: String): Result<String> = withContext(Dispatchers.IO) {
+        runCatching {
+            // Map action → natural language command
+            val cmd = when (action) {
+                "lock"     -> "lock the pc"
+                "sleep"    -> "sleep the pc"
+                "shutdown" -> "shutdown the pc"
+                "restart"  -> "restart the pc"
+                else       -> action
+            }
+            val body = """{"text":${gson.toJson(cmd)}}""".toRequestBody("application/json".toMediaType())
+            val resp = client.newCall(Request.Builder().url("${baseUrl()}/command").post(body).build()).execute()
+            val obj  = gson.fromJson(resp.body?.string() ?: "{}", JsonObject::class.java)
+            obj.get("message")?.asString ?: obj.get("response")?.asString ?: "Done."
+        }
+    }
+
     fun saveBackendUrl(url: String) = prefs.edit().putString("backend_url", url).apply()
     fun saveWsHost(host: String) = prefs.edit().putString("ws_host", host).apply()
+
+    // ── Process manager ────────────────────────────────────────────
+    suspend fun getProcesses(baseUrl: String = baseUrl()): Result<List<com.izach.android.model.ProcessInfo>> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val resp    = client.newCall(Request.Builder().url("$baseUrl/processes").build()).execute()
+                val bodyStr = resp.body?.string() ?: "[]"
+                // Backend may return a raw JSON array OR {"processes":[...]}
+                val arr: JsonArray = try {
+                    val obj = gson.fromJson(bodyStr, JsonObject::class.java)
+                    obj.getAsJsonArray("processes") ?: JsonArray()
+                } catch (_: Exception) {
+                    try { gson.fromJson(bodyStr, JsonArray::class.java) } catch (_: Exception) { JsonArray() }
+                }
+                arr.map { el ->
+                    val o = el.asJsonObject
+                    com.izach.android.model.ProcessInfo(
+                        pid      = o.get("pid")?.asInt ?: 0,
+                        name     = o.get("name")?.asString ?: "unknown",
+                        cpu      = o.get("cpu")?.asFloat ?: 0f,
+                        memoryMb = o.get("memory_mb")?.asFloat ?: 0f,
+                    )
+                }
+            }
+        }
+
+    suspend fun killProcess(pid: Int, baseUrl: String = baseUrl()): Result<Unit> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val body = """{"pid":$pid}""".toRequestBody("application/json".toMediaType())
+                client.newCall(Request.Builder().url("$baseUrl/kill_process").post(body).build()).execute()
+                Unit
+            }
+        }
+
+    // ── AlliedNode 2 (secondary PC, separate iZACH instance) ──────
+    fun alliedBaseUrl(): String =
+        prefs.getString("allied_url", "http://192.168.1.101:5050") ?: "http://192.168.1.101:5050"
+
+    fun saveAlliedUrl(url: String) = prefs.edit().putString("allied_url", url).apply()
+
+    suspend fun getAlliedStatus(): Result<com.izach.android.model.SystemStatus> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val url = alliedBaseUrl()
+                val resp = client.newCall(Request.Builder().url("$url/status").build()).execute()
+                val obj  = gson.fromJson(resp.body?.string() ?: "{}", JsonObject::class.java)
+                com.izach.android.model.SystemStatus(
+                    cpu        = obj.get("cpu")?.asFloat ?: 0f,
+                    ram        = obj.get("ram")?.asFloat ?: 0f,
+                    gpu        = obj.get("gpu")?.asFloat ?: 0f,
+                    procCpu    = obj.get("proc_cpu")?.asFloat ?: 0f,
+                    procMem    = obj.get("proc_mem")?.asFloat ?: 0f,
+                    ramUsedGb  = obj.get("ram_used_gb")?.asFloat ?: 0f,
+                    ramTotalGb = obj.get("ram_total_gb")?.asFloat ?: 0f,
+                    whatsapp   = obj.get("whatsapp")?.asBoolean ?: false,
+                    mma        = obj.get("mma")?.asBoolean ?: false,
+                )
+            }
+        }
+
+    suspend fun alliedPower(action: String): Result<String> = withContext(Dispatchers.IO) {
+        runCatching {
+            val cmd = when (action) {
+                "lock"     -> "lock the pc"
+                "sleep"    -> "sleep the pc"
+                "shutdown" -> "shutdown the pc"
+                "restart"  -> "restart the pc"
+                else       -> action
+            }
+            val body = """{"text":${gson.toJson(cmd)}}""".toRequestBody("application/json".toMediaType())
+            val resp = client.newCall(Request.Builder().url("${alliedBaseUrl()}/command").post(body).build()).execute()
+            val obj  = gson.fromJson(resp.body?.string() ?: "{}", JsonObject::class.java)
+            obj.get("message")?.asString ?: obj.get("response")?.asString ?: "Done."
+        }
+    }
+
+    suspend fun alliedVolume(level: Int): Result<Unit> = withContext(Dispatchers.IO) {
+        runCatching {
+            val body = """{"text":"set volume to $level percent"}""".toRequestBody("application/json".toMediaType())
+            client.newCall(Request.Builder().url("${alliedBaseUrl()}/command").post(body).build()).execute()
+            Unit
+        }
+    }
+
+    suspend fun alliedBrightness(level: Int): Result<Unit> = withContext(Dispatchers.IO) {
+        runCatching {
+            val body = """{"text":"set brightness to $level percent"}""".toRequestBody("application/json".toMediaType())
+            client.newCall(Request.Builder().url("${alliedBaseUrl()}/command").post(body).build()).execute()
+            Unit
+        }
+    }
+
+    suspend fun alliedScreenshot(): Result<String> = withContext(Dispatchers.IO) {
+        runCatching {
+            val resp = client.newCall(
+                Request.Builder().url("${alliedBaseUrl()}/screenshot/capture")
+                    .post("".toRequestBody(null)).build()
+            ).execute()
+            val obj = gson.fromJson(resp.body?.string() ?: "{}", JsonObject::class.java)
+            obj.get("filename")?.asString ?: error("No filename")
+        }
+    }
+
+    suspend fun alliedTerminalCmd(cmd: String, baseUrl: String = alliedBaseUrl()): Result<String> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val body = """{"text":${gson.toJson(cmd)}}""".toRequestBody("application/json".toMediaType())
+                val resp = client.newCall(Request.Builder().url("$baseUrl/command").post(body).build()).execute()
+                val obj  = gson.fromJson(resp.body?.string() ?: "{}", JsonObject::class.java)
+                obj.get("message")?.asString ?: obj.get("response")?.asString ?: "Done."
+            }
+        }
+
+    // ── Auto-DND schedule ──────────────────────────────────────────
+    suspend fun pushDndSchedule(enabled: Boolean, startHour: Int, startMin: Int, endHour: Int, endMin: Int): Result<Unit> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val start = "%02d:%02d".format(startHour, startMin)
+                val end   = "%02d:%02d".format(endHour, endMin)
+                val body  = gson.toJson(mapOf("enabled" to enabled, "start" to start, "end" to end))
+                    .toRequestBody("application/json".toMediaType())
+                client.newCall(Request.Builder().url("${baseUrl()}/dnd/schedule").post(body).build()).execute()
+                Unit
+            }
+        }
 }

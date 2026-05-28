@@ -58,10 +58,39 @@
             android:name=".QuickShortcutsActivity"
             android:exported="false" />
 
+        <activity
+            android:name=".AlliedNodeActivity"
+            android:exported="false" />
+
+        <activity
+            android:name=".TerminalActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize" />
+
         <service
             android:name=".FloatingMicService"
             android:exported="false"
             android:foregroundServiceType="microphone" />
+
+        <receiver
+            android:name=".widget.DndStatusWidget"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/dnd_status_widget_info" />
+        </receiver>
+
+        <receiver
+            android:name=".DndActionReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.izach.android.DND_HANDLE" />
+                <action android:name="com.izach.android.DND_BUSY" />
+            </intent-filter>
+        </receiver>
 
         <receiver
             android:name=".widget.PCStatusWidget"

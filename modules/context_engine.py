@@ -1,3 +1,4 @@
+import subprocess
 import pygetwindow as gw
 import win32gui
 import win32con
@@ -69,17 +70,56 @@ def launch_app_via_search(app_name):
     time.sleep(0.4)
     pyautogui.press('enter')
 
+import os as _os
+
+_SPOTIFY_EXE = _os.path.join(_os.environ.get("APPDATA", ""), "Spotify", "Spotify.exe")
+
+_APP_DIRECT_LAUNCH = {
+    "file explorer": ("explorer.exe", "File Explorer"),
+    "explorer":      ("explorer.exe", "File Explorer"),
+    "notepad":       ("notepad.exe",  "Notepad"),
+    "paint":         ("mspaint.exe",  "Paint"),
+    "calculator":    ("calc.exe",     "Calculator"),
+    "wordpad":       ("wordpad.exe",  "WordPad"),
+    "task manager":  ("taskmgr.exe",  "Task Manager"),
+    "control panel": ("control.exe",  "Control Panel"),
+    "spotify":       (_SPOTIFY_EXE,   "Spotify"),
+}
+
 def handle_open_with_position(app_name, position=None):
     """
     Core Logic:
-    1. Check if running. 
+    1. Check if running.
     2. If not, launch.
     3. Wait for window to exist.
     4. Apply snap if position is provided.
     """
+    app_lower = app_name.lower().strip()
+
+    # Direct-launch known system apps — bypass Windows Search
+    if app_lower in _APP_DIRECT_LAUNCH:
+        exe, window_title = _APP_DIRECT_LAUNCH[app_lower]
+        windows = [w for w in gw.getAllWindows() if window_title.lower() in w.title.lower() and w.title]
+        if not windows:
+            import os as _os2
+            if _os2.path.isfile(exe):
+                subprocess.Popen([exe])
+            else:
+                launch_app_via_search(window_title)
+            target_window = wait_for_window(window_title)
+        else:
+            target_window = windows[0]
+        if not target_window:
+            return f"Opened {app_name}."
+        if position:
+            snap_window(target_window, position)
+            return f"Opening {app_name} snapped to the {position}."
+        safe_activate(target_window)
+        return f"Opened {app_name}."
+
     # 1. Launch if not running
     windows = [w for w in gw.getWindowsWithTitle(app_name) if w.title != ""]
-    
+
     if not windows:
         launch_app_via_search(app_name)
         target_window = wait_for_window(app_name)

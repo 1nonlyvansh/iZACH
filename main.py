@@ -2,11 +2,40 @@ import os
 import sys
 os.environ.setdefault("PYTHONIOENCODING", "utf-8")  # prevent DeepFace emoji crash on Windows
 
+# ── Crash handler — MUST be first so it catches every later import/init crash.
+# Persists everything (native crashes, uncaught exceptions, print output, signals)
+# to logs/crash.log + logs/console.log. CMD window also stays open on crash.
+try:
+    from modules.crash_handler import install as _install_crash_handler
+    _install_crash_handler()
+except Exception as _ch_err:
+    sys.stderr.write(f"[crash_handler] install failed: {_ch_err}\n")
+
 # Suppress TensorFlow / oneDNN noise before any imports trigger TF load
 os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "3")        # hide C++ TF logs
 os.environ.setdefault("TF_ENABLE_ONEDNN_OPTS", "0")       # disable oneDNN ops (eliminates the port.cc warning)
 os.environ.setdefault("ABSL_MIN_LOG_LEVEL", "3")           # suppress absl::InitializeLog warnings
 os.environ.setdefault("GRPC_VERBOSITY", "ERROR")           # suppress gRPC noise
+
+# ── Numba / LLVM safety — MUST be set before any numba/librosa import ─────
+# SIGABRT root cause: numba JIT compiles on a thread while another thread
+# does SSL/malloc (Spotify API) — LLVM's multi-threaded allocator conflicts.
+# workqueue = single-threaded LLVM backend → no allocator race → no SIGABRT.
+os.environ.setdefault("NUMBA_THREADING_LAYER", "workqueue")
+# Cache compiled bitcode to disk — skip full JIT recompile on subsequent starts.
+os.environ.setdefault("NUMBA_CACHE_DIR", os.path.join(os.getcwd(), ".numba_cache"))
+# Limit numba to 1 thread — prevents parallel LLVM workers racing with CPython GIL.
+os.environ.setdefault("NUMBA_NUM_THREADS", "1")
+# Keep OMP/MKL single-threaded as well (same reason).
+os.environ.setdefault("OMP_NUM_THREADS", "1")
+os.environ.setdefault("MKL_NUM_THREADS", "1")
+
+# Suppress OpenCV VIDEOIO/DSHOW/MSMF/FFMPEG C++ backend warnings.
+# Must be set BEFORE cv2 DLL loads — setting it inside camera_vision.py is too late
+# if cv2 was already imported by another module.
+os.environ["OPENCV_LOG_LEVEL"] = "SILENT"      # suppress all OpenCV C++ logs
+os.environ["OPENCV_VIDEOIO_DEBUG"] = "0"       # extra safety for VIDEOIO backend noise
+os.environ["OPENCV_FFMPEG_LOGLEVEL"] = "-8"    # FFMPEG plugin ignores OPENCV_LOG_LEVEL — silence separately
 
 import subprocess
 import threading
@@ -18,9 +47,12 @@ import pygame
 import re
 import speech_recognition as sr
 import pyautogui
+from modules.audio_init_lock import PYAUDIO_INIT_LOCK
 from dotenv import load_dotenv
 from logging_config import setup_logging
 setup_logging()
+import logging as _logging
+logger = _logging.getLogger(__name__)
 
 
 # --- 1. MODULE IMPORTS ---
@@ -78,14 +110,28 @@ orchestrator     = None
 agent_orch       = None   # OrchestratorAgent — intent classifier
 _speaking        = False
 
-ai_manager  = AIProvider(os.getenv("GROQ_API_KEY", GROQ_KEY), GEMINI_KEYS)
-spotify_api = SpotifyController()
+# ── Subprocess guard ───────────────────────────────────────────
+# multiprocessing.spawn re-imports main.py inside child processes (face_auth
+# subprocess workers). Heavy module-level init (audio device, Spotify auth,
+# Flask app, etc.) MUST NOT run in the child — it conflicts with the parent
+# and can take the backend offline.
+import multiprocessing as _mp
+_IS_SUBPROCESS = _mp.current_process().name != "MainProcess"
 
-try:
-    pygame.mixer.init()
-    print("[SYSTEM] Audio Mixer Initialized.")
-except Exception as e:
-    print(f"[CRITICAL] Mixer Init Failed: {e}")
+if _IS_SUBPROCESS:
+    # Provide minimal stubs so any incidental references don't NameError;
+    # subprocess workers never actually call these.
+    ai_manager  = None
+    spotify_api = None
+else:
+    ai_manager  = AIProvider(os.getenv("GROQ_API_KEY", GROQ_KEY), GEMINI_KEYS)
+    spotify_api = SpotifyController()
+
+    try:
+        pygame.mixer.init()
+        print("[SYSTEM] Audio Mixer Initialized.")
+    except Exception as e:
+        print(f"[CRITICAL] Mixer Init Failed: {e}")
 
 # --- 4. NEURAL TTS WORKER ---
 
@@ -296,6 +342,16 @@ def speak(text, tone: str = "casual"):
         broadcast({"type": "chat", "sender": "iZACH", "text": display_text, "ts": _ts})
     except Exception:
         pass
+
+    # ── DND gate: suppress audio when Do Not Disturb is active ──
+    try:
+        from modules import dnd_mode as _dnd
+        if _dnd.is_active():
+            logger.debug("[DND] speak() suppressed — DND active.")
+            return   # text already broadcast to UI above; no audio
+    except Exception:
+        pass
+
     global _last_izach_question, _question_expires_at
     stripped = display_text.rstrip(" .!,")
     if stripped.endswith("?"):
@@ -342,6 +398,15 @@ def get_ai_response(query):
     personal_mem = get_memory_as_context()
     if personal_mem:
         parts.append(personal_mem)
+
+    # Smart memory — profile facts + behavioral instructions
+    try:
+        from modules.smart_memory import get_full_context as _sm_ctx
+        sm_ctx = _sm_ctx()
+        if sm_ctx:
+            parts.append(sm_ctx)
+    except Exception:
+        pass
 
     history = cm.get_history_as_prompt(6)
     if history:
@@ -410,9 +475,10 @@ def set_mic_device(index):
 
 def _init_mic():
     global _mic
-    _mic = sr.Microphone(device_index=_mic_device_index)
-    with _mic as source:
-        _recognizer.adjust_for_ambient_noise(source, duration=1.5)
+    with PYAUDIO_INIT_LOCK:
+        _mic = sr.Microphone(device_index=_mic_device_index)
+        with _mic as source:
+            _recognizer.adjust_for_ambient_noise(source, duration=1.5)
     print(f"[MIC] Calibrated. Energy threshold: {_recognizer.energy_threshold:.0f}")
 
 
@@ -477,13 +543,14 @@ def listen():
             speaker = identify_speaker(audio)   # audio is sr.AudioData
             if speaker is None:
                 # Too quiet / distant — background audio, ignore
+                print(f"[LISTEN] Diarization dropped (low energy/background). Text was: {text!r}")
                 return "none"
             if speaker not in (_OWNER_KEY, "unknown"):
                 # Known non-owner speaker in the room
                 print(f"[DIARIZATION] Speaker: {speaker}")
                 text = f"[{speaker.title()}] {text}"
-        except Exception:
-            pass   # diarization is optional
+        except Exception as _dia_err:
+            pass   # diarization is optional; errors don't block
 
         # Inline wake word check — single pyaudio stream, no conflict
         try:
@@ -491,18 +558,27 @@ def listen():
             det = get_wake_detector()
             if det is not None:
                 if det.check_text(text):
-                    print(f"[WAKE WORD] Heard: {text}")
+                    print(f"[WAKE WORD] Activated by: {text!r}")
                     det.activate()
                     return "none"
                 if not det.is_active():
+                    print(f"[WAKE WORD] Blocked (say 'Hey iZACH' first). Text: {text!r}")
                     return "none"
         except Exception:
             pass
 
+        print(f"[HEARD] {text!r}")
         return text
     except sr.WaitTimeoutError:
         return "none"
-    except Exception:
+    except sr.UnknownValueError:
+        # Google could not understand audio (mumble, noise, etc.)
+        return "none"
+    except sr.RequestError as _req_err:
+        print(f"[LISTEN] Google STT error: {_req_err}")
+        return "none"
+    except Exception as _listen_err:
+        print(f"[LISTEN] Unexpected error: {_listen_err}")
         return "none"
 
 
@@ -539,6 +615,20 @@ def start_brain(ui=None):
     global app, orchestrator, agent_orch, chain_engine
     app = ui  # None when Electron UI is used
 
+    # 0. Pre-warm ChromaDB / ONNX model in a BACKGROUND thread.
+    #    The init lock inside rag_memory prevents concurrent downloads.
+    #    Voice loop starts immediately; RAG calls block only if model isn't
+    #    ready yet (usually cached after first run — < 1s wait).
+    def _rag_warmup_bg():
+        try:
+            from modules import rag_memory as _rag
+            _rag.warmup()
+        except Exception as _rag_err:
+            print(f"[RAG] Warmup skipped: {_rag_err}")
+    import threading as _threading
+    _threading.Thread(target=_rag_warmup_bg, daemon=True, name="RAG-Warmup").start()
+    print("[RAG] ChromaDB warmup started in background.")
+
     # 1. Background services
     orchestrator = task_manager.TaskOrchestrator()
     orchestrator.start_task_worker()
@@ -553,6 +643,13 @@ def start_brain(ui=None):
     guard.start()
     reminder_engine = scheduler.TaskScheduler(speak, orchestrator)
     reminder_engine.start()
+
+    # Automation memory scheduler (APScheduler for recurring memory jobs)
+    try:
+        from modules.automation_scheduler import init as _init_auto_sched
+        _init_auto_sched(speak)
+    except Exception as _ase:
+        print(f"[Main] AutoScheduler init skipped: {_ase}")
 
     # 3. Memory & Chain
     ctx_mgr    = ContextManager()
@@ -766,12 +863,29 @@ def start_brain(ui=None):
     except Exception as _ne:
         print(f"[NETWORK] Init failed: {_ne}")
 
-    print("[FACE AUTH] Lazy-loaded — activates on first face command.")
+    # Init face_auth at startup so Settings UI face-enroll button works
+    # without needing a voice command first. face_auth.py only imports stdlib
+    # at module level — dlib stays in the subprocess workers.
+    try:
+        from modules import face_auth as _face_auth
+        _face_auth.init(speak)
+        print("[FACE AUTH] Initialized — speak handler bound.")
+    except Exception as _fae:
+        print(f"[FACE AUTH] Init failed: {_fae}")
 
     try:
-        from modules.voice_id import init as _vi_init
+        from modules.voice_id import init as _vi_init, warmup as _vi_warmup
         _vi_init(speak)
-        print("[VOICE ID] Initialized.")
+        # Warm up resemblyzer + librosa + numba on a dedicated thread spawned
+        # from the main process. JIT compiles ~10-20 s on first run; must
+        # NOT happen in a Flask worker thread or LLVM aborts the process.
+        def _voice_warmup_bg():
+            try:
+                _vi_warmup()
+            except Exception as _vwe:
+                print(f"[VOICE ID] Warmup background error: {_vwe}")
+        threading.Thread(target=_voice_warmup_bg, daemon=True, name="VoiceID-Warmup").start()
+        print("[VOICE ID] Initialized — warmup running in background.")
     except Exception as _vie:
         print(f"[VOICE ID] Init failed: {_vie}")
 
@@ -817,6 +931,22 @@ def start_brain(ui=None):
         print("[DIARIZATION] Speaker diarization initialized.")
     except Exception as _sde:
         print(f"[DIARIZATION] Init failed: {_sde}")
+
+    try:
+        from modules import dnd_mode as _dnd_mod
+        from modules.ws_bridge import broadcast as _ws_broadcast
+        _dnd_mod.init(speak_fn=speak, broadcast_fn=_ws_broadcast)
+        print("[DND] Do Not Disturb engine initialized.")
+    except Exception as _dnde:
+        print(f"[DND] Init failed: {_dnde}")
+
+    try:
+        from modules import busy_mode as _busy_mod
+        from modules.ws_bridge import broadcast as _ws_broadcast2
+        _busy_mod.init(speak_fn=speak, broadcast_fn=_ws_broadcast2)
+        print("[BUSY] Busy mode engine initialized.")
+    except Exception as _busye:
+        print(f"[BUSY] Init failed: {_busye}")
 
     try:
         from modules.synonym_learner import stats as _sl_stats
@@ -882,6 +1012,63 @@ def start_brain(ui=None):
 
         while not EXIT_SIGNAL:
             try:
+                # Pause main voice loop while voice enrollment is recording —
+                # otherwise the user's enrollment phrase gets captured by both
+                # the enrollment recorder AND the voice loop, which then
+                # routes it as a command. Includes a safety reset so a stuck
+                # _enrolling flag never silently kills the voice loop.
+                try:
+                    from modules import voice_id as _vid
+                    if getattr(_vid, "_enrolling", False):
+                        # Track when enrollment flag first observed True so we
+                        # can detect a stuck state and reset it.
+                        if not hasattr(voice_loop, "_enroll_pause_start"):
+                            voice_loop._enroll_pause_start = time.time()
+                            print("[VOICE LOOP] Paused — voice enrollment in progress.")
+                        elif time.time() - voice_loop._enroll_pause_start > 90:
+                            print("[VOICE LOOP] Enrollment flag stuck > 90 s — forcing reset.")
+                            _vid._enrolling = False
+                            voice_loop._enroll_pause_start = None
+                        time.sleep(0.5)
+                        continue
+                    elif hasattr(voice_loop, "_enroll_pause_start") and voice_loop._enroll_pause_start:
+                        print("[VOICE LOOP] Resumed — voice enrollment cleared.")
+                        voice_loop._enroll_pause_start = None
+                except Exception:
+                    pass
+                # Also pause while face enrollment subprocess is using the camera/mic
+                try:
+                    from modules import face_auth as _fa
+                    if getattr(_fa, "_enrolling", False):
+                        if not hasattr(voice_loop, "_face_pause_start"):
+                            voice_loop._face_pause_start = time.time()
+                            print("[VOICE LOOP] Paused — face enrollment in progress.")
+                        elif time.time() - voice_loop._face_pause_start > 120:
+                            print("[VOICE LOOP] Face enroll flag stuck > 120 s — forcing reset.")
+                            _fa._enrolling = False
+                            voice_loop._face_pause_start = None
+                        time.sleep(0.5)
+                        continue
+                    elif hasattr(voice_loop, "_face_pause_start") and voice_loop._face_pause_start:
+                        voice_loop._face_pause_start = None
+                except Exception:
+                    pass
+
+                # ── DND: pause mic while Do Not Disturb is active ──
+                try:
+                    from modules import dnd_mode as _dnd
+                    if _dnd.is_active():
+                        if not getattr(voice_loop, "_dnd_logged", False):
+                            print("[VOICE LOOP] Paused — DND mode active.")
+                            voice_loop._dnd_logged = True
+                        time.sleep(0.5)
+                        continue
+                    elif getattr(voice_loop, "_dnd_logged", False):
+                        print("[VOICE LOOP] Resumed — DND mode off.")
+                        voice_loop._dnd_logged = False
+                except Exception:
+                    pass
+
                 query = listen()
                 if query == "none":
                     if _wake_detector and _wake_detector.is_active():

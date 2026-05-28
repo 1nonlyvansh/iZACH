@@ -53,6 +53,18 @@ def process_message(text: str, sender: str, msg_id: str = None, timestamp: str =
     ).start()
 
 
+def _is_event_past(extracted: dict) -> bool:
+    date_str = extracted.get("date")
+    time_str = extracted.get("time") or "00:00"
+    if not date_str:
+        return False
+    try:
+        event_dt = datetime.strptime(f"{date_str} {time_str}", "%Y-%m-%d %H:%M").replace(tzinfo=IST)
+        return event_dt < datetime.now(tz=IST)
+    except Exception:
+        return False
+
+
 def _process(text: str, sender: str, msg_id: str, timestamp: str):
     if not _groq_client:
         return
@@ -69,6 +81,14 @@ def _process(text: str, sender: str, msg_id: str, timestamp: str):
     is_event = extracted.get("is_event", False)
     is_cancellation = extracted.get("is_cancellation", False)
     is_reschedule = extracted.get("is_reschedule", False)
+
+    if is_event and not is_cancellation and not is_reschedule:
+        if _is_event_past(extracted):
+            logger.info(
+                f"[EventExtractor] Event already passed "
+                f"({extracted.get('date')} {extracted.get('time')}), skipping: {text[:60]}"
+            )
+            return
 
     if is_cancellation:
         _handle_cancellation(extracted, sender)
@@ -122,6 +142,7 @@ Rules:
 
 Return ONLY the JSON. No explanation, no markdown, no code blocks."""
 
+    raw = ""
     try:
         resp = _groq_client.chat.completions.create(
             model="llama-3.3-70b-versatile",
@@ -157,6 +178,18 @@ def _ask_about_pending():
         if not _pending_events:
             return
         extracted, sender, _ = _pending_events[0]
+
+    # Auto-skip if event time has already passed while it sat in queue
+    if _is_event_past(extracted):
+        with _pending_lock:
+            if _pending_events:
+                _pending_events.pop(0)
+        logger.info(
+            f"[EventExtractor] Queued event already past "
+            f"({extracted.get('date')} {extracted.get('time')}), auto-skipping."
+        )
+        _ask_about_pending()
+        return
 
     title = extracted.get("title") or "Untitled Event"
     date_str = extracted.get("date")

@@ -5,6 +5,9 @@ import android.app.AlertDialog
 import android.app.DownloadManager
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
@@ -22,16 +25,20 @@ import androidx.biometric.BiometricPrompt
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
+import androidx.core.net.toUri
 import androidx.core.view.GravityCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.izach.android.databinding.ActivityMainBinding
+import com.izach.android.model.DndAlert
 import com.izach.android.model.Message
 import com.izach.android.network.IZACHApi
 import com.izach.android.network.IZACHWebSocket
+import com.izach.android.widget.DndStatusWidget
 import com.izach.android.ui.ChatAdapter
+import com.izach.android.ui.DndQueueBottomSheet
 import com.izach.android.ui.DownloadEvent
 import com.izach.android.ui.DownloadMonitorBottomSheet
 import com.izach.android.ui.FilePickerBottomSheet
@@ -40,10 +47,8 @@ import com.izach.android.ui.NotificationHistoryBottomSheet
 import com.izach.android.ui.QuickCommandBar
 import com.izach.android.ui.TaskEvent
 import com.izach.android.ui.TaskStreamBottomSheet
+import com.izach.android.ui.WaQuickReplyBottomSheet
 import kotlinx.coroutines.launch
-import androidx.core.net.toUri
-import android.content.ClipboardManager
-import android.content.ClipData
 import java.util.Locale
 
 class MainActivity : AppCompatActivity() {
@@ -67,9 +72,18 @@ class MainActivity : AppCompatActivity() {
     private val activeDownloads = mutableMapOf<String, DownloadEvent>()
     private var activeDownloadCount = 0
 
+    // DND / Busy state
+    private val dndAlerts = mutableListOf<DndAlert>()
+    private var dndActive = false
+    private var busyActive = false
+    private var dndSheet: DndQueueBottomSheet? = null
+    private var dndAlertNotifCounter = 0
+
     companion object {
-        private const val NOTIF_CHANNEL_ID = "izach_pc_events"
-        private const val NOTIF_ID_BASE = 1000
+        private const val NOTIF_CHANNEL_ID     = "izach_pc_events"
+        private const val NOTIF_CHANNEL_DND    = "izach_dnd_alerts"
+        private const val NOTIF_ID_BASE        = 1000
+        private const val NOTIF_ID_DND_BASE    = 3000
         private var notifCounter = 0
     }
 
@@ -100,8 +114,10 @@ class MainActivity : AppCompatActivity() {
         setupWebSocket()
         setupInput()
         setupSidebar()
+        setupDndBusy()
         loadHistory()
         checkStatus()
+        pollDndBusyStatus()
 
         binding.btnBannerSetup.setOnClickListener {
             startActivity(Intent(this, SettingsActivity::class.java))
@@ -136,12 +152,18 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun createNotificationChannel() {
-        val channel = NotificationChannel(
-            NOTIF_CHANNEL_ID, "iZACH PC Events",
-            NotificationManager.IMPORTANCE_DEFAULT
-        ).apply { description = "Notifications from your PC via iZACH" }
-        (getSystemService(NOTIFICATION_SERVICE) as NotificationManager)
-            .createNotificationChannel(channel)
+        val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+        nm.createNotificationChannel(
+            NotificationChannel(NOTIF_CHANNEL_ID, "iZACH PC Events", NotificationManager.IMPORTANCE_DEFAULT)
+                .apply { description = "Notifications from your PC via iZACH" }
+        )
+        nm.createNotificationChannel(
+            NotificationChannel(NOTIF_CHANNEL_DND, "iZACH DND Alerts", NotificationManager.IMPORTANCE_HIGH)
+                .apply {
+                    description = "Do Not Disturb alerts — messages & calls intercepted by iZACH"
+                    enableVibration(true)
+                }
+        )
     }
 
     private fun setupRecyclerView() {
@@ -219,6 +241,24 @@ class MainActivity : AppCompatActivity() {
                 binding.sidebarBellBadge.visibility = View.VISIBLE
 
                 if (isCategoryEnabled(category)) showSystemNotification(title, body)
+            }
+        }
+
+        ws.onDndAlert = { alert ->
+            runOnUiThread {
+                val idx = dndAlerts.indexOfFirst { it.id == alert.id }
+                if (idx >= 0) dndAlerts[idx] = alert else dndAlerts.add(0, alert)
+                dndSheet?.upsertAlert(alert)
+                updateDndBadge()
+                if (alert.action == null) showDndAlertNotification(alert, dndAlerts.indexOfFirst { it.id == alert.id })
+            }
+        }
+
+        ws.onDndStatus = { status ->
+            runOnUiThread {
+                dndActive = status.active
+                updateDndChip()
+                if (status.queueCount > 0) updateDndBadge()
             }
         }
 
@@ -309,6 +349,8 @@ class MainActivity : AppCompatActivity() {
             binding.drawerLayout.post { action() }
         }
 
+        binding.sidebarDnd.setOnClickListener { closeThen { openDndSheet() } }
+
         binding.sidebarQuick.setOnClickListener {
             closeThen { QuickCommandBar().show(supportFragmentManager, "quick_cmds") }
         }
@@ -367,6 +409,10 @@ class MainActivity : AppCompatActivity() {
             closeThen { startActivity(Intent(this, SpotifyRemoteActivity::class.java)) }
         }
 
+        binding.sidebarAlliedNode.setOnClickListener {
+            closeThen { startActivity(Intent(this, AlliedNodeActivity::class.java)) }
+        }
+
         binding.sidebarDashboard.setOnClickListener {
             closeThen { startActivity(Intent(this, SystemDashboardActivity::class.java)) }
         }
@@ -378,6 +424,193 @@ class MainActivity : AppCompatActivity() {
         binding.sidebarSettings.setOnClickListener {
             closeThen { startActivity(Intent(this, SettingsActivity::class.java)) }
         }
+    }
+
+    private fun setupDndBusy() {
+        binding.chipDnd.setOnClickListener { openDndSheet() }
+        binding.chipBusy.setOnClickListener { showBusyToggleDialog() }
+    }
+
+    private fun pollDndBusyStatus() {
+        lifecycleScope.launch {
+            api.getDndStatus().onSuccess { s ->
+                dndActive = s.active
+                updateDndChip()
+            }
+            api.getBusyStatus().onSuccess { s ->
+                busyActive = s.active
+                updateBusyChip()
+            }
+            // Load existing queue
+            api.getDndQueue().onSuccess { queue ->
+                dndAlerts.clear()
+                dndAlerts.addAll(queue.reversed()) // newest first
+                updateDndBadge()
+            }
+        }
+    }
+
+    private fun updateDndChip() {
+        val active = dndActive
+        binding.chipDnd.text = if (active) "DND ON" else "DND"
+        binding.chipDnd.setTextColor(if (active) 0xFFff8c00.toInt() else 0xFF3a6070.toInt())
+        val bg = if (active) "#40ff8c00" else "#10ff8c00"
+        binding.chipDnd.setBackgroundColor(android.graphics.Color.parseColor(bg))
+        pushWidgetState()
+    }
+
+    private fun updateBusyChip() {
+        val active = busyActive
+        binding.chipBusy.text = if (active) "BUSY ON" else "BUSY"
+        binding.chipBusy.setTextColor(if (active) 0xFFffb300.toInt() else 0xFF3a6070.toInt())
+        val bg = if (active) "#40ffb300" else "#10ffb300"
+        binding.chipBusy.setBackgroundColor(android.graphics.Color.parseColor(bg))
+        pushWidgetState()
+    }
+
+    private fun pushWidgetState() {
+        DndStatusWidget.pushState(
+            this,
+            dndActive,
+            dndAlerts.count { it.action == null },
+            busyActive
+        )
+    }
+
+    private fun updateDndBadge() {
+        val unhandled = dndAlerts.count { it.action == null }
+        if (unhandled > 0) {
+            binding.sidebarDndBadge.text = "$unhandled"
+            binding.sidebarDndBadge.visibility = View.VISIBLE
+        } else {
+            binding.sidebarDndBadge.visibility = View.GONE
+        }
+    }
+
+    private fun openDndSheet() {
+        binding.drawerLayout.closeDrawer(GravityCompat.START)
+        val sheet = DndQueueBottomSheet()
+        dndSheet = sheet
+        sheet.preload(dndAlerts)
+
+        sheet.onRefresh = {
+            lifecycleScope.launch {
+                api.getDndQueue().onSuccess { queue ->
+                    dndAlerts.clear()
+                    dndAlerts.addAll(queue.reversed())
+                    sheet.preload(dndAlerts)
+                    updateDndBadge()
+                }
+            }
+        }
+
+        sheet.onHandle = { alert, _ ->
+            val idx = dndAlerts.indexOfFirst { it.id == alert.id }
+            if (idx >= 0) {
+                lifecycleScope.launch {
+                    api.dndHandle(idx)
+                        .onSuccess {
+                            val replySheet = WaQuickReplyBottomSheet.newInstance(
+                                alert.from, alert.number, alert.text, api
+                            )
+                            replySheet.onSend = { number, text, name ->
+                                lifecycleScope.launch {
+                                    api.waSendMessage(number, text, name)
+                                        .onSuccess { Toast.makeText(this@MainActivity, "✅ Reply sent!", Toast.LENGTH_SHORT).show() }
+                                        .onFailure { Toast.makeText(this@MainActivity, "Send failed: ${it.message}", Toast.LENGTH_SHORT).show() }
+                                }
+                            }
+                            replySheet.show(supportFragmentManager, "wa_reply")
+                            refreshDndQueue(sheet)
+                        }
+                        .onFailure { Toast.makeText(this@MainActivity, "Handle failed: ${it.message}", Toast.LENGTH_SHORT).show() }
+                }
+            }
+        }
+
+        sheet.onBusy = { alert, _ ->
+            val idx = dndAlerts.indexOfFirst { it.id == alert.id }
+            if (idx >= 0) {
+                lifecycleScope.launch {
+                    api.dndBusy(idx)
+                        .onSuccess {
+                            Toast.makeText(this@MainActivity, "📵 Busy reply sent", Toast.LENGTH_SHORT).show()
+                            refreshDndQueue(sheet)
+                        }
+                        .onFailure { Toast.makeText(this@MainActivity, "Busy failed: ${it.message}", Toast.LENGTH_SHORT).show() }
+                }
+            }
+        }
+
+        sheet.show(supportFragmentManager, "dnd_queue")
+    }
+
+    private fun refreshDndQueue(sheet: DndQueueBottomSheet) {
+        lifecycleScope.launch {
+            api.getDndQueue().onSuccess { queue ->
+                dndAlerts.clear()
+                dndAlerts.addAll(queue.reversed())
+                sheet.preload(dndAlerts)
+                updateDndBadge()
+            }
+        }
+    }
+
+    private fun showBusyToggleDialog() {
+        val action = if (busyActive) "off" else "on"
+        val label  = if (busyActive) "Turn Busy Mode OFF?" else "Turn Busy Mode ON?"
+        val msg    = if (busyActive) "iZACH will stop sending busy auto-replies."
+                     else "iZACH will auto-reply as busy to incoming messages."
+        AlertDialog.Builder(this)
+            .setTitle(label)
+            .setMessage(msg)
+            .setPositiveButton(action.uppercase()) { _, _ ->
+                lifecycleScope.launch {
+                    api.toggleBusy(action, if (action == "on") "Manual" else "")
+                        .onSuccess {
+                            busyActive = !busyActive
+                            updateBusyChip()
+                            Toast.makeText(this@MainActivity,
+                                if (busyActive) "Busy mode ON" else "Busy mode OFF",
+                                Toast.LENGTH_SHORT).show()
+                        }
+                        .onFailure { Toast.makeText(this@MainActivity, "Failed: ${it.message}", Toast.LENGTH_SHORT).show() }
+                }
+            }
+            .setNegativeButton("CANCEL", null)
+            .show()
+    }
+
+    private fun showDndAlertNotification(alert: DndAlert, queueIndex: Int) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
+            != PackageManager.PERMISSION_GRANTED) return
+
+        val isCall = alert.type == "phone_call"
+        val title  = if (isCall) "📞 DND — Call from ${alert.from}" else "💬 DND — Message from ${alert.from}"
+        val body   = if (isCall) "Incoming WhatsApp call blocked" else alert.text.take(120)
+
+        fun makePi(action: String): PendingIntent {
+            val i = Intent(this, DndActionReceiver::class.java).apply {
+                this.action = action
+                putExtra(DndActionReceiver.EXTRA_INDEX, queueIndex)
+            }
+            val flags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            return PendingIntent.getBroadcast(this, queueIndex * 10 + if (action == DndActionReceiver.ACTION_HANDLE) 0 else 1, i, flags)
+        }
+
+        val notif = NotificationCompat.Builder(this, NOTIF_CHANNEL_DND)
+            .setSmallIcon(R.drawable.ic_bell)
+            .setContentTitle(title)
+            .setContentText(body)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setAutoCancel(true)
+            .addAction(0, "✅ HANDLE", makePi(DndActionReceiver.ACTION_HANDLE))
+            .addAction(0, "📵 BUSY",   makePi(DndActionReceiver.ACTION_BUSY))
+            .build()
+
+        (getSystemService(NOTIFICATION_SERVICE) as NotificationManager)
+            .notify(NOTIF_ID_DND_BASE + dndAlertNotifCounter++, notif)
     }
 
     private fun sendCommand(text: String) {
@@ -404,10 +637,10 @@ class MainActivity : AppCompatActivity() {
                 if (cmd.requiresConfirmation && cmd.confirmationToken != null) {
                     showConfirmationDialog(cmd.confirmationToken, cmd.text)
                 } else {
-                    if (!ws.isConnected) {
-                        adapter.add(Message(cmd.text, "iZACH"))
-                        scrollBottom()
-                    }
+                    // Always show HTTP response — backend captures speak() so WS
+                    // doesn't deliver the iZACH reply for /command calls.
+                    adapter.add(Message(cmd.text, "iZACH"))
+                    scrollBottom()
                     if (cmd.action == "open_file_picker") openFilePicker()
                 }
             }.onFailure { err ->
@@ -424,7 +657,7 @@ class MainActivity : AppCompatActivity() {
             .setPositiveButton("CONFIRM") { _, _ ->
                 lifecycleScope.launch {
                     api.confirmCommand(token).onSuccess { cmd ->
-                        if (!ws.isConnected) {
+                        run {
                             adapter.add(Message(cmd.text, "iZACH"))
                             scrollBottom()
                         }

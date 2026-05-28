@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widgetDndRoot"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="#FF071020"
+    android:padding="10dp">
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="iZACH · DND"
+        android:textColor="#FF3a6070"
+        android:textSize="8sp"
+        android:fontFamily="monospace"
+        android:letterSpacing="0.2"
+        android:layout_marginBottom="6dp" />
+
+    <!-- DND status row -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:layout_marginBottom="4dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="📵 DND "
+            android:textColor="#FF3a6070"
+            android:textSize="11sp"
+            android:fontFamily="monospace" />
+
+        <TextView
+            android:id="@+id/widgetDndStatus"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="OFF"
+            android:textColor="#FF3a6070"
+            android:textSize="11sp"
+            android:fontFamily="monospace"
+            android:textStyle="bold" />
+    </LinearLayout>
+
+    <!-- Queue pending count -->
+    <TextView
+        android:id="@+id/widgetDndQueue"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="2 pending"
+        android:textColor="#FFff8c00"
+        android:textSize="9sp"
+        android:fontFamily="monospace"
+        android:layout_marginBottom="4dp"
+        android:visibility="gone" />
+
+    <!-- Busy status row -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="⏳ "
+            android:textColor="#FF3a6070"
+            android:textSize="11sp"
+            android:fontFamily="monospace" />
+
+        <TextView
+            android:id="@+id/widgetBusyStatus"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="BUSY OFF"
+            android:textColor="#FF3a6070"
+            android:textSize="11sp"
+            android:fontFamily="monospace"
+            android:textStyle="bold" />
+    </LinearLayout>
+
+</LinearLayout>

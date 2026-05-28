@@ -77,9 +77,8 @@ page = make_page()
 with patch.object(wa, '_get_page', return_value=page):
     ok, msg = wa.search_google("Python tutorials")
     check("T3 returns True",   ok)
-    check("T3 goto google",    "google.com" in page.goto.call_args[0][0])
-    check("T3 fill called",    page.fill.called)
-    check("T3 enter pressed",  "Enter" in str(page.press.call_args))
+    check("T3 goto search",    "duckduckgo.com" in page.goto.call_args[0][0] or "google.com" in page.goto.call_args[0][0])
+    check("T3 query in url",   "Python" in page.goto.call_args[0][0])
 
 # ── T4: summarize_page ───────────────────────────────────────
 print("\n[T4] summarize_page")
@@ -250,7 +249,7 @@ with patch.object(wa, '_get_page', return_value=page):
     with patch('modules.web_automation._groq_summarize', return_value="iPhone 15 is priced at ₹79,900 on Amazon.") as mock_p:
         ok, msg = wa.lookup_price("iPhone 15")
         check("T10 returns True",     ok)
-        check("T10 google search",    "google.com" in page.goto.call_args[0][0])
+        check("T10 search engine",    "duckduckgo.com" in page.goto.call_args[0][0] or "google.com" in page.goto.call_args[0][0])
         check("T10 product in query", "iPhone" in page.goto.call_args[0][0])
         check("T10 groq called",      mock_p.called)
 

@@ -174,6 +174,96 @@
                     android:textSize="11sp" android:fontFamily="monospace" android:letterSpacing="0.1" />
             </LinearLayout>
 
+            <!-- PROCESSES section -->
+            <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:text="PROCESSES"
+                android:textColor="@color/cyan" android:textSize="11sp"
+                android:fontFamily="monospace" android:letterSpacing="0.2"
+                android:layout_marginBottom="12dp" android:layout_marginTop="24dp" />
+
+            <Button
+                android:id="@+id/btnViewProcesses"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:text="⚙  VIEW RUNNING PROCESSES"
+                android:textColor="@color/cyan"
+                android:backgroundTint="@color/bg_card"
+                android:fontFamily="monospace"
+                android:textSize="12sp"
+                android:layout_marginBottom="8dp" />
+
+            <!-- PC POWER ACTIONS section -->
+            <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:text="PC POWER"
+                android:textColor="@color/cyan" android:textSize="11sp"
+                android:fontFamily="monospace" android:letterSpacing="0.2"
+                android:layout_marginBottom="12dp" android:layout_marginTop="24dp" />
+
+            <GridLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:columnCount="2"
+                android:rowCount="2"
+                android:useDefaultMargins="false">
+
+                <Button
+                    android:id="@+id/btnPcLock"
+                    android:layout_width="0dp"
+                    android:layout_height="52dp"
+                    android:layout_columnWeight="1"
+                    android:layout_rowWeight="1"
+                    android:text="🔒 LOCK"
+                    android:textColor="@color/cyan"
+                    android:backgroundTint="#15007080"
+                    android:fontFamily="monospace"
+                    android:textSize="12sp"
+                    android:layout_margin="4dp"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton" />
+
+                <Button
+                    android:id="@+id/btnPcSleep"
+                    android:layout_width="0dp"
+                    android:layout_height="52dp"
+                    android:layout_columnWeight="1"
+                    android:layout_rowWeight="1"
+                    android:text="💤 SLEEP"
+                    android:textColor="@color/amber"
+                    android:backgroundTint="#15ffb300"
+                    android:fontFamily="monospace"
+                    android:textSize="12sp"
+                    android:layout_margin="4dp"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton" />
+
+                <Button
+                    android:id="@+id/btnPcRestart"
+                    android:layout_width="0dp"
+                    android:layout_height="52dp"
+                    android:layout_columnWeight="1"
+                    android:layout_rowWeight="1"
+                    android:text="🔄 RESTART"
+                    android:textColor="@color/green_neon"
+                    android:backgroundTint="#151db954"
+                    android:fontFamily="monospace"
+                    android:textSize="12sp"
+                    android:layout_margin="4dp"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton" />
+
+                <Button
+                    android:id="@+id/btnPcShutdown"
+                    android:layout_width="0dp"
+                    android:layout_height="52dp"
+                    android:layout_columnWeight="1"
+                    android:layout_rowWeight="1"
+                    android:text="⏻ SHUTDOWN"
+                    android:textColor="@color/red_neon"
+                    android:backgroundTint="#15ff0000"
+                    android:fontFamily="monospace"
+                    android:textSize="12sp"
+                    android:layout_margin="4dp"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton" />
+
+            </GridLayout>
+
         </LinearLayout>
     </ScrollView>
 </LinearLayout>
