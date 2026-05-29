@@ -1804,91 +1804,255 @@ function PrinterWidget() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Right panel modular widget system
+// ─────────────────────────────────────────────────────────────────────────────
+
+const RP_ALL_WIDGETS = [
+  { id: 'spotify',   label: 'SPOTIFY',          defaultOn: true  },
+  { id: 'fitness',   label: 'GOOGLE FIT',        defaultOn: true  },
+  { id: 'location',  label: 'LOCATION',          defaultOn: true  },
+  { id: 'smarthome', label: 'SMART HOME',        defaultOn: true  },
+  { id: 'printer',   label: 'PRINTER',           defaultOn: true  },
+  { id: 'ocr',       label: 'DOCUMENT OCR',      defaultOn: true  },
+  { id: 'devices',   label: 'DEVICES',           defaultOn: true  },
+  { id: 'calendar',  label: 'CALENDAR',          defaultOn: true  },
+  { id: 'phone',     label: 'PHONE',             defaultOn: true  },
+  { id: 'whatsapp',  label: 'WHATSAPP',          defaultOn: true  },
+  { id: 'notifs',    label: 'NOTIFICATIONS',     defaultOn: false },
+  { id: 'relgraph',  label: 'RELATIONSHIP',      defaultOn: false },
+  { id: 'terminal',  label: 'TERMINAL',          defaultOn: true  },
+  { id: 'syslog',    label: 'SYSTEM LOG',        defaultOn: false },
+]
+
+const RP_LS_ORDER     = 'rp_widget_order_v1'
+const RP_LS_ENABLED   = 'rp_widget_enabled_v1'
+const RP_LS_COLLAPSED = 'rp_widget_collapsed_v1'
+
+function rpLoadOrder() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(RP_LS_ORDER) || '[]')
+    const allIds = RP_ALL_WIDGETS.map(w => w.id)
+    const savedSet = new Set(saved)
+    return [...saved.filter(id => allIds.includes(id)), ...allIds.filter(id => !savedSet.has(id))]
+  } catch { return RP_ALL_WIDGETS.map(w => w.id) }
+}
+
+function rpLoadEnabled() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(RP_LS_ENABLED) || '{}')
+    const out = {}
+    RP_ALL_WIDGETS.forEach(w => { out[w.id] = w.id in saved ? saved[w.id] : w.defaultOn })
+    return out
+  } catch {
+    const out = {}
+    RP_ALL_WIDGETS.forEach(w => { out[w.id] = w.defaultOn })
+    return out
+  }
+}
+
+function rpLoadCollapsed() {
+  try { return JSON.parse(localStorage.getItem(RP_LS_COLLAPSED) || '{}') }
+  catch { return {} }
+}
+
+// Collapsible widget wrapper for right panel
+function RpWidget({ id, label, collapsed, onToggle, children }) {
+  return (
+    <div style={{ flexShrink: 0 }}>
+      <div
+        onClick={() => onToggle(id)}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 5,
+          padding: '8px 12px 4px', cursor: 'pointer', userSelect: 'none',
+        }}
+        title={collapsed ? 'Expand' : 'Collapse'}
+      >
+        <span style={{ color: '#00e5ff', fontSize: 9, flexShrink: 0 }}>*</span>
+        <span style={{
+          color: '#00e5ff', fontFamily: "'Share Tech Mono'",
+          fontSize: '10px', letterSpacing: '0.2em', flexShrink: 0,
+        }}>
+          {label}
+        </span>
+        <div style={{ flex: 1, height: 1, background: '#0d2a3a', marginLeft: 5 }} />
+        <span style={{ color: '#1a4a5a', fontSize: 9, flexShrink: 0, marginLeft: 4 }}>
+          {collapsed ? '›' : '‹'}
+        </span>
+      </div>
+      {!collapsed && children}
+    </div>
+  )
+}
+
+// Settings / reorder panel for right panel
+function RpSettings({ order, enabled, onSave, onClose }) {
+  const [localOrder,   setLocalOrder]   = React.useState([...order])
+  const [localEnabled, setLocalEnabled] = React.useState({ ...enabled })
+  const dragIdx     = React.useRef(null)
+  const dragOverIdx = React.useRef(null)
+
+  function onDragStart(e, i) { dragIdx.current = i; e.dataTransfer.effectAllowed = 'move'; e.currentTarget.style.opacity = '0.5' }
+  function onDragEnd(e)       { e.currentTarget.style.opacity = '1' }
+  function onDragOver(e, i)   { e.preventDefault(); dragOverIdx.current = i }
+  function onDrop(e) {
+    e.preventDefault()
+    const from = dragIdx.current, to = dragOverIdx.current
+    if (from === null || to === null || from === to) return
+    const next = [...localOrder]; const [moved] = next.splice(from, 1); next.splice(to, 0, moved)
+    setLocalOrder(next); dragIdx.current = null; dragOverIdx.current = null
+  }
+
+  const idToLabel = Object.fromEntries(RP_ALL_WIDGETS.map(w => [w.id, w.label]))
+
+  return (
+    <div style={{ flex: 1, overflowY: 'auto', padding: '10px 0' }}>
+      <div style={{ padding: '0 10px 8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span style={{ color: '#00e5ff', fontFamily: "'Share Tech Mono'", fontSize: '9px', letterSpacing: '0.2em' }}>PANEL WIDGETS</span>
+        <button onClick={() => { onSave(localOrder, localEnabled); onClose() }} style={{ background: 'rgba(0,229,255,0.1)', border: '1px solid rgba(0,229,255,0.35)', borderRadius: 3, color: '#00e5ff', fontFamily: "'Share Tech Mono'", fontSize: 7, padding: '3px 8px', cursor: 'pointer' }}>SAVE</button>
+      </div>
+      <div style={{ padding: '0 10px 8px', fontSize: 7, color: '#1a4a5a', fontFamily: "'Share Tech Mono'", letterSpacing: '0.12em' }}>
+        DRAG TO REORDER · TOGGLE SHOW/HIDE
+      </div>
+      {localOrder.map((id, i) => (
+        <div
+          key={id} draggable
+          onDragStart={e => onDragStart(e, i)} onDragEnd={onDragEnd}
+          onDragOver={e => onDragOver(e, i)} onDrop={onDrop}
+          style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '6px 10px', borderBottom: '1px solid #0d2a3a', cursor: 'grab', userSelect: 'none', transition: 'background 0.1s' }}
+          onMouseEnter={e => { e.currentTarget.style.background = 'rgba(0,229,255,0.04)' }}
+          onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
+        >
+          <span style={{ color: '#1a4a5a', fontSize: 11, flexShrink: 0 }}>⠿</span>
+          <span style={{ flex: 1, color: localEnabled[id] ? '#c8e8f0' : '#1a4a5a', fontFamily: "'Share Tech Mono'", fontSize: 8, letterSpacing: '0.1em', transition: 'color 0.2s' }}>
+            {idToLabel[id] || id}
+          </span>
+          <div onClick={() => setLocalEnabled(p => ({ ...p, [id]: !p[id] }))} style={{ width: 26, height: 13, borderRadius: 7, cursor: 'pointer', position: 'relative', flexShrink: 0, background: localEnabled[id] ? 'rgba(0,229,255,0.2)' : 'rgba(13,42,58,0.8)', border: `1px solid ${localEnabled[id] ? '#00e5ff55' : '#0d2a3a'}`, transition: 'all 0.2s' }}>
+            <div style={{ position: 'absolute', top: 2, left: localEnabled[id] ? 11 : 2, width: 7, height: 7, borderRadius: '50%', background: localEnabled[id] ? '#00e5ff' : '#1a4a5a', transition: 'left 0.2s' }} />
+          </div>
+        </div>
+      ))}
+      <div style={{ padding: '10px 10px 4px', display: 'flex', justifyContent: 'center' }}>
+        <button onClick={onClose} style={{ background: 'transparent', border: '1px solid #0d2a3a', borderRadius: 3, color: '#3a6070', fontFamily: "'Share Tech Mono'", fontSize: 7, padding: '3px 12px', cursor: 'pointer' }}>CANCEL</button>
+      </div>
+    </div>
+  )
+}
 
 export default function RightPanel({ waStatus, mmaStatus, spotifyTrack, notifications, whatsappQr, androidDevices = [], calendarEvents = [], onCalendarUpdate, shellConfirm, setShellConfirm, shellOutput, setShellOutput }) {
-  const [collapsed, setCollapsed] = React.useState(false)
+  const [panelCollapsed, setPanelCollapsed] = React.useState(false)
+  const [settingsOpen,   setSettingsOpen]   = React.useState(false)
+
+  const [widgetOrder,     setWidgetOrder]     = React.useState(rpLoadOrder)
+  const [widgetEnabled,   setWidgetEnabled]   = React.useState(rpLoadEnabled)
+  const [widgetCollapsed, setWidgetCollapsed] = React.useState(rpLoadCollapsed)
+
+  const toggleWidget = (id) => {
+    const next = { ...widgetCollapsed, [id]: !widgetCollapsed[id] }
+    setWidgetCollapsed(next)
+    localStorage.setItem(RP_LS_COLLAPSED, JSON.stringify(next))
+  }
+
+  const saveSettings = (order, enabled) => {
+    setWidgetOrder(order); setWidgetEnabled(enabled)
+    localStorage.setItem(RP_LS_ORDER,   JSON.stringify(order))
+    localStorage.setItem(RP_LS_ENABLED, JSON.stringify(enabled))
+  }
+
+  const renderWidget = (id) => {
+    if (!widgetEnabled[id]) return null
+    const collapsed = !!widgetCollapsed[id]
+    const label = (RP_ALL_WIDGETS.find(w => w.id === id) || {}).label || id
+
+    const content = (() => {
+      switch (id) {
+        case 'spotify':   return <SpotifyPanel track={spotifyTrack} />
+        case 'fitness':   return <FitnessWidget />
+        case 'location':  return <LocationWidget />
+        case 'smarthome': return <SmartHomeWidget />
+        case 'printer':   return <PrinterWidget />
+        case 'ocr':       return <OCRWidget />
+        case 'devices':   return <DevicesWidget />
+        case 'calendar':  return <CalendarPanel events={calendarEvents} onCalendarUpdate={onCalendarUpdate} />
+        case 'phone':     return <MmaPanel mmaStatus={mmaStatus} androidDevices={androidDevices} />
+        case 'whatsapp':  return <WhatsAppPanel status={waStatus} qr={whatsappQr} />
+        case 'notifs':    return <NotificationsPanel notifications={notifications} />
+        case 'relgraph':  return <RelationshipGraph />
+        case 'terminal':  return (
+          <>
+            <ShellInput />
+            {shellOutput && <TerminalPanel shellOutput={shellOutput} onClear={() => setShellOutput(null)} />}
+          </>
+        )
+        case 'syslog':    return <SystemLog errors={[]} />
+        default: return null
+      }
+    })()
+
+    if (!content) return null
+
+    return (
+      <React.Fragment key={id}>
+        <RpWidget id={id} label={label} collapsed={collapsed} onToggle={toggleWidget}>
+          {content}
+        </RpWidget>
+        <Divider />
+      </React.Fragment>
+    )
+  }
 
   return (
     <>
       <ShellConfirmModal shellConfirm={shellConfirm} onDismiss={() => setShellConfirm(null)} />
       <div style={{
-        width: collapsed ? 36 : 220,
+        width: panelCollapsed ? 36 : 220,
         transition: 'width 0.28s cubic-bezier(0.22,1,0.36,1)',
         height: '100%', overflow: 'hidden',
         background: '#0a1628', borderLeft: '1px solid #0d2a3a',
         display: 'flex', flexDirection: 'column', flexShrink: 0,
       }}>
-        {/* Panel header with collapse toggle */}
+        {/* Panel header */}
         <div style={{
           display: 'flex', alignItems: 'center', gap: 6,
           padding: '10px 8px', borderBottom: '1px solid #0d2a3a',
           flexShrink: 0, minWidth: 36,
-          flexDirection: collapsed ? 'column' : 'row',
         }}>
-          {!collapsed && (
-            <span style={{
-              color: '#00e5ff', fontFamily: "'Share Tech Mono'",
-              fontSize: '10px', letterSpacing: '0.18em', flex: 1, whiteSpace: 'nowrap',
-            }}>
-              MODULES
-            </span>
+          {!panelCollapsed && (
+            <>
+              <span style={{ color: '#00e5ff', fontFamily: "'Share Tech Mono'", fontSize: '10px', letterSpacing: '0.18em', flex: 1, whiteSpace: 'nowrap' }}>
+                MODULES
+              </span>
+              <button
+                onClick={() => setSettingsOpen(s => !s)}
+                title="Widget settings"
+                style={{ background: 'transparent', border: 'none', color: settingsOpen ? '#00e5ff' : 'rgba(0,229,255,0.35)', fontSize: '12px', cursor: 'pointer', padding: '2px 4px', flexShrink: 0, transition: 'color 0.15s' }}
+                onMouseEnter={e => { e.currentTarget.style.color = '#00e5ff' }}
+                onMouseLeave={e => { if (!settingsOpen) e.currentTarget.style.color = 'rgba(0,229,255,0.35)' }}
+              >⚙</button>
+            </>
           )}
           <button
-            onClick={() => setCollapsed(!collapsed)}
-            title={collapsed ? 'Expand panel' : 'Collapse panel'}
-            style={{
-              background: 'transparent', border: 'none',
-              color: 'rgba(0,229,255,0.5)', fontFamily: "'Share Tech Mono'",
-              fontSize: '14px', cursor: 'pointer', lineHeight: 1,
-              padding: '2px 4px', flexShrink: 0, transition: 'color 0.15s',
-            }}
+            onClick={() => setPanelCollapsed(!panelCollapsed)}
+            title={panelCollapsed ? 'Expand panel' : 'Collapse panel'}
+            style={{ background: 'transparent', border: 'none', color: 'rgba(0,229,255,0.5)', fontFamily: "'Share Tech Mono'", fontSize: '14px', cursor: 'pointer', lineHeight: 1, padding: '2px 4px', flexShrink: 0, transition: 'color 0.15s' }}
             onMouseEnter={e => { e.currentTarget.style.color = '#00e5ff' }}
             onMouseLeave={e => { e.currentTarget.style.color = 'rgba(0,229,255,0.5)' }}
           >
-            {collapsed ? '‹' : '›'}
+            {panelCollapsed ? '‹' : '›'}
           </button>
         </div>
 
-        {/* Content — always mounted, fades with collapse */}
+        {/* Content */}
         <div style={{
           flex: 1, overflowY: 'auto', overflowX: 'hidden',
-          opacity: collapsed ? 0 : 1,
-          pointerEvents: collapsed ? 'none' : 'auto',
+          opacity: panelCollapsed ? 0 : 1,
+          pointerEvents: panelCollapsed ? 'none' : 'auto',
           transition: 'opacity 0.18s ease',
+          display: 'flex', flexDirection: 'column',
         }}>
-          <SpotifyPanel track={spotifyTrack} />
-          <Divider />
-          <FitnessWidget />
-          <Divider />
-          <LocationWidget />
-          <Divider />
-          <SmartHomeWidget />
-          <Divider />
-          <PrinterWidget />
-          <Divider />
-          <OCRWidget />
-          <Divider />
-          <DevicesWidget />
-          <Divider />
-          <CalendarPanel events={calendarEvents} onCalendarUpdate={onCalendarUpdate} />
-          <Divider />
-          <MmaPanel mmaStatus={mmaStatus} androidDevices={androidDevices} />
-          <Divider />
-          <WhatsAppPanel status={waStatus} qr={whatsappQr} />
-          <Divider />
-          <NotificationsPanel notifications={notifications} />
-          <Divider />
-          <RelationshipGraph />
-          <Divider />
-          <div style={{ padding: '6px 10px 2px' }}>
-            <span style={{ color: '#38bdf8', fontSize: 9, fontFamily: "'JetBrains Mono'", letterSpacing: 1 }}>TERMINAL</span>
-          </div>
-          <ShellInput />
-          {shellOutput && (
-            <TerminalPanel shellOutput={shellOutput} onClear={() => setShellOutput(null)} />
-          )}
-          <Divider />
-          <SystemLog errors={[]} />
+          {settingsOpen
+            ? <RpSettings order={widgetOrder} enabled={widgetEnabled} onSave={saveSettings} onClose={() => setSettingsOpen(false)} />
+            : widgetOrder.map(id => renderWidget(id))
+          }
         </div>
       </div>
     </>
