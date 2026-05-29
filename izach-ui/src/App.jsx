@@ -61,6 +61,34 @@ export default function App() {
         onCommand={(cmd) => send(cmd)}
       />
 
+      {/* Busy mode bar — in normal flow so it never overlaps TitleBar nav */}
+      {busyActive && !dndActive && (
+        <div style={{
+          flexShrink: 0, left: 0, right: 0, zIndex: 3900,
+          background: 'rgba(255,140,0,0.88)', color: '#fff',
+          fontSize: 10, letterSpacing: '0.12em', textAlign: 'center',
+          padding: '3px 8px', fontFamily: "'Share Tech Mono'",
+          borderBottom: '1px solid rgba(255,180,50,0.5)',
+        }}>
+          🔶 BUSY MODE ACTIVE — WA AUTO-REPLY ON &nbsp;·&nbsp; {busyReason.toUpperCase()} &nbsp;·&nbsp;
+          <span style={{ cursor: 'pointer', textDecoration: 'underline' }} onClick={() => toggleBusy()}>TURN OFF</span>
+        </div>
+      )}
+
+      {/* DND bar — in normal flow so it never overlaps TitleBar nav */}
+      {dndActive && (
+        <div style={{
+          flexShrink: 0, left: 0, right: 0, zIndex: 4000,
+          background: 'rgba(200,40,40,0.92)', color: '#fff',
+          fontSize: 10, letterSpacing: '0.12em', textAlign: 'center',
+          padding: '3px 8px', fontFamily: "'Share Tech Mono'",
+          borderBottom: '1px solid rgba(255,100,100,0.5)',
+        }}>
+          ⛔ DO NOT DISTURB ACTIVE — MIC PAUSED &nbsp;·&nbsp;
+          <span style={{ cursor: 'pointer', textDecoration: 'underline' }} onClick={toggleDnd}>TURN OFF</span>
+        </div>
+      )}
+
       <div className="flex flex-1 overflow-hidden">
         {/* Left panel — self-manages its own width via collapse state */}
         <div style={{ flexShrink: 0, overflow: 'hidden' }}>
@@ -68,6 +96,11 @@ export default function App() {
             cpuUsage={cpuUsage} ramUsage={ramUsage} gpuUsage={gpuUsage}
             procCpu={procCpu} procMem={procMem} faceState={faceState}
             camVisible={camVisible}
+            spotifyTrack={spotifyTrack}
+            calendarEvents={calendarEvents} onCalendarUpdate={setCalendarEvents}
+            waStatus={waStatus} whatsappQr={whatsappQr}
+            mmaStatus={mmaStatus} androidDevices={androidDevices}
+            notifications={notifications}
           />
         </div>
 
@@ -143,19 +176,6 @@ export default function App() {
 
       <StatusBar cpuUsage={cpuUsage} ramUsage={ramUsage} backendStatus={backendStatus} />
 
-      {/* Busy mode top bar */}
-      {busyActive && !dndActive && (
-        <div style={{
-          position: 'fixed', top: 36, left: 0, right: 0, zIndex: 3900,
-          background: 'rgba(255,140,0,0.88)', color: '#fff',
-          fontSize: 10, letterSpacing: '0.12em', textAlign: 'center',
-          padding: '3px 8px', fontFamily: "'Share Tech Mono'",
-          borderBottom: '1px solid rgba(255,180,50,0.5)',
-        }}>
-          🔶 BUSY MODE ACTIVE — WA AUTO-REPLY ON &nbsp;·&nbsp; {busyReason.toUpperCase()} &nbsp;·&nbsp;
-          <span style={{ cursor: 'pointer', textDecoration: 'underline' }} onClick={() => toggleBusy()}>TURN OFF</span>
-        </div>
-      )}
 
       {/* Post-busy briefing popup */}
       {busyBriefing && (
@@ -194,19 +214,6 @@ export default function App() {
         </div>
       )}
 
-      {/* DND top bar */}
-      {dndActive && (
-        <div style={{
-          position: 'fixed', top: 36, left: 0, right: 0, zIndex: 4000,
-          background: 'rgba(200,40,40,0.92)', color: '#fff',
-          fontSize: 10, letterSpacing: '0.12em', textAlign: 'center',
-          padding: '3px 8px', fontFamily: "'Share Tech Mono'",
-          borderBottom: '1px solid rgba(255,100,100,0.5)',
-        }}>
-          ⛔ DO NOT DISTURB ACTIVE — MIC PAUSED &nbsp;·&nbsp;
-          <span style={{ cursor: 'pointer', textDecoration: 'underline' }} onClick={toggleDnd}>TURN OFF</span>
-        </div>
-      )}
 
       {/* DND alert popup — normal or URGENT */}
       {dndAlert && (
