@@ -146,7 +146,21 @@ class AIProvider:
             timeout=30,
         )
         r.raise_for_status()
-        return r.json()["choices"][0]["message"]["content"]
+        result = r.json()["choices"][0]["message"]["content"]
+        try:
+            from modules.api_usage_tracker import record as _rec
+            _rec("openrouter")
+        except Exception:
+            pass
+        return result
+
+    # Override send_with_model to track DeepSeek calls
+    def _track_deepseek(self):
+        try:
+            from modules.api_usage_tracker import record as _rec
+            _rec("deepseek")
+        except Exception:
+            pass
 
     @staticmethod
     def _style_instruction() -> str:
@@ -204,7 +218,7 @@ class AIProvider:
             parts.append(ctx)
         return " ".join(parts)
 
-    def _call_groq(self, query):
+    def _call_groq(self, query, key_name: str = "groq_main"):
         system_content = self._build_system_prompt(query)
         messages = [
             {"role": "system", "content": system_content},
@@ -214,7 +228,13 @@ class AIProvider:
             model="llama-3.3-70b-versatile",
             messages=messages,
         )
-        return completion.choices[0].message.content
+        result = completion.choices[0].message.content
+        try:
+            from modules.api_usage_tracker import record as _rec
+            _rec(key_name)
+        except Exception:
+            pass
+        return result
 
     def _call_gemini(self, query):
         system_instr = self._build_system_prompt(query)
@@ -225,7 +245,14 @@ class AIProvider:
                 system_instruction=system_instr
             )
         )
-        return response.text
+        result = response.text
+        try:
+            from modules.api_usage_tracker import record as _rec
+            key_name = f"gemini_{self.current_gem_idx + 1}"
+            _rec(key_name)
+        except Exception:
+            pass
+        return result
 
     def _is_rate_limit(self, error):
         """Detects 429 errors in either Groq or Gemini responses."""
@@ -280,6 +307,11 @@ class AIProvider:
             )
             result = resp.choices[0].message.content
             rag_memory.add_conversation(query, result)
+            try:
+                from modules.api_usage_tracker import record as _rec
+                _rec("deepseek")
+            except Exception:
+                pass
             return result
         except Exception as e:
             print(f"[DeepSeek ERROR]: {e}")

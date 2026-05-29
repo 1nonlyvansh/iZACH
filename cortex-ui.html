@@ -856,6 +856,17 @@ body.tb-autohide.tb-reveal #device-bar { opacity:0.5; pointer-events:all; }
 #p-sc { left:760px; top:80px; width:310px; height:500px; }
 /* ── SKILLS WIDGET ── */
 #p-skills { right:18px; top:50px; width:280px; height:360px; }
+/* ── API USAGE MONITOR WIDGET ── */
+#p-apimon { right:320px; top:50px; width:300px; height:480px; }
+.api-key-row { padding:6px 14px 8px; border-bottom:1px solid rgba(0,148,255,0.06); }
+.api-key-row:last-child { border-bottom:none; }
+.api-key-name { font-size:8px; letter-spacing:.15em; color:rgba(0,148,255,0.7); font-family:'Share Tech Mono',monospace; margin-bottom:4px; display:flex; justify-content:space-between; align-items:center; }
+.api-key-calls { font-size:7px; color:rgba(0,148,255,0.35); letter-spacing:.1em; margin-top:3px; }
+.api-bar-track { height:3px; background:rgba(0,148,255,0.08); border-radius:2px; overflow:hidden; margin:3px 0; }
+.api-bar-fill { height:100%; border-radius:2px; transition:width 0.6s ease; }
+.api-bar-fill.warn { box-shadow:0 0 6px currentColor; }
+.api-reset-btn { font-size:6px; padding:1px 5px; background:transparent; border:1px solid rgba(0,148,255,0.15); border-radius:2px; color:rgba(0,148,255,0.3); cursor:pointer; font-family:'Share Tech Mono',monospace; letter-spacing:.08em; }
+.api-reset-btn:hover { border-color:rgba(0,148,255,0.4); color:rgba(0,148,255,0.7); }
 .sc-health-grid { display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-bottom:10px; }
 .sc-health-card { background:rgba(0,148,255,0.04); border:1px solid rgba(0,148,255,0.12); border-radius:6px; padding:8px 10px; text-align:center; }
 .sc-health-val  { font-size:20px; font-family:'JetBrains Mono',monospace; color:rgba(0,148,255,0.9); line-height:1; }
@@ -1532,7 +1543,8 @@ body.spotlight-mode .pnl:not(.spotlighted) {
       <span class="sc-perm-badge" id="sc-perm-badge">0</span>
     </button>
     <button class="wp-btn" id="wpb-agents" onclick="togWgt('p-agents')" title="Agents"><span class="wp-ic">🤖</span><span class="wp-lbl">AGENTS</span></button>
-    <button class="wp-btn" id="wpb-skills" onclick="togWgt('p-skills')" title="Skills"><span class="wp-ic">⚡</span><span class="wp-lbl">SKILLS</span></button>
+    <button class="wp-btn" id="wpb-skills"  onclick="togWgt('p-skills')"  title="Skills"><span class="wp-ic">⚡</span><span class="wp-lbl">SKILLS</span></button>
+    <button class="wp-btn" id="wpb-apimon" onclick="togWgt('p-apimon')" title="API Usage Monitor"><span class="wp-ic">📊</span><span class="wp-lbl">API KEYS</span></button>
   </div>
   <!-- NEWS widget removed — iZACH speaks live news on demand via voice cmd "tell me the news" -->
 </div>
@@ -2323,6 +2335,28 @@ body.spotlight-mode .pnl:not(.spotlighted) {
       <span style="font-size:7px;letter-spacing:.3em;color:rgba(0,148,255,0.32);">PROJECTS</span>
     </div>
     <div id="skills-projects" style="padding:0 8px 8px;"></div>
+  </div>
+  <div class="rh"></div>
+</div>
+
+<!-- API USAGE MONITOR PANEL -->
+<div id="p-apimon" class="pnl">
+  <div class="cb cb-tl"></div><div class="cb cb-tr"></div><div class="cb cb-bl"></div><div class="cb cb-br"></div>
+  <div class="ph">
+    <span class="ph-id">AM · API MONITOR</span>
+    <span class="ph-cat">
+      <div class="ph-dot"></div>KEY USAGE
+      <span class="ph-min">—</span>
+    </span>
+  </div>
+  <div class="pnl-body" id="p-apimon-body" style="overflow-y:auto;">
+    <div style="padding:6px 14px 2px;display:flex;justify-content:space-between;align-items:center;">
+      <span style="font-size:7px;letter-spacing:.3em;color:rgba(0,148,255,0.32);">DAILY USAGE · RESETS MIDNIGHT UTC</span>
+      <button onclick="loadApiUsage()" style="background:transparent;border:none;color:rgba(0,148,255,0.4);font-size:12px;cursor:pointer;">↻</button>
+    </div>
+    <div id="api-usage-list">
+      <div style="padding:20px 14px;color:rgba(0,148,255,0.25);font-size:9px;letter-spacing:.2em;text-align:center;">LOADING...</div>
+    </div>
   </div>
   <div class="rh"></div>
 </div>
@@ -3419,7 +3453,7 @@ tick(); setInterval(tick,1000);
 // STATE MACHINE
 // ════════════════════════════════════════════════════
 let camStream=null;
-const allWgts=['p-comm','p-audio','p-sched','p-sys','p-intel','p-mem','p-msg','p-wx','p-feed','p-hist','p-clock','p-phone','p-devices','p-agents','p-ocr','p-print','p-fit','p-loc','p-sh','p-sc','p-ig','p-skills'];
+const allWgts=['p-comm','p-audio','p-sched','p-sys','p-intel','p-mem','p-msg','p-wx','p-feed','p-hist','p-clock','p-phone','p-devices','p-agents','p-ocr','p-print','p-fit','p-loc','p-sh','p-sc','p-ig','p-skills','p-apimon'];
 const dkMap={'p-comm':'dk-comm','p-audio':'dk-aud','p-sched':'dk-sch','p-sys':'dk-sys','p-intel':'dk-int','p-mem':'dk-mem','p-msg':'dk-msg','p-wx':'dk-wx','p-rel':'dk-rel','p-feed':'dk-feed','p-hist':'dk-hist','p-clock':'dk-clk','p-phone':'dk-phone','p-devices':'dk-devices','p-agents':'dk-agents'};
 
 function slideScreens(show){
@@ -3535,6 +3569,7 @@ const wpMap={
   'p-ig':'wpb-ig',
   'p-news':'wpb-news',
   'p-skills':'wpb-skills',
+  'p-apimon':'wpb-apimon',
 };
 function togWgt(id){
   const el=document.getElementById(id); if(!el)return;
@@ -3652,6 +3687,58 @@ document.getElementById('cin').addEventListener('keydown',e=>{
   if(e.key==='ArrowDown'){ _skillPickerNav(1); e.preventDefault(); }
   if(e.key==='ArrowUp'){ _skillPickerNav(-1); e.preventDefault(); }
 });
+
+// ════════════════════════════════════════════════════
+// API USAGE MONITOR — p-apimon widget
+// ════════════════════════════════════════════════════
+async function loadApiUsage(){
+  const list = document.getElementById('api-usage-list');
+  if(!list) return;
+  try{
+    const d = await fetch(API+'/api-usage').then(r=>r.json());
+    const stats = d.stats || [];
+    if(!stats.length){ list.innerHTML='<div style="padding:16px 14px;color:rgba(0,148,255,0.25);font-size:9px;text-align:center;">NO DATA YET</div>'; return; }
+
+    list.innerHTML = stats.map(s => {
+      const pct = s.capped ? 0 : s.pct;
+      const barColor = s.warning ? '#f97316' : s.color;
+      const pctLabel = s.capped ? '∞' : (pct + '%');
+      const callLabel = s.limit ? `${s.calls} / ${s.limit.toLocaleString()} calls` : `${s.calls} calls today`;
+      return `
+        <div class="api-key-row">
+          <div class="api-key-name">
+            <span style="color:${barColor};">${s.name}</span>
+            <div style="display:flex;align-items:center;gap:5px;">
+              <span style="font-size:8px;color:${s.warning?'#f97316':'rgba(0,148,255,0.5)'};">${pctLabel}</span>
+              <button class="api-reset-btn" onclick="resetApiKey('${s.id}')">RESET</button>
+            </div>
+          </div>
+          ${!s.capped ? `
+          <div class="api-bar-track">
+            <div class="api-bar-fill ${s.warning?'warn':''}"
+                 style="width:${pct}%;background:${barColor};color:${barColor};"></div>
+          </div>` : `<div style="height:3px;"></div>`}
+          <div class="api-key-calls">${callLabel}${s.capped?' · no daily limit':''}</div>
+        </div>`;
+    }).join('');
+  }catch(e){
+    list.innerHTML='<div style="padding:14px;color:rgba(255,80,80,0.5);font-size:8px;text-align:center;">BACKEND OFFLINE</div>';
+  }
+}
+
+async function resetApiKey(keyName){
+  try{
+    await fetch(API+'/api-usage/reset/'+keyName,{method:'POST'});
+    loadApiUsage();
+    showToast('Counter reset: '+keyName,'info','API');
+  }catch(e){}
+}
+
+// Load when panel opens, auto-refresh every 30s when visible
+document.getElementById('p-apimon').addEventListener('transitionend',function(){
+  if(this.classList.contains('show')) loadApiUsage();
+});
+setInterval(()=>{ if(document.getElementById('p-apimon').classList.contains('show')) loadApiUsage(); }, 30000);
 
 // ════════════════════════════════════════════════════
 // SKILLS PANEL — p-skills widget
@@ -4100,6 +4187,7 @@ const wCfg={
   'p-feed' :{aspect:300/240,minW:200,maxW:480,minH:160,maxH:400},
   'p-hist'  :{aspect:240/260,minW:180,maxW:420,minH:180,maxH:460},
   'p-skills':{aspect:280/360,minW:220,maxW:480,minH:200,maxH:540},
+  'p-apimon':{aspect:300/480,minW:240,maxW:500,minH:300,maxH:600},
 };
 
 const sgEl=document.getElementById('snap-grid');

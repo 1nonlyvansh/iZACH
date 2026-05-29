@@ -618,6 +618,24 @@ def memory_delete(key):
 #   GET    /smart-memory/jobs       list APScheduler jobs
 # ─────────────────────────────────────────────────────────────
 
+# ── API Usage routes ───────────────────────────────────────────────────────
+@ui_bp.route("/api-usage", methods=["GET"])
+def api_usage():
+    try:
+        from modules.api_usage_tracker import get_stats
+        return jsonify({"ok": True, "stats": get_stats()})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+@ui_bp.route("/api-usage/reset/<key_name>", methods=["POST"])
+def api_usage_reset(key_name):
+    try:
+        from modules.api_usage_tracker import reset_key
+        reset_key(key_name)
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
 # ── Skills routes ──────────────────────────────────────────────────────────
 #   GET    /skills                  list all installed skills
 #   POST   /skills/import           import .md from path or raw content
