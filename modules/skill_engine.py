@@ -192,7 +192,15 @@ def save_project_files(response_text: str, project_name: str) -> list[str]:
     if not project_name:
         return []
 
-    project_dir = os.path.join(PROJECTS_DIR, project_name)
+    # Never overwrite existing project — append (2), (3), ... like Windows
+    base_dir = os.path.join(PROJECTS_DIR, project_name)
+    project_dir = base_dir
+    if os.path.exists(project_dir):
+        counter = 2
+        while os.path.exists(os.path.join(PROJECTS_DIR, f"{project_name} ({counter})")):
+            counter += 1
+        project_dir = os.path.join(PROJECTS_DIR, f"{project_name} ({counter})")
+
     os.makedirs(project_dir, exist_ok=True)
     saved: list[str] = []
 
