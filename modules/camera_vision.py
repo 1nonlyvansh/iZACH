@@ -151,6 +151,20 @@ _cameras_cache_ts: float = 0.0
 _CAMERAS_CACHE_TTL = 60.0  # seconds
 _cameras_enum_lock = threading.Lock()   # serialise concurrent VideoCapture calls
 
+# Device names containing these keywords are NOT cameras (printers, scanners, fax, MFPs).
+# Opening them via cv2.VideoCapture causes a Windows access violation crash.
+_NON_CAMERA_KW = (
+    'printer', 'scanner', 'deskjet', 'laserjet', 'officejet', 'envy',
+    'mfp', 'fax', 'copier', 'document feed', 'film scan',
+    'brother mfc', 'canon mf', 'epson wf', 'epson xp',
+    'hp desk', 'hp laser', 'hp offic', 'hp envy',
+)
+
+def _is_camera_device(name: str) -> bool:
+    """Return False if the WMI device name is clearly a printer/scanner, not a camera."""
+    n = name.lower()
+    return not any(kw in n for kw in _NON_CAMERA_KW)
+
 
 def list_cameras(force_refresh: bool = False) -> list[dict]:
     """
@@ -210,6 +224,12 @@ def list_cameras(force_refresh: bool = False) -> list[dict]:
                     name = str(raw_name).strip() or f"Camera {i}"
             else:
                 name = f"Camera {i}"
+
+            # Skip printers / scanners — VideoCapture on a printer causes
+            # a Windows access violation that kills the entire process.
+            if not _is_camera_device(name):
+                logger.info(f"[CAM] Skipping non-camera device at index {i}: {name!r}")
+                continue
 
             # CAP_DSHOW → CAP_MSMF → auto (let OpenCV pick best backend)
             if _try_open(i, cv2.CAP_MSMF) or _try_open(i, cv2.CAP_DSHOW) or _try_open(i):
