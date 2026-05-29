@@ -1,3 +1,4 @@
+import os
 import time
 import re
 import httpx
@@ -199,3 +200,75 @@ class AIProvider:
             else:
                 print("[SYSTEM] Gemini retry failed. No AI available.")
                 return "Neural links exhausted. Please standby."
+
+    # ── DeepSeek ──────────────────────────────────────────────────────────────
+
+    def send_deepseek(self, query: str, system_prompt: str = "", model: str = "deepseek-chat") -> str | None:
+        """
+        Send query to DeepSeek API (OpenAI-compatible).
+        model: 'deepseek-chat' (fast, free tier) or 'deepseek-reasoner' (R1, shows thinking)
+        """
+        api_key = os.getenv("DEEPSEEK_API_KEY", "")
+        if not api_key:
+            print("[DeepSeek] No API key — falling back to Groq")
+            return None
+        try:
+            from openai import OpenAI as _OAI
+            client = _OAI(api_key=api_key, base_url="https://api.deepseek.com")
+            sys_content = system_prompt or self._build_system_prompt(query)
+            messages = [
+                {"role": "system", "content": sys_content},
+                {"role": "user",   "content": query},
+            ]
+            resp = client.chat.completions.create(
+                model=model,
+                messages=messages,
+                max_tokens=8192,
+            )
+            result = resp.choices[0].message.content
+            rag_memory.add_conversation(query, result)
+            return result
+        except Exception as e:
+            print(f"[DeepSeek ERROR]: {e}")
+            return None
+
+    def send_with_model(self, query: str, model_pref: str, skill_system: str = "") -> str:
+        """
+        Route to preferred model. Used by skill engine.
+        model_pref: 'deepseek' | 'groq' | 'gemini' | 'auto'
+        skill_system: extra system prompt text from skill .md
+        """
+        sys_prompt = ""
+        if skill_system:
+            base = self._build_system_prompt(query)
+            sys_prompt = f"{skill_system}\n\n---\n{base}"
+
+        if model_pref == "deepseek":
+            result = self.send_deepseek(query, sys_prompt or self._build_system_prompt(query))
+            if result:
+                return result
+            print("[SkillRoute] DeepSeek failed, falling back to Groq")
+
+        if model_pref == "gemini":
+            try:
+                q = f"{sys_prompt}\n\nUser: {query}" if sys_prompt else query
+                return self._call_gemini(q)
+            except Exception as e:
+                print(f"[SkillRoute] Gemini failed: {e}")
+
+        if model_pref in ("groq", "auto") or True:
+            try:
+                q = f"{sys_prompt}\n\nUser: {query}" if sys_prompt else query
+                result = self._call_groq(q)
+                if result:
+                    return result
+            except Exception as e:
+                print(f"[SkillRoute] Groq failed: {e}")
+            # Final fallback
+            try:
+                q = f"{sys_prompt}\n\nUser: {query}" if sys_prompt else query
+                return self._call_gemini(q)
+            except Exception as e:
+                print(f"[SkillRoute] All providers failed: {e}")
+
+        return "All AI providers unavailable for skill request."

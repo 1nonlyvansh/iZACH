@@ -346,6 +346,150 @@ function SelectField({ label, value, onChange, options }) {
 
 // ── Briefing Section ──────────────────────────────────────────
 // ── Security Section — Voice Auth + Face Auth ─────────────────
+// ── Skills Section ────────────────────────────────────────────
+function SkillsSection() {
+  const [skills,   setSkills]   = useState([])
+  const [projects, setProjects] = useState([])
+  const [tab,      setTab]      = useState('skills')  // 'skills' | 'projects'
+  const [msg,      setMsg]      = useState('')
+
+  const flash = (t, ok = true) => { setMsg({ text: t, ok }); setTimeout(() => setMsg(''), 3000) }
+
+  const loadSkills = useCallback(async () => {
+    try {
+      const d = await fetch(`${BASE}/skills`).then(r => r.json())
+      setSkills(d.skills || [])
+    } catch {}
+  }, [])
+
+  const loadProjects = useCallback(async () => {
+    try {
+      const d = await fetch(`${BASE}/skills/projects`).then(r => r.json())
+      setProjects(d.projects || [])
+    } catch {}
+  }, [])
+
+  useEffect(() => { loadSkills(); loadProjects() }, [loadSkills, loadProjects])
+
+  const deleteSkill = async (id) => {
+    await fetch(`${BASE}/skills/${id}`, { method: 'DELETE' }).catch(() => {})
+    loadSkills()
+    flash('Skill deleted')
+  }
+
+  const updateModel = async (id, model) => {
+    await fetch(`${BASE}/skills/${id}/model`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model })
+    }).catch(() => {})
+    loadSkills()
+  }
+
+  const openProject = async (name) => {
+    await fetch(`${BASE}/skills/projects/open`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name })
+    }).catch(() => {})
+  }
+
+  const MODEL_OPTS = ['auto', 'groq', 'gemini', 'deepseek']
+  const MODEL_COLOR = { auto: '#3a6070', groq: '#00e5ff', gemini: '#1db954', deepseek: '#8b5cf6' }
+
+  const inp = { background: '#071020', border: '1px solid #0d2a3a', borderRadius: 4, color: '#c8e8f0', fontFamily: "'JetBrains Mono'", fontSize: '10px', padding: '5px 8px', outline: 'none', boxSizing: 'border-box' }
+
+  return (
+    <div>
+      <SectionHeader label="SKILLS" />
+
+      {/* Tab switcher */}
+      <div style={{ display: 'flex', gap: 4, padding: '0 20px 10px' }}>
+        {[['skills', '⚡ INSTALLED'], ['projects', '📁 PROJECTS']].map(([id, lbl]) => (
+          <button key={id} onClick={() => { setTab(id); id === 'projects' && loadProjects() }} style={{ padding: '4px 12px', background: tab === id ? 'rgba(0,229,255,0.12)' : 'transparent', border: `1px solid ${tab === id ? 'rgba(0,229,255,0.4)' : '#0d2a3a'}`, borderRadius: 3, color: tab === id ? '#00e5ff' : '#3a6070', fontFamily: "'Share Tech Mono'", fontSize: '9px', letterSpacing: '0.1em', cursor: 'pointer' }}>
+            {lbl}
+          </button>
+        ))}
+        {msg && <span style={{ color: msg.ok ? '#1db954' : '#ff3d3d', fontFamily: "'Share Tech Mono'", fontSize: '9px', alignSelf: 'center', marginLeft: 8 }}>{msg.text}</span>}
+      </div>
+
+      {/* SKILLS TAB */}
+      {tab === 'skills' && (
+        <div>
+          <div style={{ padding: '0 20px 8px', color: '#1a4a5a', fontFamily: "'Share Tech Mono'", fontSize: '8px', letterSpacing: '0.15em' }}>
+            TYPE #SKILL-NAME IN CHAT TO ACTIVATE · SKILLS ARE .MD FILES IN skills/ FOLDER
+          </div>
+
+          {skills.length === 0 ? (
+            <p style={{ padding: '8px 20px', color: '#1a4a5a', fontFamily: "'JetBrains Mono'", fontSize: '10px' }}>
+              No skills installed. Add .md files to the skills/ folder.
+            </p>
+          ) : (
+            <div style={{ padding: '0 20px', maxHeight: 380, overflowY: 'auto' }}>
+              {skills.map(s => (
+                <div key={s.id} style={{ marginBottom: 8, padding: '10px 12px', background: 'rgba(0,229,255,0.03)', border: '1px solid #0d2a3a', borderRadius: 6 }}>
+                  {/* Header row */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 5 }}>
+                    <span style={{ fontSize: 16, flexShrink: 0 }}>{s.icon || '⚡'}</span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span style={{ color: '#00e5ff', fontFamily: "'Share Tech Mono'", fontSize: '10px', letterSpacing: '0.15em' }}>#{s.id}</span>
+                        <span style={{ color: '#1a4a5a', fontFamily: "'Share Tech Mono'", fontSize: '8px' }}>v{s.version}</span>
+                        <span style={{ color: '#1a4a5a', fontFamily: "'Share Tech Mono'", fontSize: '8px' }}>{s.size_kb}KB</span>
+                        {s.creates_files && <span style={{ color: '#ff9800', fontFamily: "'Share Tech Mono'", fontSize: '7px', padding: '1px 4px', border: '1px solid rgba(255,152,0,0.3)', borderRadius: 3 }}>SAVES FILES</span>}
+                      </div>
+                      <div style={{ color: '#3a6070', fontFamily: "'JetBrains Mono'", fontSize: '9px', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.description}</div>
+                    </div>
+                  </div>
+
+                  {/* Stats + model row */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ color: '#1a4a5a', fontFamily: "'Share Tech Mono'", fontSize: '8px' }}>Used {s.use_count}x</span>
+                    {s.last_used && <span style={{ color: '#1a4a5a', fontFamily: "'Share Tech Mono'", fontSize: '8px' }}>· {s.last_used}</span>}
+                    <div style={{ flex: 1 }} />
+                    {/* Model selector */}
+                    <div style={{ display: 'flex', gap: 2 }}>
+                      {MODEL_OPTS.map(m => (
+                        <button key={m} onClick={() => updateModel(s.id, m)} style={{ padding: '2px 6px', background: s.model === m ? `rgba(0,229,255,0.12)` : 'transparent', border: `1px solid ${s.model === m ? (MODEL_COLOR[m] || '#00e5ff') + '88' : '#0d2a3a'}`, borderRadius: 3, color: s.model === m ? (MODEL_COLOR[m] || '#00e5ff') : '#1a4a5a', fontFamily: "'Share Tech Mono'", fontSize: '7px', cursor: 'pointer', letterSpacing: '0.1em', transition: 'all 0.15s' }}>
+                          {m.toUpperCase()}
+                        </button>
+                      ))}
+                    </div>
+                    <button onClick={() => deleteSkill(s.id)} style={{ padding: '2px 7px', background: 'transparent', border: '1px solid rgba(255,61,61,0.2)', borderRadius: 3, color: '#ff3d3d66', fontFamily: "'Share Tech Mono'", fontSize: '8px', cursor: 'pointer' }}>DEL</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* PROJECTS TAB */}
+      {tab === 'projects' && (
+        <div style={{ padding: '0 20px', maxHeight: 380, overflowY: 'auto' }}>
+          {projects.length === 0 ? (
+            <p style={{ color: '#1a4a5a', fontFamily: "'JetBrains Mono'", fontSize: '10px', padding: '4px 0' }}>
+              No projects yet. Use a skill with creates_files: true and ask iZACH to build something.
+            </p>
+          ) : projects.map(p => (
+            <div key={p.name} style={{ marginBottom: 6, padding: '8px 10px', background: 'rgba(0,229,255,0.03)', border: '1px solid #0d2a3a', borderRadius: 4, display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={{ fontSize: 16, flexShrink: 0 }}>📁</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ color: '#00e5ff', fontFamily: "'Share Tech Mono'", fontSize: '10px', letterSpacing: '0.12em' }}>{p.name}</div>
+                <div style={{ color: '#3a6070', fontFamily: "'JetBrains Mono'", fontSize: '9px', marginTop: 2 }}>
+                  {p.file_count} file{p.file_count !== 1 ? 's' : ''} · {p.size_kb} KB
+                </div>
+                <div style={{ color: '#1a4a5a', fontFamily: "'Share Tech Mono'", fontSize: '8px', marginTop: 2 }}>
+                  {(p.files || []).join(' · ')}
+                </div>
+              </div>
+              <button onClick={() => openProject(p.name)} style={{ padding: '4px 10px', background: 'rgba(0,229,255,0.06)', border: '1px solid rgba(0,229,255,0.2)', borderRadius: 3, color: '#00e5ff', fontFamily: "'Share Tech Mono'", fontSize: '8px', cursor: 'pointer', flexShrink: 0 }}>OPEN</button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Guided Voice Enrollment wizard ───────────────────────────
 function VoiceEnrollWizard({ onDone, onCancel }) {
   const TOTAL   = 5
@@ -1755,6 +1899,7 @@ export default function SettingsPanel({
 
   const tabs = [
     { id: 'memory',   label: 'MEMORY'   },
+    { id: 'skills',   label: 'SKILLS'   },
     { id: 'general',  label: 'SETTINGS' },
     { id: 'websites', label: 'WEBSITES' },
     { id: 'keys',     label: 'KEYS & ID'},
@@ -1815,6 +1960,7 @@ export default function SettingsPanel({
             />
           </>
         )}
+        {tab === 'skills' && <SkillsSection />}
         {tab === 'general' && (
           <GeneralSection
             settings={settings}

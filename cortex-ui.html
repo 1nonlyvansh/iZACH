@@ -188,11 +188,34 @@ body.cam-mode #chud { opacity:1; }
 .cm.u { color:rgba(0,148,255,0.9); border-left-color:rgba(0,148,255,0.5); }
 .cm.a { color:var(--th); border-left-color:rgba(0,148,255,0.38); }
 .cm.u::before { content:'» '; color:rgba(0,148,255,0.45); }
-.ci-row { padding:6px 10px; border-top:1px solid rgba(0,148,255,0.07); display:flex; gap:5px; flex-shrink:0; }
+.ci-row { padding:6px 10px; border-top:1px solid rgba(0,148,255,0.07); display:flex; gap:5px; flex-shrink:0; position:relative; }
 .ci-row input { flex:1; background:rgba(0,148,255,0.025); border:1px solid rgba(0,148,255,0.14); color:var(--c); font-family:'Courier New',monospace; font-size:10px; padding:4px 8px; outline:none; }
 .ci-row input:focus { border-color:rgba(0,148,255,0.38); }
 .ci-row button { background:transparent; border:1px solid rgba(0,148,255,0.18); color:rgba(0,148,255,0.55); font-size:8px; padding:4px 10px; cursor:pointer; letter-spacing:.2em; transition:all .12s; }
 .ci-row button:hover { border-color:rgba(0,148,255,0.45); color:var(--c); }
+
+/* ── Skill picker (# autocomplete) ── */
+#skill-picker {
+  display:none; position:absolute; bottom:calc(100% + 4px); left:10px; right:10px;
+  background:rgba(1,5,20,0.97); border:1px solid rgba(0,148,255,0.25);
+  border-radius:6px; z-index:9999; max-height:220px; overflow-y:auto;
+  box-shadow:0 -4px 24px rgba(0,0,0,0.6);
+}
+#skill-picker.open { display:block; }
+.sk-item {
+  display:flex; align-items:center; gap:8px; padding:7px 12px;
+  cursor:pointer; border-bottom:1px solid rgba(0,148,255,0.06);
+  transition:background .1s;
+}
+.sk-item:last-child { border-bottom:none; }
+.sk-item:hover, .sk-item.active { background:rgba(0,148,255,0.1); }
+.sk-item .sk-icon { font-size:14px; flex-shrink:0; width:20px; text-align:center; }
+.sk-item .sk-info { flex:1; min-width:0; }
+.sk-item .sk-name { color:#a8d8ff; font-family:'Share Tech Mono',monospace; font-size:9px; letter-spacing:.15em; }
+.sk-item .sk-desc { color:rgba(0,148,255,0.4); font-size:8px; margin-top:1px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.sk-item .sk-model { font-family:'Share Tech Mono',monospace; font-size:7px; padding:1px 5px; border-radius:3px; flex-shrink:0;
+  background:rgba(0,148,255,0.08); color:rgba(0,148,255,0.5); border:1px solid rgba(0,148,255,0.15); letter-spacing:.1em; }
+.sk-header { padding:5px 12px 3px; font-family:'Share Tech Mono',monospace; font-size:7px; color:rgba(0,148,255,0.3); letter-spacing:.2em; }
 
 /* AUDIO */
 #p-audio { right:18px; top:50px; width:265px; height:295px; }
@@ -1190,7 +1213,8 @@ body.spotlight-mode .pnl:not(.spotlighted) {
     <div class="cm a" style="color:rgba(0,148,255,0.35);">Connecting to iZACH backend...</div>
   </div>
   <div class="ci-row">
-    <input id="cin" placeholder="speak or type..." autocomplete="off"/>
+    <div id="skill-picker"></div>
+    <input id="cin" placeholder="speak or type...  (#skill to activate)" autocomplete="off"/>
     <button onclick="sendChat()">TX</button>
   </div>
   <div class="rh"></div>
@@ -3593,7 +3617,97 @@ async function sendChat(){
     const a=document.createElement('div'); a.className='cm a'; a.textContent='[Backend offline — start iZACH first]'; c.appendChild(a); c.scrollTop=c.scrollHeight;
   }
 }
-document.getElementById('cin').addEventListener('keydown',e=>{if(e.key==='Enter')sendChat();});
+document.getElementById('cin').addEventListener('keydown',e=>{
+  if(e.key==='Enter'){
+    if(document.querySelector('.sk-item.active')){
+      _skillPickerSelect(document.querySelector('.sk-item.active').dataset.id); e.preventDefault(); return;
+    }
+    closeSkillPicker(); sendChat();
+  }
+  if(e.key==='Escape'){ closeSkillPicker(); }
+  if(e.key==='ArrowDown'){ _skillPickerNav(1); e.preventDefault(); }
+  if(e.key==='ArrowUp'){ _skillPickerNav(-1); e.preventDefault(); }
+});
+
+// ════════════════════════════════════════════════════
+// SKILL PICKER — # autocomplete
+// ════════════════════════════════════════════════════
+let _allSkills = [];
+
+async function loadSkillsCache(){
+  try{
+    const d = await fetch(API+'/skills').then(r=>r.json());
+    _allSkills = d.skills || [];
+  }catch(e){ _allSkills = []; }
+}
+loadSkillsCache();
+
+function openSkillPicker(query){
+  const picker = document.getElementById('skill-picker');
+  const q = query.toLowerCase().replace('#','').trim();
+  const filtered = q
+    ? _allSkills.filter(s => s.id.includes(q) || s.name.toLowerCase().includes(q) || (s.tags||[]).join(' ').includes(q))
+    : _allSkills;
+
+  if(!filtered.length){ closeSkillPicker(); return; }
+
+  picker.innerHTML = `<div class="sk-header">⚡ SKILLS — type to filter</div>` +
+    filtered.map(s => `
+      <div class="sk-item" data-id="${s.id}" onclick="_skillPickerSelect('${s.id}')">
+        <span class="sk-icon">${s.icon||'⚡'}</span>
+        <div class="sk-info">
+          <div class="sk-name">#${s.id}</div>
+          <div class="sk-desc">${s.description||s.name}</div>
+        </div>
+        <span class="sk-model">${(s.model||'auto').toUpperCase()}</span>
+      </div>`).join('');
+  picker.classList.add('open');
+}
+
+function closeSkillPicker(){
+  document.getElementById('skill-picker').classList.remove('open');
+}
+
+function _skillPickerSelect(skillId){
+  const inp = document.getElementById('cin');
+  // Replace the # prefix part with the selected skill id + space
+  const val = inp.value;
+  const hashIdx = val.lastIndexOf('#');
+  if(hashIdx !== -1){
+    inp.value = val.slice(0, hashIdx) + '#' + skillId + ' ';
+  } else {
+    inp.value = '#' + skillId + ' ';
+  }
+  closeSkillPicker();
+  inp.focus();
+}
+
+function _skillPickerNav(dir){
+  const items = document.querySelectorAll('.sk-item');
+  if(!items.length) return;
+  const cur = document.querySelector('.sk-item.active');
+  let idx = cur ? [...items].indexOf(cur) + dir : (dir > 0 ? 0 : items.length - 1);
+  idx = ((idx % items.length) + items.length) % items.length;
+  items.forEach(i => i.classList.remove('active'));
+  items[idx].classList.add('active');
+  items[idx].scrollIntoView({block:'nearest'});
+}
+
+// Wire input to picker
+document.getElementById('cin').addEventListener('input', e=>{
+  const val = e.target.value;
+  if(val.includes('#')){
+    const afterHash = val.slice(val.lastIndexOf('#'));
+    openSkillPicker(afterHash);
+  } else {
+    closeSkillPicker();
+  }
+});
+
+// Close picker on outside click
+document.addEventListener('click', e=>{
+  if(!e.target.closest('.ci-row')) closeSkillPicker();
+});
 
 // ════════════════════════════════════════════════════
 // EDGE GLOW

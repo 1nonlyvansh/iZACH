@@ -370,6 +370,27 @@ def speak(text, tone: str = "casual"):
 def get_ai_response(query):
     if not _AI_ENABLED:
         return "AI is unavailable — missing API keys. Check your .env file."
+
+    # ── Skill detection — #skill-id prefix ───────────────────────────────────
+    try:
+        from modules.skill_engine import detect_skill, build_skill_context, save_project_files, extract_project_name
+        skill_id, clean_query = detect_skill(query)
+        if skill_id:
+            sys_add, clean_query, skill_meta = build_skill_context(skill_id, clean_query)
+            if sys_add:
+                model_pref = skill_meta.get("model", "auto")
+                response = ai_manager.send_with_model(clean_query, model_pref, sys_add)
+                # Save project files if skill creates files
+                if skill_meta.get("creates_files") and response:
+                    proj_name = extract_project_name(clean_query)
+                    saved = save_project_files(response, proj_name)
+                    if saved:
+                        file_list = "\n".join(f"  • {os.path.basename(p)}" for p in saved)
+                        response += f"\n\n📁 **Project saved** → `C:/iZACH-Projects/{proj_name}/`\n{file_list}"
+                return response
+    except Exception as _se:
+        print(f"[SkillEngine] Error: {_se}")
+
     from modules.memory import get_memory_as_context
     from modules.context_memory import get_context_memory
     from modules.personality import PERSONALITY_PROMPT, detect_sentiment, get_companion_response, get_tone_for_sentiment

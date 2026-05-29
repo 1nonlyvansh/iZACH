@@ -596,6 +596,83 @@ def memory_delete(key):
 #   GET    /smart-memory/jobs       list APScheduler jobs
 # ─────────────────────────────────────────────────────────────
 
+# ── Skills routes ──────────────────────────────────────────────────────────
+#   GET    /skills                  list all installed skills
+#   POST   /skills/import           import .md from path or raw content
+#   DELETE /skills/<id>             delete skill
+#   PATCH  /skills/<id>/model       update model preference
+#   GET    /skills/projects         list generated projects
+#   POST   /skills/projects/open    open project folder in Explorer
+# ──────────────────────────────────────────────────────────────────────────
+
+@ui_bp.route("/skills", methods=["GET"])
+def skills_list():
+    try:
+        from modules.skill_engine import list_skills
+        return jsonify({"ok": True, "skills": list_skills()})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@ui_bp.route("/skills/import", methods=["POST"])
+def skills_import():
+    try:
+        from modules.skill_engine import import_skill, import_skill_from_text
+        data = request.get_json(silent=True) or {}
+        if "path" in data:
+            meta = import_skill(data["path"])
+            if meta and "error" not in meta:
+                return jsonify({"ok": True, "skill": meta})
+            return jsonify({"ok": False, "error": meta.get("error", "Import failed")}), 400
+        elif "name" in data and "content" in data:
+            ok = import_skill_from_text(data["name"], data["content"])
+            return jsonify({"ok": ok})
+        return jsonify({"ok": False, "error": "Provide 'path' or 'name'+'content'"}), 400
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@ui_bp.route("/skills/<skill_id>", methods=["DELETE"])
+def skills_delete(skill_id):
+    try:
+        from modules.skill_engine import delete_skill
+        ok = delete_skill(skill_id)
+        return jsonify({"ok": ok})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@ui_bp.route("/skills/<skill_id>/model", methods=["PATCH"])
+def skills_update_model(skill_id):
+    try:
+        from modules.skill_engine import update_skill_model
+        data  = request.get_json(silent=True) or {}
+        model = data.get("model", "auto")
+        ok    = update_skill_model(skill_id, model)
+        return jsonify({"ok": ok})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@ui_bp.route("/skills/projects", methods=["GET"])
+def skills_projects():
+    try:
+        from modules.skill_engine import list_projects
+        return jsonify({"ok": True, "projects": list_projects()})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@ui_bp.route("/skills/projects/open", methods=["POST"])
+def skills_project_open():
+    try:
+        from modules.skill_engine import open_project_folder
+        data = request.get_json(silent=True) or {}
+        ok   = open_project_folder(data.get("name", ""))
+        return jsonify({"ok": ok})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
 @ui_bp.route("/smart-memory", methods=["GET"])
 def smart_memory_list():
     try:
