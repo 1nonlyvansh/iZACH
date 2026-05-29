@@ -150,8 +150,12 @@ class InterruptEngine:
             if mic is None:
                 return  # no mic available — silently skip
 
-            # Open mic ONCE — keep context open for entire loop
-            with mic as source:
+            # Open mic ONCE — keep context open for entire loop.
+            # Manual __enter__/__exit__ (instead of `with mic as source:`) so we
+            # can hold PYAUDIO_INIT_LOCK during terminate().  Concurrent
+            # Pa_Initialize + Pa_Terminate → Windows access violation (C crash).
+            source = mic.__enter__()
+            try:
                 try:
                     self._rec.adjust_for_ambient_noise(source, duration=0.2)
                 except (AssertionError, Exception):
@@ -189,6 +193,14 @@ class InterruptEngine:
                         break
                     except Exception:
                         break
+            finally:
+                # Hold lock during Pa_Terminate() to avoid race with Pa_Initialize
+                # in the main voice_loop — concurrent calls cause access violation.
+                try:
+                    with PYAUDIO_INIT_LOCK:
+                        mic.__exit__(None, None, None)
+                except Exception:
+                    pass  # terminate() failed — ignore; process stays alive
 
         except (AssertionError, OSError):
             pass  # mic unavailable — normal when audio device is busy

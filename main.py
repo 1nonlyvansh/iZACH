@@ -524,9 +524,19 @@ def listen():
     if _mic is None:
         _init_mic()
     try:
-        with _mic as source:
+        # Manual __enter__/__exit__ — hold PYAUDIO_INIT_LOCK during Pa_Terminate()
+        # to prevent race with interrupt_engine's concurrent Pa_Terminate() call,
+        # which causes a Windows access violation (C-level crash, uncatchable).
+        source = _mic.__enter__()
+        try:
             print("[LISTENING...]")
             audio = _recognizer.listen(source, timeout=3, phrase_time_limit=15)
+        finally:
+            try:
+                with PYAUDIO_INIT_LOCK:
+                    _mic.__exit__(None, None, None)
+            except Exception:
+                pass
         # Check again after listening in case mic was turned off during capture
         try:
             from modules.ui_api import is_mic_active
