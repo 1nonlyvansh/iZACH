@@ -854,6 +854,8 @@ body.tb-autohide.tb-reveal #device-bar { opacity:0.5; pointer-events:all; }
 
 /* ── SUBCONSCIOUSNESS WIDGET ── */
 #p-sc { left:760px; top:80px; width:310px; height:500px; }
+/* ── SKILLS WIDGET ── */
+#p-skills { right:18px; top:50px; width:280px; height:360px; }
 .sc-health-grid { display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-bottom:10px; }
 .sc-health-card { background:rgba(0,148,255,0.04); border:1px solid rgba(0,148,255,0.12); border-radius:6px; padding:8px 10px; text-align:center; }
 .sc-health-val  { font-size:20px; font-family:'JetBrains Mono',monospace; color:rgba(0,148,255,0.9); line-height:1; }
@@ -1523,13 +1525,14 @@ body.spotlight-mode .pnl:not(.spotlighted) {
     <button class="wp-btn" id="wpb-sh"    onclick="togWgt('p-sh')"    title="Smart Home"><span class="wp-ic">⌂</span><span class="wp-lbl">SMART HOME</span></button>
   </div>
 
-  <!-- AI: Subconsciousness, Agents -->
+  <!-- AI: Subconsciousness, Agents, Skills -->
   <div class="wp-panel" id="wppan-ai">
     <button class="wp-btn" id="wpb-sc" onclick="togWgt('p-sc')" title="Subconsciousness" style="position:relative;">
       <span class="wp-ic">⟁</span><span class="wp-lbl">SUBCON</span>
       <span class="sc-perm-badge" id="sc-perm-badge">0</span>
     </button>
     <button class="wp-btn" id="wpb-agents" onclick="togWgt('p-agents')" title="Agents"><span class="wp-ic">🤖</span><span class="wp-lbl">AGENTS</span></button>
+    <button class="wp-btn" id="wpb-skills" onclick="togWgt('p-skills')" title="Skills"><span class="wp-ic">⚡</span><span class="wp-lbl">SKILLS</span></button>
   </div>
   <!-- NEWS widget removed — iZACH speaks live news on demand via voice cmd "tell me the news" -->
 </div>
@@ -2301,6 +2304,26 @@ body.spotlight-mode .pnl:not(.spotlighted) {
     </div>
   </div>
 
+  <div class="rh"></div>
+</div>
+
+<!-- SKILLS PANEL -->
+<div id="p-skills" class="pnl">
+  <div class="cb cb-tl"></div><div class="cb cb-tr"></div><div class="cb cb-bl"></div><div class="cb cb-br"></div>
+  <div class="ph"><span class="ph-id">SK · SKILLS</span><span class="ph-cat"><div class="ph-dot"></div>SKILL ENGINE<span class="ph-min">—</span></span></div>
+  <div class="pnl-body" id="p-skills-body" style="overflow-y:auto;">
+    <!-- header row -->
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px 4px;">
+      <span style="font-size:7px;letter-spacing:.3em;color:rgba(0,148,255,0.32);">INSTALLED SKILLS</span>
+      <span style="font-size:7px;letter-spacing:.2em;color:rgba(0,148,255,0.25);"># TO ACTIVATE</span>
+    </div>
+    <div id="skills-list" style="padding:0 8px 8px;"></div>
+    <!-- projects header -->
+    <div style="padding:6px 12px 4px;border-top:1px solid rgba(0,148,255,0.07);margin-top:4px;">
+      <span style="font-size:7px;letter-spacing:.3em;color:rgba(0,148,255,0.32);">PROJECTS</span>
+    </div>
+    <div id="skills-projects" style="padding:0 8px 8px;"></div>
+  </div>
   <div class="rh"></div>
 </div>
 
@@ -3627,6 +3650,62 @@ document.getElementById('cin').addEventListener('keydown',e=>{
   if(e.key==='Escape'){ closeSkillPicker(); }
   if(e.key==='ArrowDown'){ _skillPickerNav(1); e.preventDefault(); }
   if(e.key==='ArrowUp'){ _skillPickerNav(-1); e.preventDefault(); }
+});
+
+// ════════════════════════════════════════════════════
+// SKILLS PANEL — p-skills widget
+// ════════════════════════════════════════════════════
+async function loadSkillsPanel(){
+  const list = document.getElementById('skills-list');
+  const proj = document.getElementById('skills-projects');
+  if(!list) return;
+
+  // Skills
+  try{
+    const d = await fetch(API+'/skills').then(r=>r.json());
+    const skills = d.skills || [];
+    if(!skills.length){
+      list.innerHTML='<div style="padding:6px 4px;font-size:8px;color:rgba(0,148,255,0.25);letter-spacing:.15em;">NO SKILLS INSTALLED</div>';
+    } else {
+      list.innerHTML = skills.map(s=>`
+        <div style="display:flex;align-items:center;gap:6px;padding:5px 6px;border-bottom:1px solid rgba(0,148,255,0.06);cursor:pointer;"
+             onclick="document.getElementById('cin').value='#${s.id} ';togWgt('p-comm');togWgt('p-skills');"
+             title="Click to activate #${s.id}">
+          <span style="font-size:13px;flex-shrink:0;">${s.icon||'⚡'}</span>
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:8px;letter-spacing:.15em;color:rgba(0,148,255,0.8);font-family:'Share Tech Mono',monospace;">#${s.id}</div>
+            <div style="font-size:7px;color:rgba(0,148,255,0.35);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${s.description||s.name}</div>
+          </div>
+          <span style="font-size:6px;padding:1px 4px;border:1px solid rgba(0,148,255,0.15);border-radius:3px;color:rgba(0,148,255,0.4);font-family:'Share Tech Mono',monospace;flex-shrink:0;">${(s.model||'auto').toUpperCase()}</span>
+          <span style="font-size:7px;color:rgba(0,148,255,0.25);flex-shrink:0;">${s.use_count||0}×</span>
+        </div>`).join('');
+    }
+  }catch(e){ list.innerHTML='<div style="padding:6px 4px;font-size:8px;color:rgba(255,80,80,0.4);">Backend offline</div>'; }
+
+  // Projects
+  try{
+    const d = await fetch(API+'/skills/projects').then(r=>r.json());
+    const projects = d.projects || [];
+    if(!projects.length){
+      proj.innerHTML='<div style="padding:4px 4px;font-size:8px;color:rgba(0,148,255,0.2);letter-spacing:.12em;">NO PROJECTS YET</div>';
+    } else {
+      proj.innerHTML = projects.map(p=>`
+        <div style="display:flex;align-items:center;gap:6px;padding:4px 6px;border-bottom:1px solid rgba(0,148,255,0.05);">
+          <span style="font-size:11px;">📁</span>
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:8px;color:rgba(0,148,255,0.75);font-family:'Share Tech Mono',monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${p.name}</div>
+            <div style="font-size:7px;color:rgba(0,148,255,0.3);">${p.file_count} file${p.file_count!==1?'s':''} · ${p.size_kb}KB</div>
+          </div>
+          <button onclick="fetch(API+'/skills/projects/open',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:'${p.name}'})})"
+            style="background:transparent;border:1px solid rgba(0,148,255,0.18);border-radius:3px;color:rgba(0,148,255,0.5);font-size:6px;padding:2px 6px;cursor:pointer;font-family:'Share Tech Mono',monospace;letter-spacing:.1em;">OPEN</button>
+        </div>`).join('');
+    }
+  }catch(e){}
+}
+
+// Load skills panel when opened
+document.getElementById('p-skills').addEventListener('transitionend',function(){
+  if(this.classList.contains('show')) loadSkillsPanel();
 });
 
 // ════════════════════════════════════════════════════
