@@ -3419,7 +3419,7 @@ tick(); setInterval(tick,1000);
 // STATE MACHINE
 // ════════════════════════════════════════════════════
 let camStream=null;
-const allWgts=['p-comm','p-audio','p-sched','p-sys','p-intel','p-mem','p-msg','p-wx','p-feed','p-hist','p-clock','p-phone','p-devices','p-agents','p-ocr','p-print','p-fit','p-loc','p-sh','p-sc','p-ig'];
+const allWgts=['p-comm','p-audio','p-sched','p-sys','p-intel','p-mem','p-msg','p-wx','p-feed','p-hist','p-clock','p-phone','p-devices','p-agents','p-ocr','p-print','p-fit','p-loc','p-sh','p-sc','p-ig','p-skills'];
 const dkMap={'p-comm':'dk-comm','p-audio':'dk-aud','p-sched':'dk-sch','p-sys':'dk-sys','p-intel':'dk-int','p-mem':'dk-mem','p-msg':'dk-msg','p-wx':'dk-wx','p-rel':'dk-rel','p-feed':'dk-feed','p-hist':'dk-hist','p-clock':'dk-clk','p-phone':'dk-phone','p-devices':'dk-devices','p-agents':'dk-agents'};
 
 function slideScreens(show){
@@ -3534,6 +3534,7 @@ const wpMap={
   'p-sc':'wpb-sc',
   'p-ig':'wpb-ig',
   'p-news':'wpb-news',
+  'p-skills':'wpb-skills',
 };
 function togWgt(id){
   const el=document.getElementById(id); if(!el)return;
@@ -4097,7 +4098,8 @@ const wCfg={
   'p-wx'   :{aspect:262/200,minW:190,maxW:420,minH:144,maxH:320},
   'p-rel'  :{aspect:300/300,minW:200,maxW:500,minH:200,maxH:500},
   'p-feed' :{aspect:300/240,minW:200,maxW:480,minH:160,maxH:400},
-  'p-hist' :{aspect:240/260,minW:180,maxW:420,minH:180,maxH:460},
+  'p-hist'  :{aspect:240/260,minW:180,maxW:420,minH:180,maxH:460},
+  'p-skills':{aspect:280/360,minW:220,maxW:480,minH:200,maxH:540},
 };
 
 const sgEl=document.getElementById('snap-grid');
