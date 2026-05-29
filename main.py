@@ -371,22 +371,24 @@ def get_ai_response(query):
     if not _AI_ENABLED:
         return "AI is unavailable — missing API keys. Check your .env file."
 
-    # ── Skill detection — #skill-id prefix ───────────────────────────────────
+    # ── Skill detection — #skill-id or #skill1 & #skill2 prefix ─────────────
     try:
-        from modules.skill_engine import detect_skill, build_skill_context, save_project_files, extract_project_name
-        skill_id, clean_query = detect_skill(query)
-        if skill_id:
-            sys_add, clean_query, skill_meta = build_skill_context(skill_id, clean_query)
+        from modules.skill_engine import (
+            detect_skills, build_multi_skill_context,
+            save_project_files, extract_project_name
+        )
+        skill_ids, clean_query = detect_skills(query)
+        if skill_ids:
+            sys_add, clean_query, skill_meta = build_multi_skill_context(skill_ids, clean_query)
             if sys_add:
                 model_pref = skill_meta.get("model", "auto")
                 response = ai_manager.send_with_model(clean_query, model_pref, sys_add)
-                # Save project files if skill creates files
+                # Save project files if any skill creates files
                 if skill_meta.get("creates_files") and response:
                     proj_name = extract_project_name(clean_query)
                     saved = save_project_files(response, proj_name)
                     if saved:
                         file_list = " · ".join(os.path.basename(p) for p in saved)
-                        # Replace verbose code dump with short summary
                         response = (
                             f"Done! Built **{proj_name}** and saved to "
                             f"`C:/iZACH-Projects/{proj_name}/`\n"

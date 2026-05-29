@@ -304,9 +304,9 @@ def ui_command():
     # Must happen BEFORE _chain_fn() so the orchestrator never sees it.
     if text.startswith('#'):
         try:
-            from modules.skill_engine import detect_skill
-            skill_id, _ = detect_skill(text)
-            if skill_id:
+            from modules.skill_engine import detect_skills
+            skill_ids, _ = detect_skills(text)
+            if skill_ids:
                 # Route directly to get_ai_response which has skill injection
                 if _get_resp:
                     resp = _get_resp(text)

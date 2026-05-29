@@ -135,8 +135,8 @@ def load_skill_content(skill_id: str) -> tuple[dict, str] | None:
 
 def detect_skill(text: str) -> tuple[str | None, str]:
     """
-    Detect #skill-id prefix in user input.
-    Returns (skill_id, cleaned_text_without_prefix).
+    Detect single #skill-id prefix. Returns (skill_id, cleaned_text) or (None, text).
+    For multi-skill (&) detection use detect_skills().
     """
     m = re.match(r'^#([\w\-]+)\s*(.*)', text.strip(), re.DOTALL)
     if not m:
@@ -144,40 +144,87 @@ def detect_skill(text: str) -> tuple[str | None, str]:
     return m.group(1).lower(), m.group(2).strip()
 
 
+def detect_skills(text: str) -> tuple[list[str], str]:
+    """
+    Detect one or more #skill-id separated by & in user input.
+    e.g. "#html-builder & #python-dev build a task manager"
+    Returns (list_of_skill_ids, cleaned_text).
+    """
+    stripped = text.strip()
+    # Match: #skill1 & #skill2 & ... followed by the actual prompt
+    m = re.match(r'^(#[\w\-]+(?:\s*&\s*#[\w\-]+)*)\s*(.*)', stripped, re.DOTALL)
+    if not m:
+        return [], text
+    skill_part = m.group(1)
+    clean_text = m.group(2).strip()
+    skill_ids = [s.strip().lstrip('#').lower() for s in re.split(r'\s*&\s*', skill_part)]
+    return skill_ids, clean_text
+
+
 def build_skill_context(skill_id: str, user_message: str) -> tuple[str, str, dict]:
+    """Single skill context. Returns (system_addition, user_message, skill_meta)."""
+    return build_multi_skill_context([skill_id], user_message)
+
+
+def build_multi_skill_context(skill_ids: list[str], user_message: str) -> tuple[str, str, dict]:
     """
-    Load skill, build system prompt addition, detect project name.
-    Returns (system_addition, possibly_modified_user_message, skill_meta).
+    Merge context from multiple skills. All skill bodies combined into one system prompt.
+    Returns (combined_system_addition, user_message, merged_meta).
+    merged_meta: model = deepseek if ANY skill uses deepseek, creates_files = True if ANY does.
     """
-    result = load_skill_content(skill_id)
-    if not result:
-        print(f"[SkillEngine] Skill not found: {skill_id}")
+    bodies: list[str] = []
+    merged_meta: dict = {"model": "auto", "creates_files": False, "name": "", "version": "1.0"}
+    found_any = False
+
+    for skill_id in skill_ids:
+        result = load_skill_content(skill_id)
+        if not result:
+            print(f"[SkillEngine] Skill not found: {skill_id}")
+            continue
+        meta, body = result
+        found_any = True
+        merged_meta["name"] += (", " if merged_meta["name"] else "") + meta.get("name", skill_id)
+        # Model priority: deepseek > groq > gemini > auto
+        _PRIO = {"deepseek": 3, "groq": 2, "gemini": 1, "auto": 0}
+        if _PRIO.get(meta.get("model","auto"), 0) > _PRIO.get(merged_meta["model"], 0):
+            merged_meta["model"] = meta.get("model", "auto")
+        if meta.get("creates_files"):
+            merged_meta["creates_files"] = True
+        bodies.append(f"[SKILL: {meta.get('name', skill_id)}]\n{body}")
+        _track_usage(skill_id)
+
+    if not found_any:
         return "", user_message, {}
 
-    meta, body = result
-    project_name = ""
+    separator = "\n\n" + "─" * 60 + "\n\n"
+    combined_body = separator.join(bodies)
 
-    if meta.get("creates_files"):
+    if merged_meta.get("creates_files"):
         project_name = extract_project_name(user_message)
-        project_ctx = (
+        combined_body += (
             f"\n\n## File Output Instructions\n"
-            f"When generating code files, start each file's code block with its filename on the opening fence line:\n"
+            f"Label each generated file on its fence opening line:\n"
+            f"```python main.py\n(content)\n```\n"
             f"```html index.html\n(content)\n```\n"
             f"```css style.css\n(content)\n```\n"
-            f"```js script.js\n(content)\n```\n"
-            f"Project name: **{project_name}**\n"
-            f"Output path: C:/iZACH-Projects/{project_name}/\n"
-            f"Generate ALL necessary files — do not omit any."
+            f"Project name: **{project_name}**  ·  Path: C:/iZACH-Projects/{project_name}/\n"
+            f"Generate ALL necessary files across ALL active skills. Do not omit any.\n\n"
+            f"## CRITICAL — Always generate complete working code. NEVER ask 'should I generate code?' "
+            f"NEVER output only tables or lists of endpoints without actual implementation. "
+            f"Build the full working project immediately."
         )
-        body = body + project_ctx
+    else:
+        combined_body += (
+            "\n\n## CRITICAL — Always generate complete working code immediately. "
+            "NEVER ask 'should I generate code?'. NEVER output only summaries or endpoint lists. "
+            "Build and show the full implementation now."
+        )
 
     system_addition = (
-        f"[ACTIVE SKILL: {meta.get('name', skill_id)} v{meta.get('version','1.0')}]\n\n"
-        f"{body}"
+        f"[ACTIVE SKILLS: {merged_meta['name']}]\n\n"
+        f"{combined_body}"
     )
-
-    _track_usage(skill_id)
-    return system_addition, user_message, meta
+    return system_addition, user_message, merged_meta
 
 
 # ── Project file saving ───────────────────────────────────────────────────────
