@@ -149,6 +149,7 @@ def _get_camera_names() -> dict[int, str]:
 _cameras_cache: list[dict] | None = None
 _cameras_cache_ts: float = 0.0
 _CAMERAS_CACHE_TTL = 60.0  # seconds
+_cameras_enum_lock = threading.Lock()   # serialise concurrent VideoCapture calls
 
 
 def list_cameras(force_refresh: bool = False) -> list[dict]:
@@ -164,51 +165,59 @@ def list_cameras(force_refresh: bool = False) -> list[dict]:
     global _cameras_cache, _cameras_cache_ts
     import time as _t
     now = _t.time()
+    # Fast path — return cache without acquiring lock (double-checked locking)
     if not force_refresh and _cameras_cache is not None and (now - _cameras_cache_ts) < _CAMERAS_CACHE_TTL:
         return _cameras_cache
 
-    try:
-        cv2.setLogLevel(0)
-    except AttributeError:
-        pass
+    # Serialize: concurrent VideoCapture() calls on Windows cause access violations
+    with _cameras_enum_lock:
+        # Re-check inside lock — another thread may have just refreshed
+        now = _t.time()
+        if not force_refresh and _cameras_cache is not None and (now - _cameras_cache_ts) < _CAMERAS_CACHE_TTL:
+            return _cameras_cache
 
-    wmi_names = _get_camera_names()
-    result: list[dict] = []
-    logger.info(f"[CAM] Scanning cameras… name map: {wmi_names}")
-
-    def _try_open(idx: int, backend=None) -> bool:
         try:
-            cap = cv2.VideoCapture(idx, backend) if backend is not None else cv2.VideoCapture(idx)
-            if not cap.isOpened():
+            cv2.setLogLevel(0)
+        except AttributeError:
+            pass
+
+        wmi_names = _get_camera_names()
+        result: list[dict] = []
+        logger.info(f"[CAM] Scanning cameras… name map: {wmi_names}")
+
+        def _try_open(idx: int, backend=None) -> bool:
+            try:
+                cap = cv2.VideoCapture(idx, backend) if backend is not None else cv2.VideoCapture(idx)
+                if not cap.isOpened():
+                    cap.release()
+                    return False
+                ret, _ = cap.read()
                 cap.release()
+                return bool(ret)
+            except Exception:
                 return False
-            ret, _ = cap.read()
-            cap.release()
-            return bool(ret)
-        except Exception:
-            return False
 
-    for i in range(8):  # check up to 8 indices (handles external cameras at higher slots)
-        # Always coerce name to str — WMI may return dicts/None on some Windows configs
-        raw_name = wmi_names.get(i)
-        if isinstance(raw_name, str) and raw_name.strip():
-            name = raw_name.strip()
-        elif raw_name is not None:
-            # Extract name from dict if WMI returned a PSObject
-            if isinstance(raw_name, dict):
-                name = str(raw_name.get("Name") or raw_name.get("name") or f"Camera {i}").strip()
+        for i in range(8):  # check up to 8 indices (handles external cameras at higher slots)
+            # Always coerce name to str — WMI may return dicts/None on some Windows configs
+            raw_name = wmi_names.get(i)
+            if isinstance(raw_name, str) and raw_name.strip():
+                name = raw_name.strip()
+            elif raw_name is not None:
+                # Extract name from dict if WMI returned a PSObject
+                if isinstance(raw_name, dict):
+                    name = str(raw_name.get("Name") or raw_name.get("name") or f"Camera {i}").strip()
+                else:
+                    name = str(raw_name).strip() or f"Camera {i}"
             else:
-                name = str(raw_name).strip() or f"Camera {i}"
-        else:
-            name = f"Camera {i}"
+                name = f"Camera {i}"
 
-        # CAP_DSHOW → CAP_MSMF → auto (let OpenCV pick best backend)
-        if _try_open(i, cv2.CAP_MSMF) or _try_open(i, cv2.CAP_DSHOW) or _try_open(i):
-            result.append({"index": i, "name": name})
+            # CAP_DSHOW → CAP_MSMF → auto (let OpenCV pick best backend)
+            if _try_open(i, cv2.CAP_MSMF) or _try_open(i, cv2.CAP_DSHOW) or _try_open(i):
+                result.append({"index": i, "name": name})
 
-    _cameras_cache = result
-    _cameras_cache_ts = now
-    return result
+        _cameras_cache = result
+        _cameras_cache_ts = now
+        return result
 
 
 # ── Camera helpers ────────────────────────────────────────────────────────────
