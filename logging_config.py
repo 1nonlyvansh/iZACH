@@ -27,5 +27,18 @@ def setup_logging():
     root_logger.addHandler(file_handler)
     root_logger.addHandler(console_handler)
 
+    # Suppress noisy loggers
     logging.getLogger('google').setLevel(logging.ERROR)
     logging.getLogger('httpx').setLevel(logging.ERROR)
+
+    # Stop werkzeug from propagating to root logger —
+    # without this every HTTP request is logged TWICE (once by werkzeug's
+    # own handler, once when it bubbles up to the root handler).
+    logging.getLogger('werkzeug').propagate = False
+
+    # Other chatty libraries that don't need root propagation
+    for _noisy in ('urllib3', 'googleapiclient', 'google_auth_httplib2',
+                   'pymongo', 'apscheduler', 'websockets', 'asyncio',
+                   'comtypes', 'PIL'):
+        logging.getLogger(_noisy).propagate = False
+        logging.getLogger(_noisy).setLevel(logging.WARNING)

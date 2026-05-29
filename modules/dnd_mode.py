@@ -258,6 +258,9 @@ def add_to_queue(item: dict):
             item["reminder_status"] = "none"   # none | pending | done | cancelled
             item["reminder_event_id"] = None
             _queue.append(item)
+            # Evict oldest if over cap
+            if len(_queue) > _DND_QUEUE_MAX:
+                _queue = _queue[-_DND_QUEUE_MAX:]
             _grouped_senders[number] = item["id"]
 
         # ── Auto-escalation tracking ───────────────────────────
@@ -957,12 +960,19 @@ def _save_queue():
         logger.warning(f"[DND] Queue save error: {e}")
 
 
+_DND_QUEUE_MAX = 500  # cap — prevent unbounded memory growth across restarts
+
 def _load_queue():
     global _queue
     try:
         if os.path.exists(_QUEUE_FILE):
             with open(_QUEUE_FILE, encoding="utf-8") as f:
-                _queue = json.load(f)
+                loaded = json.load(f)
+            # Keep only most recent items — discard old stale alerts
+            if len(loaded) > _DND_QUEUE_MAX:
+                loaded = loaded[-_DND_QUEUE_MAX:]
+                logger.info(f"[DND] Queue trimmed to {_DND_QUEUE_MAX} items.")
+            _queue = loaded
             logger.info(f"[DND] Loaded {len(_queue)} queued alerts from disk.")
     except Exception:
         _queue = []

@@ -92,7 +92,35 @@ def warmup():
     _get_collection()
 
 
+_RAG_MAX_ENTRIES = 2000      # hard cap on collection size
+_RAG_PRUNE_DAYS  = 30        # delete entries older than this many days
+_prune_counter   = 0         # prune every N adds, not every single add
+
+
+def _prune_old_entries(col) -> None:
+    """Delete entries older than _RAG_PRUNE_DAYS and trim to _RAG_MAX_ENTRIES."""
+    try:
+        cutoff = int(time.time()) - (_RAG_PRUNE_DAYS * 86400)
+        # Delete by timestamp filter
+        col.delete(where={"ts": {"$lt": cutoff}})
+        # Hard cap: if still over limit, delete oldest
+        count = col.count()
+        if count > _RAG_MAX_ENTRIES:
+            # Get all IDs sorted by ts, delete oldest excess
+            results = col.get(include=["metadatas"])
+            ids     = results.get("ids", [])
+            metas   = results.get("metadatas", [])
+            pairs   = sorted(zip(metas, ids), key=lambda x: x[0].get("ts", 0))
+            excess  = count - _RAG_MAX_ENTRIES
+            delete_ids = [iid for _, iid in pairs[:excess]]
+            if delete_ids:
+                col.delete(ids=delete_ids)
+    except Exception as e:
+        print(f"[RAG] Prune error: {e}")
+
+
 def add_conversation(query: str, response: str) -> None:
+    global _prune_counter
     col = _get_collection()
     if col is None:
         return
@@ -108,6 +136,10 @@ def add_conversation(query: str, response: str) -> None:
             }],
             ids=[doc_id],
         )
+        # Prune every 50 adds — cheap check, prevents unbounded growth
+        _prune_counter += 1
+        if _prune_counter % 50 == 0:
+            _prune_old_entries(col)
     except Exception as e:
         print(f"[RAG] Store failed: {e}")
 
