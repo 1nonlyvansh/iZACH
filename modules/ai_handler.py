@@ -64,7 +64,7 @@ class AIProvider:
             print(f"[SYSTEM] Gemini Init Failed: {e}")
 
     def send_message(self, query):
-        """Online cloud providers only: Groq → Gemini."""
+        """Online cloud providers only: Groq → Gemini (all 3 keys) → OpenRouter."""
         online = _check_internet()
         if not online:
             return "Offline — cloud providers unreachable."
@@ -76,24 +76,77 @@ class AIProvider:
             response = self._call_groq(query)
         except Exception as e:
             if self._is_rate_limit(e):
-                response = self._handle_429(query, "groq")
+                print("[ALERT] Groq rate limited — trying Groq retry once...")
+                try:
+                    time.sleep(3)
+                    response = self._call_groq(query)
+                except Exception:
+                    pass
             else:
                 print(f"[GROQ ERROR]: {e}")
 
-        # 2. FALLBACK TO GEMINI
+        # 2. FALLBACK: rotate through ALL Gemini keys
         if response is None:
-            print("[SYSTEM] Groq failed. Falling back to Gemini...")
+            valid_keys = [k for k in self.gemini_keys if k]
+            for attempt, key in enumerate(valid_keys):
+                try:
+                    print(f"[SYSTEM] Trying Gemini key {attempt + 1}/{len(valid_keys)}...")
+                    client = genai.Client(api_key=key)
+                    from google.genai import types as _types
+                    sys_instr = self._build_system_prompt(query)
+                    resp = client.models.generate_content(
+                        model="gemini-2.0-flash",
+                        contents=query,
+                        config=_types.GenerateContentConfig(system_instruction=sys_instr)
+                    )
+                    response = resp.text
+                    if response:
+                        # Update active key index on success
+                        self.current_gem_idx = attempt
+                        self._init_gemini()
+                        break
+                except Exception as e:
+                    if self._is_rate_limit(e):
+                        print(f"[SYSTEM] Gemini key {attempt + 1} rate limited — trying next key...")
+                        continue
+                    else:
+                        print(f"[GEMINI ERROR key {attempt + 1}]: {e}")
+                        break
+
+        # 3. FINAL FALLBACK: OpenRouter (free tier, no daily quota)
+        if response is None:
+            print("[SYSTEM] All Groq/Gemini keys exhausted — trying OpenRouter...")
             try:
-                response = self._call_gemini(query)
+                response = self._call_openrouter(query)
             except Exception as e:
-                if self._is_rate_limit(e):
-                    response = self._handle_429(query, "gemini")
-                else:
-                    print(f"[GEMINI ERROR]: {e}")
+                print(f"[OPENROUTER ERROR]: {e}")
 
         if response:
             rag_memory.add_conversation(query, response)
         return response or "Neural link instability. All providers offline."
+
+    def _call_openrouter(self, query: str) -> str | None:
+        """OpenRouter fallback — uses free models, no daily quota."""
+        api_key = os.getenv("OPENROUTER_API_KEY", "")
+        if not api_key:
+            return None
+        import httpx as _hx
+        sys_prompt = self._build_system_prompt(query)
+        payload = {
+            "model": "meta-llama/llama-3.1-8b-instruct:free",
+            "messages": [
+                {"role": "system", "content": sys_prompt},
+                {"role": "user",   "content": query},
+            ],
+        }
+        r = _hx.post(
+            "https://openrouter.ai/api/v1/chat/completions",
+            json=payload,
+            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+            timeout=30,
+        )
+        r.raise_for_status()
+        return r.json()["choices"][0]["message"]["content"]
 
     @staticmethod
     def _style_instruction() -> str:

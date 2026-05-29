@@ -1,37 +1,6 @@
 import logging
 import os
-import re
 from logging.handlers import RotatingFileHandler
-
-
-# ── Poll-endpoint filter ───────────────────────────────────────────────────────
-# Werkzeug logs every HTTP request at INFO level. The UI polls /status, /spotify,
-# /phone/status, /whatsapp/status etc. every 2-4s → 40+ terminal lines/minute.
-# This filter lets 4xx/5xx and POST/PUT/DELETE through; silences noisy GET polls.
-
-_POLL_ENDPOINTS = re.compile(
-    r'"GET /(status|spotify|phone/status|phone/commands|whatsapp/status|'
-    r'health|weather|contacts|nodes/vitals|subconsciousness/pending|'
-    r'mic/devices|vision/cameras|connect/qr|busy|dnd|calendar/events|'
-    r'skills|relationships|print/status|location/status|fitness/summary|'
-    r'smarthome/status) HTTP'
-)
-
-
-class _SuppressPollFilter(logging.Filter):
-    """Drop routine UI poll GET requests — only pass errors and write ops."""
-    def filter(self, record: logging.LogRecord) -> bool:
-        msg = record.getMessage()
-        # Always show errors (4xx/5xx)
-        if '" 4' in msg or '" 5' in msg:
-            return True
-        # Always show writes
-        if '"POST ' in msg or '"PUT ' in msg or '"DELETE ' in msg or '"PATCH ' in msg:
-            return True
-        # Drop silent polls
-        if _POLL_ENDPOINTS.search(msg):
-            return False
-        return True
 
 
 def setup_logging():
@@ -43,14 +12,17 @@ def setup_logging():
         datefmt='%Y-%m-%d %H:%M:%S'
     )
 
-    # File handler — keep INFO and above, polls included (for debug)
+    # ── File handler — captures everything ────────────────────────────────────
     file_handler = RotatingFileHandler(
         'logs/izach.log', maxBytes=5*1024*1024, backupCount=2, encoding='utf-8'
     )
     file_handler.setFormatter(log_format)
     file_handler.setLevel(logging.INFO)
 
-    # Console handler — ERROR only + iZACH's own prints bypass this anyway
+    # ── Console handler — ERROR only ──────────────────────────────────────────
+    # iZACH's own [SPEAK], [LISTENING], [USER] etc. are plain print() — they
+    # bypass Python logging entirely and always appear.
+    # Python-logged stuff: only show actual errors in terminal.
     console_handler = logging.StreamHandler()
     console_handler.setFormatter(log_format)
     console_handler.setLevel(logging.ERROR)
@@ -60,13 +32,13 @@ def setup_logging():
     root_logger.addHandler(file_handler)
     root_logger.addHandler(console_handler)
 
-    # ── Werkzeug access log ────────────────────────────────────────────────────
-    # Stop propagation to root (prevents double-logging).
-    # Add poll-suppression filter so terminal stays clean.
-    # Keep a file-only handler so polls still appear in izach.log for debugging.
+    # ── Werkzeug — file only, NOT console ────────────────────────────────────
+    # werkzeug logs every HTTP request at INFO. The UI polls 20+ endpoints
+    # every 2-4s → flood. Solution: propagate=False + ERROR level on console.
+    # All requests still go to izach.log via the file_handler below.
     wz = logging.getLogger('werkzeug')
-    wz.propagate = False
-    wz.setLevel(logging.INFO)
+    wz.propagate = False        # never bubble to root (prevents double-log)
+    wz.setLevel(logging.INFO)   # capture INFO for file
 
     wz_file = RotatingFileHandler(
         'logs/izach.log', maxBytes=5*1024*1024, backupCount=2, encoding='utf-8'
@@ -75,19 +47,14 @@ def setup_logging():
     wz_file.setLevel(logging.INFO)
     wz.addHandler(wz_file)
 
-    # Console version of werkzeug — only errors + writes, no polls
-    wz_console = logging.StreamHandler()
-    wz_console.setFormatter(log_format)
-    wz_console.setLevel(logging.INFO)
-    wz_console.addFilter(_SuppressPollFilter())
-    wz.addHandler(wz_console)
+    # NO console handler for werkzeug → terminal stays clean
 
-    # ── Suppress other noisy libraries ────────────────────────────────────────
-    logging.getLogger('google').setLevel(logging.ERROR)
-    logging.getLogger('httpx').setLevel(logging.ERROR)
-
-    for _noisy in ('urllib3', 'googleapiclient', 'google_auth_httplib2',
-                   'pymongo', 'apscheduler', 'websockets', 'asyncio',
-                   'comtypes', 'PIL', 'numba', 'llvmlite'):
-        logging.getLogger(_noisy).propagate = False
-        logging.getLogger(_noisy).setLevel(logging.WARNING)
+    # ── Suppress all other chatty libraries ───────────────────────────────────
+    for _lib in (
+        'google', 'httpx', 'urllib3', 'googleapiclient', 'google_auth_httplib2',
+        'pymongo', 'apscheduler', 'websockets', 'asyncio', 'comtypes',
+        'PIL', 'numba', 'llvmlite',
+    ):
+        lg = logging.getLogger(_lib)
+        lg.propagate = False
+        lg.setLevel(logging.ERROR)
