@@ -389,7 +389,7 @@ body.cam-mode #chud { opacity:1; }
 
 /* ── Widget Picker (tabbed) ── */
 #widget-picker {
-  position:fixed; bottom:80px; left:50%;
+  position:fixed; bottom:86px; left:50%;
   transform:translateX(-50%) translateY(12px);
   width:360px;   /* JS overrides this with taskbar's actual rendered width */
   min-width:260px; max-width:900px;
@@ -399,7 +399,7 @@ body.cam-mode #chud { opacity:1; }
   backdrop-filter:blur(20px);
   -webkit-backdrop-filter:blur(20px);
   box-shadow:0 -4px 40px rgba(0,0,0,0.7),0 0 0 1px rgba(0,148,255,0.05) inset,0 0 24px rgba(0,148,255,0.06);
-  z-index:8999; opacity:0; pointer-events:none;
+  z-index:9001; opacity:0; pointer-events:none;
   transition:opacity .22s, transform .22s;
   overflow:hidden;
 }
