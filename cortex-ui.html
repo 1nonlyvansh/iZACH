@@ -3670,8 +3670,8 @@ async function loadSkillsPanel(){
     } else {
       list.innerHTML = skills.map(s=>`
         <div style="display:flex;align-items:center;gap:6px;padding:5px 6px;border-bottom:1px solid rgba(0,148,255,0.06);cursor:pointer;"
-             onclick="document.getElementById('cin').value='#${s.id} ';togWgt('p-comm');togWgt('p-skills');"
-             title="Click to activate #${s.id}">
+             onclick="document.getElementById('cin').value='#${s.id} ';document.getElementById('cin').focus();"
+             title="Click to prefill #${s.id} in chat input">
           <span style="font-size:13px;flex-shrink:0;">${s.icon||'⚡'}</span>
           <div style="flex:1;min-width:0;">
             <div style="font-size:8px;letter-spacing:.15em;color:rgba(0,148,255,0.8);font-family:'Share Tech Mono',monospace;">#${s.id}</div>

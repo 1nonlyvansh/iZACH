@@ -300,6 +300,28 @@ def ui_command():
             "ts": time.strftime("%H:%M"),
         })
 
+    # ── Skill shortcut — #skill-id prefix bypasses command chain ──────────────
+    # Must happen BEFORE _chain_fn() so the orchestrator never sees it.
+    if text.startswith('#'):
+        try:
+            from modules.skill_engine import detect_skill
+            skill_id, _ = detect_skill(text)
+            if skill_id:
+                # Route directly to get_ai_response which has skill injection
+                if _get_resp:
+                    resp = _get_resp(text)
+                    if resp:
+                        _log_message("iZACH", resp)
+                        if source == "phone":
+                            try:
+                                from modules.ws_bridge import _broadcast_to_non_android
+                                _broadcast_to_non_android({"type": "chat", "sender": "iZACH", "text": resp, "ts": time.strftime("%H:%M")})
+                            except Exception:
+                                pass
+                        return jsonify({"ok": True, "response": resp, "ts": time.strftime("%H:%M")})
+        except Exception as _se:
+            print(f"[UI API] Skill intercept error: {_se}")
+
     try:
         if _chain_fn is None:
             return jsonify({"ok": False, "error": "Backend not initialized"}), 503
