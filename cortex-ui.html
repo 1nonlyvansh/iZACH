@@ -1433,6 +1433,9 @@ body.spotlight-mode .pnl:not(.spotlighted) {
     <button class="tb-btn" id="tb-mic"      onclick="toggleListen()"             title="MIC ON/OFF">
       <span class="tb-ic">⬤</span><span class="tb-lbl">MIC</span>
     </button>
+    <button class="tb-btn" id="tb-busy"     onclick="toggleBusyMode()"           title="BUSY MODE">
+      <span class="tb-ic">🔶</span><span class="tb-lbl">BUSY</span>
+    </button>
     <button class="tb-btn" id="tb-dnd"      onclick="toggleDND()"                title="DO NOT DISTURB">
       <span class="tb-ic">🌙</span><span class="tb-lbl">DND</span>
     </button>
@@ -6499,19 +6502,99 @@ document.getElementById('p-mem').addEventListener('transitionend',function(){
 });
 
 // ── Calendar panel — fetch events when opened ────────
+let _calEvents=[];
+
 async function fetchCalendar(){
   try{
     const r=await fetch(API+'/calendar/events'); const d=await r.json(); if(!d.ok||!d.events)return;
-    const body=document.getElementById('p-sched-body');
-    body.innerHTML='';
-    d.events.slice(0,6).forEach(ev=>{
-      const row=document.createElement('div'); row.className='ev';
-      const t=ev.time||ev.start_time||'—'; const title=ev.title||ev.summary||'Event';
-      row.innerHTML=`<div class="ev-time">${t.substring(0,5)}</div><div class="ev-dot"></div><div class="ev-info"><div class="ev-title">${title}</div><div class="ev-tag">${(ev.calendar||'CALENDAR').toUpperCase()}</div></div>`;
-      body.appendChild(row);
-    });
+    _calEvents=d.events;
+    renderCalendar();
   }catch(e){}
 }
+
+function renderCalendar(){
+  const body=document.getElementById('p-sched-body');
+  if(!body)return;
+  body.innerHTML='';
+  if(!_calEvents.length){
+    body.innerHTML='<div class="ev"><div class="ev-info" style="padding:8px 0;color:rgba(0,148,255,0.3);font-size:9px;letter-spacing:.2em;">NO EVENTS</div></div>';
+    return;
+  }
+  _calEvents.slice(0,6).forEach(ev=>{
+    const evId=ev.id||'';
+    const title=ev.title||ev.summary||'Event';
+    const t=ev.time||ev.start_time||'—';
+    const startIso=ev.start||'';
+    const startDate=startIso?startIso.slice(0,10):'';
+    const startTime=startIso&&startIso.length>10?new Date(startIso).toTimeString().slice(0,5):'';
+    const hasLink=!!(ev.link||ev.meet_link);
+
+    const wrap=document.createElement('div');
+    wrap.style.cssText='border-bottom:1px solid rgba(0,148,255,0.07);';
+    wrap.innerHTML=`
+      <!-- Normal row -->
+      <div class="ev" id="cal-row-${evId}" style="cursor:default;">
+        <div class="ev-time">${t.substring?t.substring(0,5):t}</div>
+        <div class="ev-dot"></div>
+        <div class="ev-info" style="flex:1;min-width:0;">
+          <div class="ev-title" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${title}</div>
+          <div class="ev-tag">${(ev.calendar||'CALENDAR').toUpperCase()}</div>
+        </div>
+        <div style="display:flex;gap:3px;flex-shrink:0;margin-left:4px;">
+          <button onclick="calEditOpen('${evId}')" style="background:transparent;border:1px solid rgba(0,148,255,0.2);border-radius:3px;color:rgba(0,148,255,0.55);font-size:7px;padding:2px 5px;cursor:pointer;font-family:'Share Tech Mono',monospace;letter-spacing:.08em;">✎</button>
+          <button onclick="calDelete('${evId}')" style="background:transparent;border:1px solid rgba(255,61,61,0.2);border-radius:3px;color:rgba(255,61,61,0.45);font-size:9px;padding:2px 5px;cursor:pointer;font-family:inherit;">✕</button>
+        </div>
+      </div>
+      <!-- Edit form (hidden by default) -->
+      <div id="cal-edit-${evId}" style="display:none;padding:8px 10px 10px;background:rgba(0,148,255,0.04);border-top:1px solid rgba(0,148,255,0.08);">
+        <input id="cal-title-${evId}" value="${title.replace(/"/g,'&quot;')}" placeholder="Event title"
+          style="width:100%;margin-bottom:5px;background:#010814;border:1px solid rgba(0,148,255,0.2);border-radius:3px;color:#6ab0e0;font-family:'JetBrains Mono',monospace;font-size:8px;padding:4px 6px;outline:none;box-sizing:border-box;">
+        <div style="display:flex;gap:4px;margin-bottom:5px;">
+          <input id="cal-date-${evId}" type="date" value="${startDate}"
+            style="flex:1;background:#010814;border:1px solid rgba(0,148,255,0.2);border-radius:3px;color:#6ab0e0;font-family:'JetBrains Mono',monospace;font-size:8px;padding:4px 5px;outline:none;min-width:0;color-scheme:dark;">
+          <input id="cal-time-${evId}" type="time" value="${startTime}"
+            style="flex:1;background:#010814;border:1px solid rgba(0,148,255,0.2);border-radius:3px;color:#6ab0e0;font-family:'JetBrains Mono',monospace;font-size:8px;padding:4px 5px;outline:none;min-width:0;color-scheme:dark;">
+        </div>
+        <input id="cal-link-${evId}" value="${(ev.link||ev.meet_link||'').replace(/"/g,'&quot;')}" placeholder="Meeting link (optional)"
+          style="width:100%;margin-bottom:6px;background:#010814;border:1px solid rgba(0,148,255,0.2);border-radius:3px;color:#6ab0e0;font-family:'JetBrains Mono',monospace;font-size:8px;padding:4px 6px;outline:none;box-sizing:border-box;">
+        <div style="display:flex;gap:4px;">
+          <button onclick="calEditSave('${evId}')" style="flex:1;padding:4px;background:rgba(0,148,255,0.12);border:1px solid rgba(0,148,255,0.3);border-radius:3px;color:#6ab0e0;font-family:'Share Tech Mono',monospace;font-size:7px;cursor:pointer;letter-spacing:.1em;">SAVE</button>
+          <button onclick="calEditClose('${evId}')" style="flex:1;padding:4px;background:transparent;border:1px solid rgba(0,148,255,0.12);border-radius:3px;color:rgba(0,148,255,0.35);font-family:'Share Tech Mono',monospace;font-size:7px;cursor:pointer;">CANCEL</button>
+        </div>
+      </div>`;
+    body.appendChild(wrap);
+  });
+}
+
+function calEditOpen(id){
+  document.getElementById('cal-edit-'+id).style.display='block';
+}
+function calEditClose(id){
+  document.getElementById('cal-edit-'+id).style.display='none';
+}
+async function calEditSave(id){
+  const title=document.getElementById('cal-title-'+id).value.trim();
+  const date=document.getElementById('cal-date-'+id).value;
+  const time=document.getElementById('cal-time-'+id).value;
+  const link=document.getElementById('cal-link-'+id).value.trim();
+  if(!title)return;
+  try{
+    await fetch(API+'/calendar/events/'+id,{
+      method:'PUT',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({title,date,time,link})
+    });
+    showToast('Event updated','info','CAL');
+    await fetchCalendar();
+  }catch(e){ showToast('Update failed','error','CAL'); }
+}
+async function calDelete(id){
+  try{
+    await fetch(API+'/calendar/events/'+id,{method:'DELETE'});
+    showToast('Event deleted','info','CAL');
+    await fetchCalendar();
+  }catch(e){ showToast('Delete failed','error','CAL'); }
+}
+
 document.getElementById('p-sched').addEventListener('transitionend',function(){
   if(this.classList.contains('show')) fetchCalendar();
 });
@@ -8142,6 +8225,40 @@ function applyDNDState(active, reason, queueCount){
   }
 }
 
+// ── Busy mode toggle ────────────────────────────────────────
+let _busyActive = false;
+
+async function toggleBusyMode(){
+  const action = _busyActive ? 'off' : 'on';
+  try{
+    const r = await fetch(API + '/busy', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({action, reason:'manual'})
+    });
+    const d = await r.json();
+    _busyActive = d.active || false;
+    const btn = document.getElementById('tb-busy');
+    if(btn){
+      btn.classList.toggle('on', _busyActive);
+      btn.title = _busyActive ? 'BUSY MODE ACTIVE — click to turn off' : 'BUSY MODE';
+      btn.querySelector('.tb-lbl').textContent = _busyActive ? 'BUSY ON' : 'BUSY';
+    }
+    showToast(_busyActive ? '🔶 Busy mode ON — WA auto-reply active' : '🔶 Busy mode OFF', _busyActive ? 'warn' : 'info', 'BUSY');
+  }catch(e){ showToast('Busy toggle failed','error','BUSY'); }
+}
+
+async function loadBusyState(){
+  try{
+    const d = await fetch(API+'/busy').then(r=>r.json());
+    _busyActive = d.active || false;
+    const btn = document.getElementById('tb-busy');
+    if(btn){
+      btn.classList.toggle('on', _busyActive);
+      btn.querySelector('.tb-lbl').textContent = _busyActive ? 'BUSY ON' : 'BUSY';
+    }
+  }catch(e){}
+}
+
 // ── Toggle via button ───────────────────────────────────────
 async function toggleDND(){
   const action = _dndActive ? 'off' : 'on';
@@ -8164,6 +8281,7 @@ async function loadDNDStatus(){
   }catch(e){}
 }
 loadDNDStatus();
+loadBusyState();
 initBusyStatus();
 
 // ── Alert overlay ────────────────────────────────────────────

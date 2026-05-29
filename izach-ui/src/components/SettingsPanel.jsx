@@ -164,6 +164,163 @@ function MemorySection({ entries, onAdd, onDelete }) {
 
 const BASE = 'http://localhost:5050'
 
+// ── Smart Memory Section ──────────────────────────────────────
+function SmartMemorySection() {
+  const [memories, setMemories]     = useState([])
+  const [cat,      setCat]          = useState('all')
+  const [search,   setSearch]       = useState('')
+  const [editId,   setEditId]       = useState(null)
+  const [editText, setEditText]     = useState('')
+  const [importing, setImporting]   = useState(false)
+  const [importText, setImportText] = useState('')
+  const [importing2, setImporting2] = useState(false)
+  const [msg,      setMsg]          = useState('')
+
+  const flash = (t, ok = true) => { setMsg({ text: t, ok }); setTimeout(() => setMsg(''), 3000) }
+
+  const load = useCallback(async () => {
+    try {
+      const params = new URLSearchParams({ include_disabled: '1' })
+      if (cat !== 'all') params.set('category', cat)
+      if (search) params.set('search', search)
+      const d = await fetch(`${BASE}/smart-memory?${params}`).then(r => r.json())
+      setMemories(d.memories || [])
+    } catch {}
+  }, [cat, search])
+
+  useEffect(() => { load() }, [load])
+
+  const del = async (id) => {
+    await fetch(`${BASE}/smart-memory/${id}`, { method: 'DELETE' }).catch(() => {})
+    load()
+  }
+  const toggle = async (id, enabled) => {
+    await fetch(`${BASE}/smart-memory/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled: !enabled }) }).catch(() => {})
+    load()
+  }
+  const save = async () => {
+    if (!editText.trim()) return
+    await fetch(`${BASE}/smart-memory/${editId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ content: editText }) }).catch(() => {})
+    setEditId(null); load()
+  }
+  const doImport = async () => {
+    if (!importText.trim()) return
+    setImporting2(true)
+    try {
+      const d = await fetch(`${BASE}/smart-memory/import`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: importText }) }).then(r => r.json())
+      flash(`Imported ${(d.imported || []).length} memories`)
+      setImportText(''); setImporting(false); load()
+    } catch { flash('Import failed', false) }
+    setImporting2(false)
+  }
+  const obsSync = async () => {
+    try {
+      const d = await fetch(`${BASE}/smart-memory/obsidian-sync`, { method: 'POST' }).then(r => r.json())
+      flash(`Synced ${d.synced || 0} memories to Obsidian`)
+    } catch { flash('Sync failed', false) }
+  }
+  const doExport = async () => {
+    try {
+      const d = await fetch(`${BASE}/smart-memory/export`).then(r => r.json())
+      navigator.clipboard.writeText(d.text || '').then(() => flash('Copied to clipboard'))
+    } catch { flash('Export failed', false) }
+  }
+
+  const catColor = { profile: '#00e5ff', instruction: '#1db954', automation: '#ff9800' }
+  const filtered = memories.filter(m => cat === 'all' || m.category === cat)
+
+  const inp = {
+    background: '#071020', border: '1px solid #0d2a3a', borderRadius: 4,
+    color: '#c8e8f0', fontFamily: "'JetBrains Mono'", fontSize: '11px',
+    padding: '6px 10px', outline: 'none', width: '100%', boxSizing: 'border-box',
+  }
+
+  return (
+    <div>
+      <SectionHeader label="AI SMART MEMORY" />
+
+      {/* Action row */}
+      <div style={{ display: 'flex', gap: 6, padding: '0 20px 10px', flexWrap: 'wrap' }}>
+        {[
+          { label: 'IMPORT', fn: () => setImporting(true), color: '#00e5ff' },
+          { label: 'EXPORT', fn: doExport, color: '#3a6070' },
+          { label: '♾ OBSIDIAN SYNC', fn: obsSync, color: '#8b5cf6' },
+        ].map(({ label, fn, color }) => (
+          <button key={label} onClick={fn} style={{ padding: '5px 12px', background: 'rgba(0,229,255,0.06)', border: `1px solid ${color}44`, borderRadius: 4, color, fontFamily: "'Share Tech Mono'", fontSize: '9px', letterSpacing: '0.1em', cursor: 'pointer' }}>
+            {label}
+          </button>
+        ))}
+        {msg && <span style={{ color: msg.ok ? '#1db954' : '#ff3d3d', fontFamily: "'Share Tech Mono'", fontSize: '9px', alignSelf: 'center' }}>{msg.text}</span>}
+      </div>
+
+      {/* Category tabs + search */}
+      <div style={{ display: 'flex', gap: 4, padding: '0 20px 8px', flexWrap: 'wrap', alignItems: 'center' }}>
+        {['all', 'profile', 'instruction', 'automation'].map(c => (
+          <button key={c} onClick={() => setCat(c)} style={{ padding: '3px 10px', background: cat === c ? 'rgba(0,229,255,0.12)' : 'transparent', border: `1px solid ${cat === c ? 'rgba(0,229,255,0.4)' : '#0d2a3a'}`, borderRadius: 3, color: cat === c ? '#00e5ff' : '#3a6070', fontFamily: "'Share Tech Mono'", fontSize: '9px', letterSpacing: '0.1em', cursor: 'pointer' }}>
+            {c.toUpperCase()}
+          </button>
+        ))}
+        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="search…" style={{ ...inp, flex: 1, minWidth: 100, padding: '4px 8px', fontSize: '10px' }} />
+      </div>
+
+      {/* Import modal */}
+      {importing && (
+        <div style={{ margin: '0 20px 12px', padding: 12, background: 'rgba(0,229,255,0.04)', border: '1px solid #0d2a3a', borderRadius: 6 }}>
+          <p style={{ color: '#3a6070', fontFamily: "'Share Tech Mono'", fontSize: '9px', letterSpacing: '0.1em', marginBottom: 8 }}>PASTE CHATGPT / CLAUDE EXPORT:</p>
+          <textarea value={importText} onChange={e => setImportText(e.target.value)} rows={5} style={{ ...inp, resize: 'vertical', marginBottom: 8 }} placeholder="- Preferred name: Vansh&#10;- Always reply briefly&#10;..." />
+          <div style={{ display: 'flex', gap: 6 }}>
+            <button onClick={doImport} disabled={importing2} style={{ flex: 1, padding: '6px 0', background: 'rgba(0,229,255,0.1)', border: '1px solid rgba(0,229,255,0.3)', borderRadius: 4, color: '#00e5ff', fontFamily: "'Share Tech Mono'", fontSize: '9px', cursor: 'pointer' }}>
+              {importing2 ? 'IMPORTING…' : 'IMPORT'}
+            </button>
+            <button onClick={() => setImporting(false)} style={{ flex: 1, padding: '6px 0', background: 'transparent', border: '1px solid #0d2a3a', borderRadius: 4, color: '#3a6070', fontFamily: "'Share Tech Mono'", fontSize: '9px', cursor: 'pointer' }}>CANCEL</button>
+          </div>
+        </div>
+      )}
+
+      {/* Edit modal */}
+      {editId && (
+        <div style={{ margin: '0 20px 12px', padding: 12, background: 'rgba(0,229,255,0.04)', border: '1px solid rgba(0,229,255,0.25)', borderRadius: 6 }}>
+          <textarea value={editText} onChange={e => setEditText(e.target.value)} rows={3} style={{ ...inp, resize: 'vertical', marginBottom: 8 }} />
+          <div style={{ display: 'flex', gap: 6 }}>
+            <button onClick={save} style={{ flex: 1, padding: '6px 0', background: 'rgba(0,229,255,0.1)', border: '1px solid rgba(0,229,255,0.3)', borderRadius: 4, color: '#00e5ff', fontFamily: "'Share Tech Mono'", fontSize: '9px', cursor: 'pointer' }}>SAVE</button>
+            <button onClick={() => setEditId(null)} style={{ flex: 1, padding: '6px 0', background: 'transparent', border: '1px solid #0d2a3a', borderRadius: 4, color: '#3a6070', fontFamily: "'Share Tech Mono'", fontSize: '9px', cursor: 'pointer' }}>CANCEL</button>
+          </div>
+        </div>
+      )}
+
+      {/* Memory cards */}
+      <div style={{ padding: '0 20px', maxHeight: 320, overflowY: 'auto' }}>
+        {filtered.length === 0 ? (
+          <p style={{ color: '#1a4a5a', fontFamily: "'JetBrains Mono'", fontSize: '10px', padding: '4px 0' }}>
+            {cat === 'all' ? 'No AI memories yet. Use voice: "remember that…"' : `No ${cat} memories.`}
+          </p>
+        ) : filtered.map(m => {
+          const color = catColor[m.category] || '#3a6070'
+          return (
+            <div key={m.id} style={{ marginBottom: 6, padding: '8px 10px', background: m.enabled ? 'rgba(0,229,255,0.03)' : 'rgba(0,0,0,0.2)', border: `1px solid ${m.enabled ? '#0d2a3a' : 'rgba(255,255,255,0.05)'}`, borderRadius: 4, opacity: m.enabled ? 1 : 0.5 }}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                <span style={{ color, fontFamily: "'Share Tech Mono'", fontSize: '8px', letterSpacing: '0.15em', flexShrink: 0, marginTop: 2, textTransform: 'uppercase' }}>{m.category}</span>
+                <span style={{ flex: 1, color: '#c8e8f0', fontFamily: "'JetBrains Mono'", fontSize: '10px', lineHeight: 1.5, wordBreak: 'break-word' }}>{m.content}</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 6 }}>
+                <span style={{ color: '#1a4a5a', fontFamily: "'Share Tech Mono'", fontSize: '8px' }}>{m.created}</span>
+                <div style={{ display: 'flex', gap: 4 }}>
+                  {/* Enable/disable toggle */}
+                  <div onClick={() => toggle(m.id, m.enabled)} style={{ width: 26, height: 13, borderRadius: 7, cursor: 'pointer', position: 'relative', background: m.enabled ? 'rgba(0,229,255,0.2)' : 'rgba(13,42,58,0.8)', border: `1px solid ${m.enabled ? '#00e5ff55' : '#0d2a3a'}`, flexShrink: 0, transition: 'all 0.2s' }}>
+                    <div style={{ position: 'absolute', top: 2, left: m.enabled ? 11 : 2, width: 7, height: 7, borderRadius: '50%', background: m.enabled ? '#00e5ff' : '#1a4a5a', transition: 'left 0.2s' }} />
+                  </div>
+                  <button onClick={() => { setEditId(m.id); setEditText(m.content) }} style={{ padding: '2px 7px', background: 'transparent', border: '1px solid #0d2a3a', borderRadius: 3, color: '#3a6070', fontFamily: "'Share Tech Mono'", fontSize: '8px', cursor: 'pointer' }}>EDIT</button>
+                  <button onClick={() => del(m.id)} style={{ padding: '2px 7px', background: 'transparent', border: '1px solid rgba(255,61,61,0.25)', borderRadius: 3, color: '#ff3d3d66', fontFamily: "'Share Tech Mono'", fontSize: '8px', cursor: 'pointer' }}>DEL</button>
+                </div>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 function SelectField({ label, value, onChange, options }) {
   return (
     <div style={{ padding: '4px 20px 10px' }}>
@@ -1008,8 +1165,8 @@ function GeneralSection({ settings, onSave }) {
         value={form.ui || 'classic'}
         onChange={v => set('ui', v)}
         options={[
-          { value: 'classic', label: 'Classic — React dashboard (default)' },
-          { value: 'scifi',   label: 'Sci-Fi — JARVIS-style holographic UI' },
+          { value: 'classic', label: 'Forge UI' },
+          { value: 'scifi',   label: 'Cortex UI' },
         ]}
       />
       {(form.ui || 'classic') !== (form._savedUi || 'classic') && (
@@ -1648,11 +1805,15 @@ export default function SettingsPanel({
       {/* Content — key forces remount on tab change → triggers tabEnter animation */}
       <div key={tab} className="tab-content" style={{ flex: 1, overflowY: 'auto' }}>
         {tab === 'memory' && (
-          <MemorySection
-            entries={memoryEntries}
-            onAdd={onAddMemory}
-            onDelete={onDeleteMemory}
-          />
+          <>
+            <SmartMemorySection />
+            <div style={{ height: 1, background: '#0d2a3a', margin: '8px 0' }} />
+            <MemorySection
+              entries={memoryEntries}
+              onAdd={onAddMemory}
+              onDelete={onDeleteMemory}
+            />
+          </>
         )}
         {tab === 'general' && (
           <GeneralSection
