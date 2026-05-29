@@ -545,10 +545,14 @@ def listen():
     if _mic is None:
         _init_mic()
     try:
-        # Manual __enter__/__exit__ — hold PYAUDIO_INIT_LOCK during Pa_Terminate()
-        # to prevent race with interrupt_engine's concurrent Pa_Terminate() call,
-        # which causes a Windows access violation (C-level crash, uncatchable).
-        source = _mic.__enter__()
+        # Hold PYAUDIO_INIT_LOCK during BOTH __enter__ (Pa_Initialize) and
+        # __exit__ (Pa_Terminate). Concurrent Pa_Initialize or Pa_Terminate
+        # calls from interrupt_engine cause Windows access violations (C crash).
+        try:
+            with PYAUDIO_INIT_LOCK:
+                source = _mic.__enter__()
+        except Exception:
+            return "none"
         try:
             print("[LISTENING...]")
             audio = _recognizer.listen(source, timeout=3, phrase_time_limit=15)
