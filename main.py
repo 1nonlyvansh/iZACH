@@ -385,8 +385,14 @@ def get_ai_response(query):
                     proj_name = extract_project_name(clean_query)
                     saved = save_project_files(response, proj_name)
                     if saved:
-                        file_list = "\n".join(f"  • {os.path.basename(p)}" for p in saved)
-                        response += f"\n\n📁 **Project saved** → `C:/iZACH-Projects/{proj_name}/`\n{file_list}"
+                        file_list = " · ".join(os.path.basename(p) for p in saved)
+                        # Replace verbose code dump with short summary
+                        response = (
+                            f"Done! Built **{proj_name}** and saved to "
+                            f"`C:/iZACH-Projects/{proj_name}/`\n"
+                            f"Files: {file_list}\n\n"
+                            f"Open the folder to view and run the project."
+                        )
                 return response
     except Exception as _se:
         print(f"[SkillEngine] Error: {_se}")
