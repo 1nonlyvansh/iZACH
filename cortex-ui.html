@@ -4076,6 +4076,25 @@ document.addEventListener('keydown',e=>{
   const wp=document.getElementById('widget-picker');
   const db=document.getElementById('device-bar');
 
+  function syncSecondaryToTb(){
+    // After taskbar CSS is applied, read its actual rendered rect and
+    // centre widget-picker + device-bar on the same visual X axis.
+    const tbR = tb.getBoundingClientRect();
+    const cx  = tbR.left + tbR.width / 2;   // visual centre X
+
+    if(wp){
+      const wpR = wp.getBoundingClientRect();
+      wp.style.left      = cx + 'px';
+      wp.style.transform = 'translateX(-50%)';
+      // keep existing top/bottom from caller
+    }
+    if(db){
+      db.style.left      = cx + 'px';
+      db.style.transform = 'translateX(-50%)';
+      // keep existing top/bottom from caller
+    }
+  }
+
   function applyTbPos(){
     if(!tb)return;
 
@@ -4088,19 +4107,14 @@ document.addEventListener('keydown',e=>{
       tb.style.transformOrigin = 'center center';
       // Widget picker: above taskbar, same width
       if(wp){
-        const tbW = tb.getBoundingClientRect().width;
-        wp.style.width     = tbW+'px';
-        wp.style.left      = _tbLeft+'px';
-        wp.style.top       = (_tbTop - 62)+'px';
-        wp.style.bottom    = 'auto';
-        wp.style.transform = 'translateX(-50%)';
+        wp.style.width  = tb.getBoundingClientRect().width+'px';
+        wp.style.top    = (_tbTop - 62)+'px';
+        wp.style.bottom = 'auto';
       }
       // Device bar: above taskbar
       if(db){
-        db.style.left      = _tbLeft+'px';
-        db.style.top       = (_tbTop - 96)+'px';
-        db.style.bottom    = 'auto';
-        db.style.transform = 'translateX(-50%)';
+        db.style.top    = (_tbTop - 38)+'px';
+        db.style.bottom = 'auto';
       }
     } else {
       // Default — CSS drives position (left:50%, bottom:18px)
@@ -4109,22 +4123,20 @@ document.addEventListener('keydown',e=>{
       tb.style.bottom='18px';
       tb.style.transform=`translateX(-50%) scale(${_tbScale})`;
       tb.style.transformOrigin='center bottom';
-      // Sync widget picker width to taskbar's scaled visual width
       if(wp){
-        const tbW = tb.getBoundingClientRect().width;
-        wp.style.width     = tbW+'px';
-        wp.style.left      = '50%';
-        wp.style.top       = '';
-        wp.style.bottom    = '';
+        wp.style.width  = tb.getBoundingClientRect().width+'px';
+        wp.style.top    = '';
+        wp.style.bottom = '';
         wp.style.transform = 'translateX(-50%) translateY(8px)';
       }
       if(db){
-        db.style.left='50%';
-        db.style.top='';
-        db.style.bottom='96px';
-        db.style.transform='translateX(-50%)';
+        db.style.top    = '';
+        db.style.bottom = '96px';
       }
     }
+
+    // Align widget-picker and device-bar to taskbar's visual centre
+    syncSecondaryToTb();
   }
 
   function saveTbState(){
@@ -6634,7 +6646,13 @@ function cfgToggleTbLabels(){
 function resetTaskbar(){
   localStorage.removeItem('tbState2');
   const tb=document.getElementById('taskbar');
-  if(tb){ tb.style.left='50%'; tb.style.top=''; tb.style.bottom='18px'; tb.style.transform='translateX(-50%) scale(1)'; }
+  if(tb){
+    tb.style.left='50%'; tb.style.top=''; tb.style.bottom='18px';
+    tb.style.transform='translateX(-50%) scale(1)';
+    // Re-centre device bar after reset
+    const db=document.getElementById('device-bar');
+    if(db){ db.style.left='50%'; db.style.top=''; db.style.bottom='96px'; db.style.transform='translateX(-50%)'; }
+  }
 }
 // Restore auto-hide on load
 if(localStorage.getItem('tbAutoHide')==='1'){
