@@ -498,6 +498,18 @@ class IZACHApi(context: Context) {
     // ── Audio streaming ────────────────────────────────────────
     fun audioStreamUrl(): String = "${baseUrl()}/audio/stream"
 
+    suspend fun getAudioStreamInfo(): Result<Map<String, Any?>> = withContext(Dispatchers.IO) {
+        runCatching {
+            val resp = client.newCall(Request.Builder().url("${baseUrl()}/audio/info").build()).execute()
+            val obj  = gson.fromJson(resp.body?.string() ?: "{}", JsonObject::class.java)
+            mapOf(
+                "available"    to (obj.get("available")?.asBoolean ?: false),
+                "backend"      to (obj.get("backend")?.asString ?: "none"),
+                "install_hint" to (obj.get("install_hint")?.asString ?: ""),
+            )
+        }
+    }
+
     suspend fun stopAudioStream(): Result<Unit> = withContext(Dispatchers.IO) {
         runCatching {
             client.newCall(

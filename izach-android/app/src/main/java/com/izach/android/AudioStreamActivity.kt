@@ -59,11 +59,28 @@ class AudioStreamActivity : AppCompatActivity() {
         tvInfo.text = "PC: ${api.baseUrl()}\n22050 Hz · Mono · PCM"
 
         btnToggle.setOnClickListener {
-            if (streaming) stopStream() else startStream(api)
+            if (streaming) stopStream() else checkAndStartStream(api)
         }
 
         // Back button
         findViewById<View>(R.id.btnAudioBack).setOnClickListener { finish() }
+    }
+
+    private fun checkAndStartStream(api: IZACHApi) {
+        tvStatus.text = "Checking backend…"
+        lifecycleScope.launch {
+            val info = api.getAudioStreamInfo()
+            val available = info.getOrNull()?.get("available")?.toString()?.toBoolean() ?: false
+            val hint      = info.getOrNull()?.get("install_hint")?.toString() ?: ""
+            val backend   = info.getOrNull()?.get("backend")?.toString() ?: "none"
+            if (!available) {
+                tvStatus.text = "❌ No audio backend on PC"
+                tvInfo.text   = "Run on PC:\nwinget install ffmpeg\n\n$hint"
+                return@launch
+            }
+            tvInfo.text = "PC: ${api.baseUrl()}\n22050 Hz · Mono · PCM · $backend"
+            startStream(api)
+        }
     }
 
     private fun startStream(api: IZACHApi) {

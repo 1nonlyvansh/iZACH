@@ -4966,8 +4966,8 @@ def news_settings_post():
 @ui_bp.route("/audio/info", methods=["GET"])
 def audio_stream_info():
     try:
-        from modules.audio_streamer import get_stream_info
-        return jsonify({"ok": True, **get_stream_info()})
+        from modules.audio_streamer import get_status
+        return jsonify({"ok": True, **get_status()})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
 

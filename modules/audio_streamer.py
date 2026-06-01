@@ -32,6 +32,12 @@ _stream_lock = threading.Lock()
 _active_proc: subprocess.Popen | None = None
 
 
+def _ffmpeg_in_path() -> bool:
+    """Quick check: ffmpeg exists in PATH."""
+    import shutil
+    return shutil.which("ffmpeg") is not None
+
+
 def _get_ffmpeg_cmd() -> list[str]:
     """Build ffmpeg command for WASAPI loopback capture."""
     return [
@@ -51,15 +57,66 @@ def _get_ffmpeg_cmd() -> list[str]:
     ]
 
 
+def _get_sounddevice_cmd() -> list[str] | None:
+    """
+    Fallback: use sounddevice loopback via a tiny inline Python script.
+    Only works if sounddevice + PyAudio with WASAPI support are installed.
+    Returns None if sounddevice unavailable.
+    """
+    try:
+        import sounddevice  # noqa: F401
+        import sys
+        script = (
+            "import sounddevice as sd, sys, numpy as np;"
+            "sd.default.samplerate=" + str(_SAMPLE_RATE) + ";"
+            "sd.default.channels=" + str(_CHANNELS) + ";"
+            "with sd.InputStream(samplerate=" + str(_SAMPLE_RATE) + ","
+            "channels=" + str(_CHANNELS) + ",dtype='int16')as s:"
+            "\n while True:\n  d,_=s.read(2048)\n  sys.stdout.buffer.write(d.tobytes())"
+        )
+        return [sys.executable, "-c", script]
+    except ImportError:
+        return None
+
+
+def get_status() -> dict:
+    """Return availability info for the /audio/info endpoint."""
+    has_ffmpeg = _ffmpeg_in_path()
+    has_sd     = _get_sounddevice_cmd() is not None
+    return {
+        "available":  has_ffmpeg or has_sd,
+        "backend":    "ffmpeg" if has_ffmpeg else ("sounddevice" if has_sd else "none"),
+        "ffmpeg":     has_ffmpeg,
+        "sounddevice": has_sd,
+        "sample_rate": _SAMPLE_RATE,
+        "channels":    _CHANNELS,
+        "encoding":    "pcm_s16le",
+        "install_hint": (
+            "" if (has_ffmpeg or has_sd)
+            else "Install ffmpeg (winget install ffmpeg) or pip install sounddevice"
+        ),
+    }
+
+
 def stream_generator() -> Generator[bytes, None, None]:
     """
     Generator that yields raw PCM chunks.
-    Each call to next() blocks until a chunk is available.
-    Yields empty bytes to signal end (or on error).
+    Tries ffmpeg first, falls back to sounddevice.
     """
     global _active_proc
 
-    cmd = _get_ffmpeg_cmd()
+    if _ffmpeg_in_path():
+        cmd = _get_ffmpeg_cmd()
+    else:
+        cmd = _get_sounddevice_cmd()
+
+    if cmd is None:
+        logger.error(
+            "[AudioStream] No audio backend available. "
+            "Install ffmpeg (winget install ffmpeg) or sounddevice (pip install sounddevice)."
+        )
+        return
+
     try:
         proc = subprocess.Popen(
             cmd,
@@ -68,10 +125,10 @@ def stream_generator() -> Generator[bytes, None, None]:
             bufsize=_CHUNK_BYTES * 4,
         )
     except FileNotFoundError:
-        logger.error("[AudioStream] ffmpeg not found. Install ffmpeg and add to PATH.")
+        logger.error("[AudioStream] Backend not found. Install ffmpeg and add to PATH.")
         return
     except Exception as e:
-        logger.error(f"[AudioStream] Failed to start ffmpeg: {e}")
+        logger.error(f"[AudioStream] Failed to start audio capture: {e}")
         return
 
     with _stream_lock:

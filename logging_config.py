@@ -33,19 +33,12 @@ def setup_logging():
     root_logger.addHandler(console_handler)
 
     # ── Werkzeug — file only, NOT console ────────────────────────────────────
-    # werkzeug logs every HTTP request at INFO. The UI polls 20+ endpoints
-    # every 2-4s → flood. Solution: propagate=False + ERROR level on console.
-    # All requests still go to izach.log via the file_handler below.
+    # Reuse the same file_handler instance (not a second RotatingFileHandler on
+    # the same file — two handlers on one file causes WinError 32 on rotation).
     wz = logging.getLogger('werkzeug')
     wz.propagate = False        # never bubble to root (prevents double-log)
     wz.setLevel(logging.INFO)   # capture INFO for file
-
-    wz_file = RotatingFileHandler(
-        'logs/izach.log', maxBytes=5*1024*1024, backupCount=2, encoding='utf-8'
-    )
-    wz_file.setFormatter(log_format)
-    wz_file.setLevel(logging.INFO)
-    wz.addHandler(wz_file)
+    wz.addHandler(file_handler) # shared handler → single file lock
 
     # NO console handler for werkzeug → terminal stays clean
 
