@@ -31,7 +31,6 @@ _VISION_COOLDOWN = 5
 logger = logging.getLogger(__name__)
 
 from modules.task_engine import TaskEngine, Task
-from rapidfuzz import process, fuzz
 from modules.automation import open_app, play_specific_youtube, snap_window
 from modules.intent_router import IntentRouter
 from modules.state_engine import state
@@ -338,7 +337,7 @@ Output format:
         # ── Snap position pre-parse ───────────────────────────────
         # Pattern: "open X at left", "open X on the right", "snap X to left"
         _SNAP_RE = re.compile(
-            r'\b(?:open|launch|start)\s+(.+?)\s+(?:at|on\s+(?:the\s+)?|snap\s+(?:to\s+)?)(?:the\s+)?(left|right|center|full(?:screen)?|maximize)\b',
+            r'\b(?:open|launch|start)\s+(.+?)\s+(?:at|in|on\s+(?:the\s+)?|snap\s+(?:to\s+)?)(?:the\s+)?(left|right|center|full(?:screen)?|maximize)\b',
             re.IGNORECASE,
         )
 
@@ -419,6 +418,135 @@ Output format:
                 self._handle_remote_node_command(resolved_cmd)
                 continue
 
+
+            # ── Alias resolution: substitute user-defined shortcuts ──
+            try:
+                from modules.alias_engine import resolve as _alias_resolve
+                _alias_resolved = _alias_resolve(resolved_cmd)
+                if _alias_resolved != resolved_cmd:
+                    print(f"[ALIAS] '{resolved_cmd}' → '{_alias_resolved}'")
+                    resolved_cmd = _alias_resolved
+            except Exception:
+                pass
+
+            # ══════════════════════════════════════════════════════════
+            # PRE-ORCHESTRATOR FAST-PATHS
+            # Run BEFORE the orchestrator LLM so these never get mis-classified.
+            # ══════════════════════════════════════════════════════════
+            _rc = resolved_cmd.lower()
+
+            # ── 0. UI screen / optics mode commands ───────────────────
+            # "turn on optics mode", "show camera", "optics screen" etc.
+            # Must run before orchestrator — SystemAgent mis-routes as WiFi.
+            _OPTICS_RE = re.compile(
+                r'\b(?:turn\s+on|open|show|enable|activate|start)\s+(?:optics|camera\s*mode|cam\s*mode|vision\s*mode|optics?\s*screen)\b'
+                r'|\boptics\s*(?:mode|screen|on)\b'
+                r'|\bcamera\s*(?:screen|mode|on|view)\b',
+                re.IGNORECASE,
+            )
+            if _OPTICS_RE.search(resolved_cmd):
+                try:
+                    from modules.ws_bridge import broadcast as _bc
+                    _bc({"type": "ui_command", "action": "set_screen", "screen": "cam"})
+                    self.speak("Optics mode on.")
+                except Exception:
+                    self.speak("Opening optics screen.")
+                continue
+
+            # ── 1. Form fill — orchestrator misclassifies as open_app ─
+            _FILL_TRIGS = [
+                "fill form", "autofill", "fill the form", "fill this form",
+                "fill these details", "fill my details", "fill this for me", "fill details",
+                "feel this form", "feel these details", "feel my details",
+            ]
+            if any(t in _rc for t in _FILL_TRIGS):
+                self._handle_web_automation(resolved_cmd)
+                continue
+
+            # ── 2. Software installer download ────────────────────────
+            _DL_RE = re.compile(
+                r'^(?:download|get me|fetch|grab)\s+(.+?)'
+                r'(?:\s+(?:installer|setup|install file|app|application|software))?\s*$',
+                re.IGNORECASE,
+            )
+            _dl_m = _DL_RE.match(resolved_cmd)
+            if _dl_m:
+                _dl_candidate = _dl_m.group(1).strip()
+                try:
+                    from modules.app_installer import get_installer_info as _gii
+                    if _gii(_dl_candidate):
+                        from modules.app_installer import download_installer as _dlfn
+                        import threading as _dlthr
+                        self.speak(f"Downloading {_dl_candidate.title()} installer. I'll let you know when it's ready.")
+                        _dlthr.Thread(
+                            target=lambda _a=_dl_candidate: self.speak(_dlfn(_a)[1]),
+                            daemon=True,
+                        ).start()
+                        continue
+                except Exception as _dle:
+                    import logging as _ldl; _ldl.getLogger("iZACH.Chain").debug(f"[DL fast] {_dle}")
+
+            # ── 3. System control (volume / brightness / open / close) ─
+            _sc_handled = False
+            try:
+                import modules.system_control as _sc_fp
+                from modules.automation import open_app as _open_fp
+                _norm = _normalize_numbers(resolved_cmd)
+
+                if re.search(r'\b(volume\s+up|increase volume|raise volume|turn up)\b', _rc):
+                    _, _m = _sc_fp.adjust_volume(10); self.speak(_m); _sc_handled = True
+                elif re.search(r'\b(volume\s+down|decrease volume|lower volume|turn down|reduce volume)\b', _rc):
+                    _, _m = _sc_fp.adjust_volume(-10); self.speak(_m); _sc_handled = True
+                elif re.search(r'\b(mute|silence|mute volume)\b', _rc) and 'unmute' not in _rc:
+                    _, _m = _sc_fp.mute(); self.speak(_m); _sc_handled = True
+                elif re.search(r'\bunmute\b', _rc):
+                    _, _m = _sc_fp.unmute(); self.speak(_m); _sc_handled = True
+                elif re.search(r'\b(set volume|volume to|volume at|change volume)\b', _rc):
+                    _vm = re.search(r'\b(\d{1,3})\b', _norm)
+                    if _vm: _, _m = _sc_fp.set_volume(int(_vm.group(1))); self.speak(_m); _sc_handled = True
+                elif re.search(r'\b(brightness up|increase brightness|raise brightness|turn up brightness)\b', _rc):
+                    _, _m = _sc_fp.adjust_brightness(10); self.speak(_m); _sc_handled = True
+                elif re.search(r'\b(brightness down|decrease brightness|lower brightness|turn down brightness|reduce brightness)\b', _rc):
+                    _, _m = _sc_fp.adjust_brightness(-10); self.speak(_m); _sc_handled = True
+                elif re.search(r'\b(set brightness|brightness to|brightness at|change brightness)\b', _rc):
+                    _bm = re.search(r'\b(\d{1,3})\b', _norm)
+                    if _bm: _, _m = _sc_fp.set_brightness(int(_bm.group(1))); self.speak(_m); _sc_handled = True
+                elif re.search(r'\b(dark mode|switch to dark|turn on dark|enable dark)\b', _rc):
+                    _, _m = _sc_fp.set_theme("dark"); self.speak(_m); _sc_handled = True
+                elif re.search(r'\b(light mode|switch to light|turn on light|enable light)\b', _rc):
+                    _, _m = _sc_fp.set_theme("light"); self.speak(_m); _sc_handled = True
+                elif (re.match(r'^open\s+\w', _rc)
+                      and not any(w in _rc for w in ('file', 'folder', 'document', 'note', 'pdf',
+                                                      'assignment', 'report', 'lecture', 'homework'))
+                      and not _SNAP_RE.search(resolved_cmd)):
+                    _app_name = re.sub(r'^open\s+', '', resolved_cmd.strip(), flags=re.IGNORECASE).strip()
+                    if _app_name and len(_app_name.split()) <= 3:
+                        _open_fp(_app_name); self.speak(f"Opening {_app_name}."); _sc_handled = True
+                elif re.search(r'\b(close|quit|exit|kill|force quit|force close)\b\s+(?!all\b)', _rc):
+                    _km = re.search(r'\b(?:close|quit|exit|kill|force\s+(?:quit|close))\s+(.+)', _rc)
+                    if _km:
+                        _kt = _km.group(1).strip()
+                        if len(_kt.split()) <= 3 and _kt not in ('all', 'everything', 'them'):
+                            ok, _msg = _sc_fp.kill_app(_kt); self.speak(_msg); _sc_handled = True
+            except Exception as _fpe:
+                import logging as _lfp; _lfp.getLogger("iZACH.Chain").debug(f"[SC fast] {_fpe}")
+
+            if _sc_handled:
+                continue
+
+            # ── 4. Spotify "play X on spotify" (phone sends this phrase) ─
+            _SPO_DIRECT_RE = re.compile(
+                r'^(?:play|stream|put on|start playing)\s+(.+?)\s+(?:on|in|via|through|using)\s+spotify\s*$',
+                re.IGNORECASE,
+            )
+            _spo_m = _SPO_DIRECT_RE.match(resolved_cmd)
+            if _spo_m:
+                resolved_cmd = f"play {_spo_m.group(1).strip()}"
+                self._domain_ctx = {"domain": "spotify", "confidence": 0.99}
+
+            # ══════════════════════════════════════════════════════════
+            # END FAST-PATHS — orchestrator runs below
+            # ══════════════════════════════════════════════════════════
 
             # ── Synonym learner: pre-route known corrected phrasings ─
             _synonym_domain = None
@@ -1700,8 +1828,13 @@ Return ONLY the JSON array. No explanation."""
         except Exception:
             cfg = {}
 
-        def _on(key, default=True):
-            return cfg.get(key, default)
+        def _on(key, default=True, alt_key=None):
+            """Check key; if missing, check alt_key; if still missing, use default."""
+            if key in cfg:
+                return bool(cfg[key])
+            if alt_key and alt_key in cfg:
+                return bool(cfg[alt_key])
+            return default
 
         hour = now.hour
         if hour < 12:
@@ -1748,7 +1881,7 @@ Return ONLY the JSON array. No explanation."""
             except Exception:
                 pass
 
-        if _on("briefing_battery_status"):
+        if _on("briefing_battery_status", True, "briefing_system"):
             try:
                 _, bat = system_control.get_battery()
                 parts.append(bat)
@@ -1762,14 +1895,14 @@ Return ONLY the JSON array. No explanation."""
             except Exception:
                 pass
 
-        if _on("briefing_ram"):
+        if _on("briefing_ram", True, "briefing_system"):
             try:
                 _, ram = system_control.get_ram_usage()
                 parts.append(ram)
             except Exception:
                 pass
 
-        if _on("briefing_events"):
+        if _on("briefing_events", True, "briefing_calendar"):
             try:
                 from modules.calendar_agent import get_today_events
                 events = get_today_events()
@@ -3136,13 +3269,19 @@ Return ONLY JSON."""
                 self.speak(f"Opening {app_name} app.")
             else:
                 # Open in user's default browser (not Playwright Chromium)
+                from modules import web_automation
                 try:
                     url = web_automation._resolve_url(svc)
                     webbrowser.open(url)
                     self.speak(f"Opening {svc} in your default browser.")
                 except Exception as _osvc_err:
                     logger.warning(f"[open svc] Default browser failed: {_osvc_err}")
-                    _bg(web_automation.open_website, svc, announce=f"Opening {svc} in browser.")
+                    self.speak(f"Opening {svc} in browser.")
+                    import threading
+                    threading.Thread(
+                        target=lambda: web_automation.open_website(svc),
+                        daemon=True,
+                    ).start()
             return
 
         # ---------------- PLATFORM CHOICE ----------------

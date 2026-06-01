@@ -3,6 +3,7 @@ package com.izach.android.widget
 import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.widget.RemoteViews
@@ -40,7 +41,27 @@ class DndStatusWidget : AppWidgetProvider() {
             views.setTextColor(R.id.widgetBusyStatus,
                 if (busyActive) 0xFFffb300.toInt() else 0xFF3a6070.toInt())
 
-            // Tap → open MainActivity
+            // Tap DND row → toggle DND
+            val dndToggleIntent = Intent(context, WidgetToggleReceiver::class.java).apply {
+                action = WidgetToggleReceiver.ACTION_TOGGLE_DND
+            }
+            val dndTogglePi = PendingIntent.getBroadcast(
+                context, 1, dndToggleIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            views.setOnClickPendingIntent(R.id.widgetDndStatus, dndTogglePi)
+
+            // Tap Busy row → toggle Busy
+            val busyToggleIntent = Intent(context, WidgetToggleReceiver::class.java).apply {
+                action = WidgetToggleReceiver.ACTION_TOGGLE_BUSY
+            }
+            val busyTogglePi = PendingIntent.getBroadcast(
+                context, 2, busyToggleIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            views.setOnClickPendingIntent(R.id.widgetBusyStatus, busyTogglePi)
+
+            // Tap root (background) → open MainActivity
             val tapIntent = Intent(context, MainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             }

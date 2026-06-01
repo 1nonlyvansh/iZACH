@@ -16,6 +16,16 @@ function getUIMode() {
 
 function createWindow() {
   const uiMode = getUIMode()
+
+  // Background mode: no window. If Electron is launched anyway (e.g. stale
+  // shortcut), quit without opening a window — and WITHOUT the python taskkill
+  // in window-all-closed, since the backend must keep running headless.
+  if (uiMode === 'background') {
+    console.log('[iZACH] Background mode — no UI window. Quitting Electron.')
+    app.exit(0)
+    return
+  }
+
   const isSciFi = uiMode === 'scifi'
 
   const win = new BrowserWindow({
@@ -84,6 +94,12 @@ app.whenReady().then(() => {
 })
 
 app.on('window-all-closed', () => {
+  // If the user switched to Background Mode, keep the Python backend (and its
+  // tray icon) running — only quit the Electron window.
+  if (getUIMode() === 'background') {
+    if (process.platform !== 'darwin') app.quit()
+    return
+  }
   const { exec } = require('child_process')
   exec('taskkill /F /IM python.exe /T', () => {})
   if (process.platform !== 'darwin') app.quit()

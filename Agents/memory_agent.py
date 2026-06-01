@@ -25,7 +25,6 @@ Intents handled:
 from __future__ import annotations
 
 import re
-import os
 
 def _first_to_third(text: str) -> str:
     """Convert first-person statements to third-person for memory storage.
@@ -245,6 +244,14 @@ class MemoryAgent:
             self.speak(f"Couldn't save automation: {e}")
         return True
 
+    # Keys whose values contain private data — read summary only, never the raw value
+    _SENSITIVE_KEYS = {
+        "phone", "phone number", "mobile", "mobile number", "number",
+        "email", "email address", "mail",
+        "address", "home address", "location",
+        "password", "pin", "otp", "card", "aadhaar", "pan",
+    }
+
     def _recall_all(self, d: dict, cmd: str) -> bool:
         try:
             from modules.memory import list_memory
@@ -253,8 +260,16 @@ class MemoryAgent:
                 self.speak("I don't have anything stored in memory yet.")
                 return True
             self.speak(f"I remember {len(items)} thing{'s' if len(items) != 1 else ''} about you.")
-            for _, val, _ in items[:5]:
-                self.speak(val)
+            spoken = 0
+            for key, val, _ in items:
+                if spoken >= 5:
+                    break
+                # Don't read out raw sensitive values
+                if any(s in (key or "").lower() for s in self._SENSITIVE_KEYS):
+                    self.speak(f"Your {key} is saved.")
+                else:
+                    self.speak(val)
+                spoken += 1
             if len(items) > 5:
                 self.speak(f"And {len(items) - 5} more.")
         except Exception as e:

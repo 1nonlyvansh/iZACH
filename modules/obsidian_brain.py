@@ -6,7 +6,6 @@ Writes structured markdown insights into separate .md files.
 
 import os
 from datetime import datetime
-from collections import defaultdict
 
 # ── CONFIG ────────────────────────────────────────────────────
 # Set this to your Obsidian vault path

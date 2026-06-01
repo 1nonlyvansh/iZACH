@@ -78,7 +78,7 @@
                 </LinearLayout>
             </LinearLayout>
 
-            <!-- DND + Busy chips (right side, replaces spacer) -->
+            <!-- DND + Busy + BG chips (right side) -->
             <LinearLayout
                 android:layout_width="72dp"
                 android:layout_height="wrap_content"
@@ -113,7 +113,22 @@
                     android:letterSpacing="0.1"
                     android:paddingHorizontal="6dp"
                     android:paddingVertical="2dp"
-                    android:background="#10ffb300" />
+                    android:background="#10ffb300"
+                    android:layout_marginBottom="3dp" />
+
+                <TextView
+                    android:id="@+id/chipBgMode"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="BG"
+                    android:textColor="#FF3a6070"
+                    android:textSize="9sp"
+                    android:fontFamily="monospace"
+                    android:textStyle="bold"
+                    android:letterSpacing="0.1"
+                    android:paddingHorizontal="6dp"
+                    android:paddingVertical="2dp"
+                    android:background="#1000e5ff" />
             </LinearLayout>
 
         </LinearLayout>
@@ -427,6 +442,28 @@
                 android:layout_weight="1" android:text="Media Remote"
                 android:textColor="@color/text_pri" android:textSize="14sp"
                 android:fontFamily="monospace" />
+        </LinearLayout>
+
+        <!-- PC Audio Stream -->
+        <LinearLayout android:id="@+id/sidebarAudioStream"
+            android:layout_width="match_parent" android:layout_height="52dp"
+            android:orientation="horizontal" android:gravity="center_vertical"
+            android:paddingHorizontal="20dp"
+            android:background="?attr/selectableItemBackground">
+            <ImageView android:layout_width="20dp" android:layout_height="20dp"
+                android:src="@drawable/ic_bell" android:layout_marginEnd="16dp"
+                android:contentDescription="PC Audio" />
+            <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content"
+                android:orientation="vertical">
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                    android:text="PC Audio"
+                    android:textColor="@color/text_pri" android:textSize="14sp"
+                    android:fontFamily="monospace" />
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                    android:text="Stream speakers to phone"
+                    android:textColor="@color/text_sec" android:textSize="10sp"
+                    android:fontFamily="monospace" />
+            </LinearLayout>
         </LinearLayout>
 
         <!-- AlliedNode 2 -->

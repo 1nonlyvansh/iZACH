@@ -156,6 +156,10 @@ def turn_on(reason: str = "manual"):
     _broadcast_state()
     if _speak_fn and reason == "manual":
         _speak_fn("Do Not Disturb mode activated. Mic paused. Alerts will be held silently.")
+    # Windows toast when auto-activated by meeting detection
+    if reason in ("zoom", "teams", "meet", "zoom_meeting", "teams_meeting", "google_meet"):
+        _meeting_name = {"zoom": "Zoom", "teams": "Microsoft Teams", "meet": "Google Meet"}.get(reason, reason.title())
+        _notify_meeting_detected(_meeting_name)
 
 
 def turn_off():
@@ -197,6 +201,7 @@ def clear_queue():
 
 def add_to_queue(item: dict):
     """Smart queue: ack filter, grouping, priority escalation, auto-escalation."""
+    global _queue
     number = item.get("number", "")
     text   = item.get("text", "")
     typ    = item.get("type", "alert")
@@ -286,7 +291,7 @@ def add_to_queue(item: dict):
 
     if _broadcast_fn:
         try:
-            _broadcast_fn({"type": "dnd_alert", **item})
+            _broadcast_fn({"type": "dnd_alert", **item, "is_priority": is_priority})
         except Exception:
             pass
     logger.info(f"[DND] Queued alert: {item.get('type')} from {item.get('from','?')}{' [PRIORITY]' if is_priority else ''}{' [ESCALATED]' if escalate else ''}")
@@ -380,7 +385,7 @@ def _ai_handle_reply(sender: str, text: str) -> str:
     try:
         r = _req.post(
             "http://127.0.0.1:5050/ai/respond",
-            json={"from": sender, "message": text, "number": "", "lang_hint": "hinglish"},
+            json={"from": sender, "message": text, "number": sender, "lang_hint": "english"},
             headers={"X-N8N-Token": "izach-n8n-2024", "Content-Type": "application/json"},
             timeout=15,
         )
@@ -512,6 +517,23 @@ def _window_title_contains(keywords: list) -> bool:
         return bool(found)
     except Exception:
         return False
+
+
+# ── Meeting-detected notification ─────────────────────────────
+def _notify_meeting_detected(meeting_name: str):
+    """Windows toast: meeting auto-detected → DND enabled."""
+    try:
+        from winotify import Notification, audio as _wa
+        toast = Notification(
+            app_id   = "iZACH",
+            title    = "🎙 Meeting Detected — Do Not Disturb Enabled",
+            msg      = f"{meeting_name} meeting detected. Mic paused, alerts held silently.",
+            duration = "short",
+        )
+        toast.set_audio(_wa.Default, loop=False)
+        toast.show()
+    except Exception as e:
+        logger.debug(f"[DND] Meeting toast failed: {e}")
 
 
 # ── Windows Toast ──────────────────────────────────────────────

@@ -16,11 +16,9 @@ Integration points:
 """
 
 import logging
-import os
 import threading
 import time
 import uuid
-from datetime import datetime
 from typing import Callable, Optional
 
 logger = logging.getLogger(__name__)
@@ -297,6 +295,24 @@ _RAM_WARN_COOLDOWN      = 900    # 15 min between RAM alerts
 _DISK_WARN_COOLDOWN     = 3600   # 1 hour between disk alerts
 _TEMP_WARN_COOLDOWN     = 600    # 10 min between temp alerts
 
+_notif_perf_cache: tuple[bool, float] = (True, 0.0)
+
+def _notif_perf_enabled() -> bool:
+    """Read notif_performance from settings (cached 60s)."""
+    global _notif_perf_cache
+    val, ts = _notif_perf_cache
+    if time.time() - ts < 60:
+        return val
+    try:
+        import json as _j
+        with open("api_keys.json") as _f:
+            val = bool(_j.load(_f).get("notif_performance", True))
+    except Exception:
+        val = True
+    _notif_perf_cache = (val, time.time())
+    return val
+
+
 def _check_battery():
     global _last_battery_warn_ts
     try:
@@ -312,14 +328,16 @@ def _check_battery():
 
         if not plugged and pct <= 10 and cooldown_ok:
             _last_battery_warn_ts = now
-            _alert(f"Battery critically low at {pct:.0f}%. Please plug in your charger.")
+            if _notif_perf_enabled():
+                _alert(f"Battery critically low at {pct:.0f}%. Please plug in your charger.")
         elif not plugged and pct <= 20 and cooldown_ok:
             _last_battery_warn_ts = now
-            _alert(f"Battery at {pct:.0f}%. You might want to plug in soon.")
+            if _notif_perf_enabled():
+                _alert(f"Battery at {pct:.0f}%. You might want to plug in soon.")
         elif plugged and pct >= 95 and cooldown_ok:
-            # Gentle reminder to unplug (battery health)
             _last_battery_warn_ts = now
-            _alert(f"Battery is at {pct:.0f}% and still charging. Consider unplugging to preserve battery health.")
+            if _notif_perf_enabled():
+                _alert(f"Battery is at {pct:.0f}% and still charging. Consider unplugging to preserve battery health.")
     except Exception:
         pass
 
@@ -333,13 +351,14 @@ def _check_ram():
         now = time.time()
         if pct >= 90 and (now - _last_ram_warn_ts) > _RAM_WARN_COOLDOWN:
             _last_ram_warn_ts = now
-            used_gb  = vm.used  / (1024 ** 3)
-            total_gb = vm.total / (1024 ** 3)
-            _alert(
-                f"Memory usage is very high — {pct:.0f}% used, "
-                f"{used_gb:.1f} of {total_gb:.1f} gigabytes. "
-                f"You may want to close some applications."
-            )
+            if _notif_perf_enabled():
+                used_gb  = vm.used  / (1024 ** 3)
+                total_gb = vm.total / (1024 ** 3)
+                _alert(
+                    f"Memory usage is very high — {pct:.0f}% used, "
+                    f"{used_gb:.1f} of {total_gb:.1f} gigabytes. "
+                    f"You may want to close some applications."
+                )
     except Exception:
         pass
 

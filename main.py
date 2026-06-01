@@ -37,7 +37,6 @@ os.environ["OPENCV_LOG_LEVEL"] = "SILENT"      # suppress all OpenCV C++ logs
 os.environ["OPENCV_VIDEOIO_DEBUG"] = "0"       # extra safety for VIDEOIO backend noise
 os.environ["OPENCV_FFMPEG_LOGLEVEL"] = "-8"    # FFMPEG plugin ignores OPENCV_LOG_LEVEL — silence separately
 
-import subprocess
 import threading
 import time
 import queue
@@ -46,7 +45,6 @@ import edge_tts
 import pygame
 import re
 import speech_recognition as sr
-import pyautogui
 from modules.audio_init_lock import PYAUDIO_INIT_LOCK
 from dotenv import load_dotenv
 from logging_config import setup_logging
@@ -56,10 +54,6 @@ logger = _logging.getLogger(__name__)
 
 
 # --- 1. MODULE IMPORTS ---
-from modules.automation import (
-    get_current_time,
-    get_current_date
-)
 from modules.ai_handler import AIProvider
 from modules.spotify_controller import SpotifyController
 import modules.context_engine as context_engine
@@ -85,7 +79,8 @@ except (ImportError, ModuleNotFoundError):
 load_dotenv()
 
 # --- 2. CONFIGURATION ---
-GROQ_KEY    = os.getenv("GROQ_API_KEY", "")
+GROQ_KEY         = os.getenv("GROQ_API_KEY", "")
+ANTHROPIC_KEY    = os.getenv("ANTHROPIC_API_KEY", "").strip()
 GEMINI_KEYS = [
     os.getenv("GEMINI_KEY_1", ""),
     os.getenv("GEMINI_KEY_2", ""),
@@ -124,7 +119,8 @@ if _IS_SUBPROCESS:
     ai_manager  = None
     spotify_api = None
 else:
-    ai_manager  = AIProvider(os.getenv("GROQ_API_KEY", GROQ_KEY), GEMINI_KEYS)
+    ai_manager  = AIProvider(os.getenv("GROQ_API_KEY", GROQ_KEY), GEMINI_KEYS,
+                             anthropic_key=ANTHROPIC_KEY)
     spotify_api = SpotifyController()
 
     try:
@@ -340,6 +336,17 @@ def speak(text, tone: str = "casual"):
         from modules.ws_bridge import broadcast
         _ts = time.strftime("%H:%M")
         broadcast({"type": "chat", "sender": "iZACH", "text": display_text, "ts": _ts})
+    except Exception:
+        pass
+
+    # ── Toast notification if enabled in settings ─────────────
+    try:
+        import json as _tj
+        with open("api_keys.json", encoding="utf-8") as _tf:
+            _tc = _tj.load(_tf)
+        if _tc.get("toast_enabled", False):
+            from modules import toast_notify as _toast
+            _toast.notify("iZACH", display_text[:120])
     except Exception:
         pass
 
@@ -651,6 +658,82 @@ def safe_shutdown():
 
 
 # ─────────────────────────────────────────────────────────────
+# Battery / lid monitor — auto-switch to background mode
+# ─────────────────────────────────────────────────────────────
+def _start_battery_monitor(speak_fn):
+    """Monitor battery level and lid state; auto-switch UI if settings say so."""
+    import threading as _bm_thr
+
+    def _read_cfg():
+        try:
+            import json as _j
+            with open("api_keys.json", encoding="utf-8") as _f:
+                return _j.load(_f)
+        except Exception:
+            return {}
+
+    def _write_ui_background():
+        try:
+            import json as _j
+            cfg = {}
+            try:
+                with open("api_keys.json", encoding="utf-8") as _f:
+                    cfg = _j.load(_f)
+            except Exception:
+                pass
+            if cfg.get("ui") == "background":
+                return False  # already background
+            cfg["ui"] = "background"
+            with open("api_keys.json", "w", encoding="utf-8") as _f:
+                _j.dump(cfg, _f, indent=2)
+            return True
+        except Exception:
+            return False
+
+    def _battery_loop():
+        import time as _bt
+        while True:
+            try:
+                cfg = _read_cfg()
+                if cfg.get("battery_auto_switch", False):
+                    import psutil as _ps
+                    batt = _ps.sensors_battery()
+                    if batt and not batt.power_plugged:
+                        if cfg.get("ui", "classic") != "background":
+                            if _write_ui_background():
+                                speak_fn("Switching to background mode to save power.")
+            except Exception:
+                pass
+            import time as _bt2
+            _bt2.sleep(60)
+
+    def _lid_loop():
+        """Monitor lid state via WMI power events. Graceful skip if WMI unavailable."""
+        try:
+            import wmi as _wmi  # type: ignore
+            c = _wmi.WMI()
+            watcher = c.Win32_PowerManagementEvent.watch_for("modification")
+        except Exception:
+            return  # WMI not available — skip lid monitoring
+        while True:
+            try:
+                evt = watcher(timeout_ms=10000)
+                if evt:
+                    cfg = _read_cfg()
+                    if cfg.get("lid_close_trigger", False):
+                        # EventType 7 = entering sleep/suspend (lid close)
+                        if getattr(evt, "EventType", None) == 7:
+                            _write_ui_background()
+            except Exception:
+                import time as _lt
+                _lt.sleep(10)
+
+    _bm_thr.Thread(target=_battery_loop, daemon=True, name="BatteryMonitor").start()
+    _bm_thr.Thread(target=_lid_loop,     daemon=True, name="LidMonitor").start()
+    print("[BATTERY MONITOR] Battery/lid monitor started.")
+
+
+# ─────────────────────────────────────────────────────────────
 # start_brain — works with ui=None (Electron/headless) OR
 #               ui=JarvisUI instance (old tkinter mode)
 # ─────────────────────────────────────────────────────────────
@@ -714,6 +797,9 @@ def start_brain(ui=None):
     from modules import system_control as _sc
     _sc.start_bluetooth_watcher(speak)
     _sc.start_drive_watcher(speak)
+
+    # Battery / lid auto-switch monitor
+    _start_battery_monitor(speak)
 
     # 4. WhatsApp callbacks — real ones if old UI, dummy lambdas if headless
     from modules.whatsapp_handler import set_ui_callbacks
@@ -825,7 +911,8 @@ def start_brain(ui=None):
     # Phase 3: SmartAlarm + WhatsApp 24h context engine
     try:
         from modules.smart_alarm import init as _init_alarm
-        _init_alarm(speak_fn=speak)
+        from modules.ws_bridge import broadcast as _sa_broadcast
+        _init_alarm(speak_fn=speak, broadcast_fn=_sa_broadcast)
         print("[SMART ALARM] Initialized — persistent alarm engine active.")
     except Exception as _ae:
         print(f"[SMART ALARM] Init failed: {_ae}")
@@ -1133,7 +1220,12 @@ def start_brain(ui=None):
                     })
                 except Exception:
                     pass
-                if any(w in query for w in ["shutdown", "exit izach", "stop izach"]):
+                _is_node2 = bool(re.search(
+                    r'\b(?:alliednode\s*2|allied\s*node\s*2|allied\s*note\s*2'
+                    r'|elite\s*node\s*2|elite\s*note\s*2|alliednote\s*2|allied\s*no\s*2)\b',
+                    query, re.IGNORECASE,
+                ))
+                if any(w in query for w in ["shutdown", "exit izach", "stop izach"]) and not _is_node2:
                     speak("Systems offline.")
                     safe_shutdown()
                     break

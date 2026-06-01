@@ -47,7 +47,6 @@ from __future__ import annotations
 
 import json
 import re
-import threading
 
 import modules.system_control as _sc
 

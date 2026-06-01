@@ -114,12 +114,20 @@ function createClient() {
 
     // Send message endpoint
     app.post('/send-message', async (req, res) => {
-        const { number, text } = req.body;
+        let { number, text } = req.body;
+        if (!number || !text) {
+            return res.json({ status: 'error', message: 'number and text are required' });
+        }
+        // Normalize number to WA format: strip non-digits, ensure @c.us suffix
+        number = number.toString().replace(/[^0-9]/g, '');
+        if (!number.endsWith('@c.us')) number = number + '@c.us';
         try {
             await client.sendMessage(number, text);
             res.json({ status: 'sent' });
         } catch (e) {
-            res.json({ status: 'error', message: e.message });
+            const errMsg = e.message || String(e) || 'unknown bridge error';
+            console.log(`[BRIDGE] Send failed to ${number}: ${errMsg}`);
+            res.json({ status: 'error', message: errMsg });
         }
     });
 

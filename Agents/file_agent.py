@@ -244,11 +244,7 @@ class FileAgent:
             ok, msg = fm.handle_by_type(chosen)
             self.speak(msg)
         elif action == "delete":
-            ok, msg = fm.delete_file(chosen)
-            if not ok and msg.startswith("PASSWORD_REQUIRED"):
-                self.speak("Please confirm your file manager password to delete.")
-            else:
-                self.speak(msg)
+            self._delete_with_face_auth(chosen)
         elif action == "read":
             ok, content = fm.read_text_file(chosen)
             self.speak(content if ok else content)
@@ -347,16 +343,47 @@ class FileAgent:
         if not matches:
             self.speak(f"Couldn't find '{query}' to delete.")
             return True
+
         if len(matches) == 1:
-            ok, msg = fm.delete_file(matches[0])
-            if not ok and msg.startswith("PASSWORD_REQUIRED"):
-                self.speak("Please confirm your file manager password to delete.")
-            else:
-                self.speak(msg)
+            self._delete_with_face_auth(matches[0])
             return True
 
         self._start_disambiguation("delete", matches, cmd)
         return True
+
+    def _delete_with_face_auth(self, filepath: str):
+        """Run face verification, then delete on success. Mirrors command_chain path."""
+        import threading as _thr
+        try:
+            from modules import face_auth
+        except ImportError:
+            # face_auth unavailable — fall back to password-gated delete
+            fm = self._fm()
+            ok, msg = fm.delete_file(filepath)
+            self.speak(msg)
+            return
+
+        if not face_auth.is_enrolled():
+            self.speak("Face auth is not set up. Say 'enroll my face' first, then try deleting again.")
+            return
+
+        import os as _os
+        name = _os.path.basename(filepath)
+        self.speak(f"Look at the camera to confirm deletion of {name}.")
+
+        def _run():
+            verified = face_auth.verify_owner()
+            if verified:
+                try:
+                    fm = self._fm()
+                    ok, msg = fm.delete_verified(filepath)
+                    self.speak(f"Identity confirmed. {msg}")
+                except Exception as e:
+                    self.speak(f"Verified but delete failed: {e}")
+            else:
+                self.speak("Face not recognized. Deletion cancelled.")
+
+        _thr.Thread(target=_run, daemon=True).start()
 
     def _rename_file(self, d: dict, cmd: str) -> bool:
         query    = (d.get("file_name") or "").strip()

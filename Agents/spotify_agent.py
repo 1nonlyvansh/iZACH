@@ -202,14 +202,17 @@ class SpotifyAgent:
         if "youtube" in cmd:
             from modules.automation import play_specific_youtube
             play_specific_youtube(song)
-        elif "spotify" in cmd or "spotify" not in cmd:
+        elif "spotify" in cmd:
             self.speak(f"Playing {song}.")
             status = self.spotify.play_track(song)
             if any(w in status.lower() for w in ["couldn't", "error", "not found", "failed"]):
                 self.speak(status)
         else:
-            self.speak("Playing on Spotify.")
-            self.spotify.play_track(song)
+            # User confirmed without naming platform — default Spotify
+            self.speak(f"Playing {song} on Spotify.")
+            status = self.spotify.play_track(song)
+            if any(w in status.lower() for w in ["couldn't", "error", "not found", "failed"]):
+                self.speak(status)
         return True
 
     # ── Helpers ───────────────────────────────────────────────────

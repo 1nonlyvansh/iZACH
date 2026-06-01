@@ -32,6 +32,159 @@
         android:textColor="@color/text_sec" android:textSize="11sp"
         android:fontFamily="monospace" android:letterSpacing="0.05" />
 
+    <!-- Pinned system quick-action tiles -->
+    <LinearLayout
+        android:id="@+id/systemTiles"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:paddingHorizontal="12dp"
+        android:paddingBottom="8dp"
+        android:gravity="center_vertical">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="SYSTEM"
+            android:textColor="@color/text_sec"
+            android:textSize="8sp"
+            android:fontFamily="monospace"
+            android:letterSpacing="0.15"
+            android:layout_marginEnd="10dp" />
+
+        <!-- Background Mode toggle tile -->
+        <LinearLayout
+            android:id="@+id/tileBgMode"
+            android:layout_width="0dp"
+            android:layout_height="72dp"
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:background="@drawable/bg_shortcut_tile"
+            android:layout_marginEnd="8dp"
+            android:clickable="true"
+            android:focusable="true">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="⊟"
+                android:textColor="@color/cyan"
+                android:textSize="22sp" />
+
+            <TextView
+                android:id="@+id/tvBgModeLabel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="BACKGROUND"
+                android:textColor="@color/cyan"
+                android:textSize="8sp"
+                android:fontFamily="monospace"
+                android:letterSpacing="0.1"
+                android:textStyle="bold"
+                android:layout_marginTop="2dp" />
+
+            <TextView
+                android:id="@+id/tvBgModeStatus"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="TAP TO ACTIVATE"
+                android:textColor="@color/text_sec"
+                android:textSize="7sp"
+                android:fontFamily="monospace"
+                android:letterSpacing="0.05"
+                android:layout_marginTop="1dp" />
+        </LinearLayout>
+
+        <!-- Forge UI tile -->
+        <LinearLayout
+            android:id="@+id/tileForge"
+            android:layout_width="0dp"
+            android:layout_height="72dp"
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:background="@drawable/bg_shortcut_tile"
+            android:layout_marginEnd="8dp"
+            android:clickable="true"
+            android:focusable="true">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="⊞"
+                android:textColor="@color/cyan"
+                android:textSize="22sp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="FORGE UI"
+                android:textColor="@color/cyan"
+                android:textSize="8sp"
+                android:fontFamily="monospace"
+                android:letterSpacing="0.1"
+                android:textStyle="bold"
+                android:layout_marginTop="2dp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="OPEN DASHBOARD"
+                android:textColor="@color/text_sec"
+                android:textSize="7sp"
+                android:fontFamily="monospace"
+                android:letterSpacing="0.05"
+                android:layout_marginTop="1dp" />
+        </LinearLayout>
+
+        <!-- Cortex UI tile -->
+        <LinearLayout
+            android:id="@+id/tileCortex"
+            android:layout_width="0dp"
+            android:layout_height="72dp"
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:background="@drawable/bg_shortcut_tile"
+            android:clickable="true"
+            android:focusable="true">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="◉"
+                android:textColor="@color/cyan"
+                android:textSize="22sp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="CORTEX UI"
+                android:textColor="@color/cyan"
+                android:textSize="8sp"
+                android:fontFamily="monospace"
+                android:letterSpacing="0.1"
+                android:textStyle="bold"
+                android:layout_marginTop="2dp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="OPEN DASHBOARD"
+                android:textColor="@color/text_sec"
+                android:textSize="7sp"
+                android:fontFamily="monospace"
+                android:letterSpacing="0.05"
+                android:layout_marginTop="1dp" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- Divider -->
+    <View android:layout_width="match_parent" android:layout_height="1dp"
+        android:background="#0d2a3a" android:layout_marginHorizontal="12dp"
+        android:layout_marginBottom="8dp" />
+
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/rvShortcuts"
         android:layout_width="match_parent"

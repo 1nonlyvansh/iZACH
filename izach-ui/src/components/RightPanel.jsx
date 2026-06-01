@@ -245,23 +245,44 @@ function SystemLog({ errors }) {
 }
 
 function WhatsAppPanel({ status, qr }) {
-  const [qrDataUrl, setQrDataUrl] = useState(null)
+  const [qrDataUrl,    setQrDataUrl]    = useState(null)
+  const [restarting,   setRestarting]   = useState(false)
+  const [restartMsg,   setRestartMsg]   = useState('')
 
   useEffect(() => {
     if (qr && qr.length > 0) {
-      // Backend already sends a base64-encoded PNG (from _qr_to_base64()).
-      // Do NOT pass through QRCode.toDataURL() — that expects raw QR text, not PNG bytes.
       setQrDataUrl(`data:image/png;base64,${qr}`)
     } else {
       setQrDataUrl(null)
     }
   }, [qr])
 
+  async function restartBridge() {
+    setRestarting(true)
+    setRestartMsg('Restarting…')
+    try {
+      const r = await fetch(`${BASE}/whatsapp/restart-bridge`, { method: 'POST' }).then(r => r.json())
+      setRestartMsg(r.ok ? 'Bridge restarting — wait ~10s' : (r.error || 'Failed'))
+    } catch {
+      setRestartMsg('Backend offline')
+    }
+    setTimeout(() => { setRestarting(false); setRestartMsg('') }, 10000)
+  }
+
+  const btnStyle = {
+    padding: '4px 10px', background: 'rgba(0,148,255,0.08)',
+    border: '1px solid rgba(0,148,255,0.25)', borderRadius: 4,
+    color: 'rgba(0,148,255,0.7)', fontFamily: "'Share Tech Mono'",
+    fontSize: '8px', letterSpacing: '0.12em', cursor: 'pointer',
+    marginLeft: 'auto', flexShrink: 0,
+    opacity: restarting ? 0.5 : 1,
+  }
+
   return (
     <div>
       <SectionHeader label="WHATSAPP BRIDGE" />
       <div style={{ padding: '0 16px 12px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: qrDataUrl ? 10 : 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: (qrDataUrl || restartMsg) ? 8 : 0 }}>
           <StatusDot status={status} />
           <span style={{
             color: status === 'online' ? '#1db954' : '#ff3d3d',
@@ -271,16 +292,24 @@ function WhatsAppPanel({ status, qr }) {
             {status}
           </span>
           {status === 'online' && (
-            <span style={{ color: '#1a4a5a', fontFamily: "'JetBrains Mono'", fontSize: '9px', marginLeft: 2 }}>
+            <span style={{ color: '#1a4a5a', fontFamily: "'JetBrains Mono'", fontSize: '9px' }}>
               Connected
             </span>
           )}
-        {status === 'online' && (
-          <span style={{ color: '#1a4a5a', fontFamily: "'JetBrains Mono'", fontSize: '9px', marginLeft: 'auto' }}>
-            To Log Out, Go to Settings
-          </span>
-        )}
+          <button
+            onClick={restartBridge}
+            disabled={restarting}
+            title="Restart bridge — fixes port-3000 / offline errors"
+            style={btnStyle}
+          >
+            ↺ RESTART
+          </button>
         </div>
+        {restartMsg && (
+          <p style={{ color: '#5a9ab0', fontFamily: "'Share Tech Mono'", fontSize: '8px', marginBottom: 6 }}>
+            {restartMsg}
+          </p>
+        )}
         {qrDataUrl && status !== 'online' && (
           <div>
             <p style={{ color: '#3a6070', fontFamily: "'Share Tech Mono'", fontSize: '8px', letterSpacing: '0.12em', marginBottom: 6 }}>
@@ -288,6 +317,11 @@ function WhatsAppPanel({ status, qr }) {
             </p>
             <img src={qrDataUrl} alt="WhatsApp QR" style={{ width: '100%', borderRadius: 4, display: 'block' }} />
           </div>
+        )}
+        {status === 'online' && (
+          <p style={{ color: '#1a4a5a', fontFamily: "'JetBrains Mono'", fontSize: '8px', marginTop: 4 }}>
+            To log out, go to Settings
+          </p>
         )}
       </div>
     </div>

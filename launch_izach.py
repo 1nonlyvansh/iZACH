@@ -138,7 +138,17 @@ if not izach_ok:
 
 # ── 3. MMA ───────────────────────────────────────────────────
 print(f"\n{M}━━━ Step 3 / 5 — MMA Remote Agent (port 6060) ━━━{RST}")
-p_mma = start("MMA", M, MMA_CMD, cwd=r"C:\Projects\iZACHMMA")
+LOG_MMA = os.path.join(BASE, "logs", "mma.log")
+os.makedirs(os.path.join(BASE, "logs"), exist_ok=True)
+_mma_log_fh = open(LOG_MMA, "a", encoding="utf-8", errors="replace", buffering=1)
+proc_mma = subprocess.Popen(
+    MMA_CMD,
+    cwd=r"C:\Projects\iZACHMMA",
+    stdout=_mma_log_fh,
+    stderr=_mma_log_fh,
+    creationflags=0,   # no new window — log to file instead
+)
+p_mma = proc_mma
 time.sleep(2)
 mma_ok = wait_http("http://localhost:6060/health", "MMA", M, timeout=20)
 if not mma_ok:

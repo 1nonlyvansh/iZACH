@@ -1476,6 +1476,9 @@ body.spotlight-mode .pnl:not(.spotlighted) {
     <button class="tb-btn" id="tb-dnd"      onclick="toggleDND()"                title="DO NOT DISTURB">
       <span class="tb-ic">🌙</span><span class="tb-lbl">DND</span>
     </button>
+    <button class="tb-btn" id="tb-bg"       onclick="goBackgroundMode()"         title="BACKGROUND MODE — close window, run from tray (low RAM)">
+      <span class="tb-ic">⊟</span><span class="tb-lbl">BG</span>
+    </button>
     <div class="tb-sep"></div>
     <button class="tb-btn" id="tb-settings" onclick="openSettings('settings')"   title="SETTINGS">
       <span class="tb-ic">⚙</span><span class="tb-lbl">SETTINGS</span>
@@ -1588,6 +1591,7 @@ body.spotlight-mode .pnl:not(.spotlighted) {
     <button class="sp-tab" data-tab="security" onclick="switchSettingsTab('security')">SECURITY</button>
     <button class="sp-tab" data-tab="commands" onclick="switchSettingsTab('commands')">COMMANDS</button>
     <button class="sp-tab" data-tab="links"    onclick="switchSettingsTab('links')">CUSTOM LINKS</button>
+    <button class="sp-tab" data-tab="bgmode"   onclick="switchSettingsTab('bgmode')">BG MODE</button>
   </div>
   <div class="sp-body">
 
@@ -1785,8 +1789,17 @@ body.spotlight-mode .pnl:not(.spotlighted) {
         <div class="sp-sec">
           <div class="sp-sec-title">INTERFACE</div>
           <div class="cfg-label">UI STYLE (restart to apply)</div>
-          <label class="cfg-opt"><input type="radio" name="ui-mode" value="classic"><span>Classic — React dashboard</span></label>
-          <label class="cfg-opt"><input type="radio" name="ui-mode" value="scifi" checked><span>Sci-Fi — JARVIS holographic</span></label>
+          <label class="cfg-opt"><input type="radio" name="ui-mode" value="classic"><span>Classic — React dashboard (Forge UI)</span></label>
+          <label class="cfg-opt"><input type="radio" name="ui-mode" value="scifi" checked><span>Sci-Fi — JARVIS holographic (Cortex UI)</span></label>
+          <label class="cfg-opt"><input type="radio" name="ui-mode" value="background"><span>Background — no window, voice/tray only, low RAM</span></label>
+          <label class="cfg-opt" style="margin-top:8px;"><input type="checkbox" id="cfg-ask-boot"><span>Ask Every Time During Boot</span></label>
+          <div class="cfg-label" style="margin-top:10px;">FONT SIZE</div>
+          <select class="cfg-sel" id="cfg-font-size" onchange="applyFontSize(this.value)">
+            <option value="11">Small (11px)</option>
+            <option value="13" selected>Normal (13px)</option>
+            <option value="15">Large (15px)</option>
+            <option value="17">X-Large (17px)</option>
+          </select>
           <div class="cfg-divider" style="margin:12px 0;border-top:1px solid rgba(0,148,255,0.07);"></div>
           <div class="sp-sec-title" style="margin-bottom:8px;">IDLE SCREEN</div>
           <div class="cfg-label">WALLPAPER</div>
@@ -2094,6 +2107,105 @@ body.spotlight-mode .pnl:not(.spotlighted) {
       <div class="sp-save-row" style="flex-shrink:0;">
         <button class="sp-save-btn" onclick="clSave()">SAVE TO iZACH</button>
         <span class="sp-save-msg" id="cl-save-msg"></span>
+      </div>
+    </div>
+
+    <!-- ── BG MODE TAB ── -->
+    <div class="sp-panel" id="sptab-bgmode">
+      <div class="sp-scroll">
+
+        <!-- INTERFACE MODE -->
+        <div class="sp-sec">
+          <div class="sp-sec-title">INTERFACE MODE</div>
+          <div class="cfg-label">UI STYLE (restart to apply)</div>
+          <label class="cfg-opt"><input type="radio" name="ui-mode" value="classic"><span>Classic — React dashboard (Forge UI)</span></label>
+          <label class="cfg-opt"><input type="radio" name="ui-mode" value="scifi" checked><span>Sci-Fi — JARVIS holographic (Cortex UI)</span></label>
+          <label class="cfg-opt"><input type="radio" name="ui-mode" value="background"><span>Background — no window, voice/tray only, low RAM</span></label>
+          <label class="cfg-opt" style="margin-top:8px;"><input type="checkbox" id="cfg-ask-boot-bg"><span>Ask Every Time During Boot</span></label>
+        </div>
+        <div class="sp-divider"></div>
+
+        <!-- OVERLAYS -->
+        <div class="sp-sec">
+          <div class="sp-sec-title">OVERLAYS</div>
+          <div class="cfg-label">GLOBAL HOTKEYS <span style="color:rgba(0,148,255,0.3);font-size:7px;letter-spacing:.08em;">restart to apply</span></div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px;">
+            <div style="flex:1;min-width:130px;">
+              <div style="font-size:7px;letter-spacing:.12em;color:rgba(0,148,255,0.4);margin-bottom:3px;">COMMAND BAR</div>
+              <input id="cfg-hotkey-bar-bg" placeholder="ctrl+shift+space"
+                style="width:100%;box-sizing:border-box;padding:5px 8px;background:#010d1a;border:1px solid rgba(0,148,255,0.15);border-radius:3px;color:#00e5ff;font-family:'JetBrains Mono',monospace;font-size:10px;outline:none;">
+            </div>
+            <div style="flex:1;min-width:130px;">
+              <div style="font-size:7px;letter-spacing:.12em;color:rgba(0,148,255,0.4);margin-bottom:3px;">MIC TOGGLE</div>
+              <input id="cfg-hotkey-mic-bg" placeholder="ctrl+shift+m"
+                style="width:100%;box-sizing:border-box;padding:5px 8px;background:#010d1a;border:1px solid rgba(0,148,255,0.15);border-radius:3px;color:#00e5ff;font-family:'JetBrains Mono',monospace;font-size:10px;outline:none;">
+            </div>
+          </div>
+          <div class="cfg-toggle-row" style="margin-top:10px;">
+            <span>Push-to-Talk Mode (hold hotkey to talk)</span>
+            <div class="cfg-tog" id="tog-ptt" onclick="cfgToggle('tog-ptt','push_to_talk')"></div>
+          </div>
+          <div style="font-size:7px;color:rgba(0,148,255,0.35);letter-spacing:.08em;margin-top:3px;">PTT mic recording is phase 2 — UI wired now.</div>
+        </div>
+        <div class="sp-divider"></div>
+
+        <!-- POWER SETTINGS -->
+        <div class="sp-sec">
+          <div class="sp-sec-title">POWER SETTINGS</div>
+          <div class="cfg-toggle-row">
+            <span>Auto Background on Battery</span>
+            <div class="cfg-tog" id="tog-batt-auto" onclick="cfgToggle('tog-batt-auto','battery_auto_switch')"></div>
+          </div>
+          <div class="cfg-toggle-row">
+            <span>Auto Background on Lid Close</span>
+            <div class="cfg-tog" id="tog-lid" onclick="cfgToggle('tog-lid','lid_close_trigger')"></div>
+          </div>
+        </div>
+        <div class="sp-divider"></div>
+
+        <!-- NOTIFICATIONS -->
+        <div class="sp-sec">
+          <div class="sp-sec-title">NOTIFICATIONS</div>
+          <div class="cfg-toggle-row">
+            <span>Windows Toast Notifications</span>
+            <div class="cfg-tog" id="tog-toast" onclick="cfgToggle('tog-toast','toast_enabled')"></div>
+          </div>
+          <div class="cfg-toggle-row">
+            <span>Toast in Background Mode Only</span>
+            <div class="cfg-tog" id="tog-toast-bg" onclick="cfgToggle('tog-toast-bg','toast_bg_only')"></div>
+          </div>
+        </div>
+        <div class="sp-divider"></div>
+
+        <!-- EXPORT -->
+        <div class="sp-sec">
+          <div class="sp-sec-title">EXPORT</div>
+          <div class="sp-action-grid">
+            <button class="sp-action-btn" onclick="exportChat('txt')">EXPORT CHAT (TXT)</button>
+            <button class="sp-action-btn" onclick="exportChat('pdf')">EXPORT CHAT (PDF)</button>
+          </div>
+        </div>
+        <div class="sp-divider"></div>
+
+        <!-- VOICE ALIASES -->
+        <div class="sp-sec">
+          <div class="sp-sec-title">VOICE ALIASES</div>
+          <div style="font-size:7px;color:rgba(0,148,255,0.4);letter-spacing:.12em;margin-bottom:8px;">SAY TRIGGER → iZACH RUNS THE ALIASED COMMAND</div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">
+            <input class="sp-add-inp" id="alias-trigger" placeholder="Trigger (e.g. fire it up)" style="flex:1;min-width:120px;">
+            <input class="sp-add-inp" id="alias-command" placeholder="Command (e.g. play my gym playlist)" style="flex:2;min-width:180px;">
+            <button class="sp-add-btn" onclick="addAlias()">+ ADD</button>
+          </div>
+          <div style="font-size:8px;color:rgba(0,148,255,0.5);letter-spacing:.1em;margin-bottom:6px;" id="alias-msg"></div>
+          <div id="alias-list" style="max-height:180px;overflow-y:auto;">
+            <div class="sp-empty" id="alias-empty">No aliases yet.</div>
+          </div>
+        </div>
+
+      </div>
+      <div class="sp-save-row">
+        <button class="sp-save-btn" onclick="saveBgConfig()">SAVE BG MODE SETTINGS</button>
+        <span class="sp-save-msg" id="bgcfg-msg"></span>
       </div>
     </div>
 
@@ -3575,15 +3687,34 @@ function togWgt(id){
   const el=document.getElementById(id); if(!el)return;
   el.classList.toggle('show');
   const active=el.classList.contains('show');
-  // Auto-position: if panel has no explicit left/top, place with margin from edges
+  // Auto-position: restore saved geometry, or place with margin from edges
   if(active){
-    const cs=el.style;
-    if(!cs.left && !el.getBoundingClientRect().left){
-      const offset=60+Object.values(wpMap).indexOf(id)*30;
-      el.style.left=(80+offset%200)+'px';
-      el.style.top =(80+offset%120)+'px';
+    try{
+      const g=(JSON.parse(localStorage.getItem('izach_wgt_geom')||'{}'))[id];
+      if(g && g.left){
+        el.style.left=g.left; el.style.top=g.top||'80px';
+        if(g.w) el.style.width=g.w;
+        if(g.h) el.style.height=g.h;
+        el.style.right='auto'; el.style.bottom='auto';
+      } else {
+        const cs=el.style;
+        if(!cs.left && !el.getBoundingClientRect().left){
+          const offset=60+Object.values(wpMap).indexOf(id)*30;
+          el.style.left=(80+offset%200)+'px';
+          el.style.top =(80+offset%120)+'px';
+        }
+      }
+    }catch(e){
+      const cs=el.style;
+      if(!cs.left && !el.getBoundingClientRect().left){
+        const offset=60+Object.values(wpMap).indexOf(id)*30;
+        el.style.left=(80+offset%200)+'px';
+        el.style.top =(80+offset%120)+'px';
+      }
     }
   }
+  // Persist open/close state
+  if(typeof _saveWidgetOpen==='function') _saveWidgetOpen(id,active);
   // Sync old dock map (no-ops now, buttons don't exist)
   const dk=dkMap[id]; if(dk){const b=document.getElementById(dk);if(b)b.classList.toggle('on',active);}
   // Sync widget picker button highlight
@@ -3625,12 +3756,16 @@ function stopCam(){
 function toggleOptics(){
   if(currentMode==='cam'){
     setMode('widget');
-    // Re-show panels if none are visible (all were hidden while in cam mode)
+    // Re-show panels if none are visible (all were hidden while in cam mode).
+    // Prefer restoring saved state; fall back to defaults only if no saved state.
     const anyShown = allWgts.some(w => {
       const el = document.getElementById(w);
       return el && el.classList.contains('show');
     });
-    if(!anyShown) showDefault();
+    if(!anyShown){
+      const _sv=localStorage.getItem('izach_wgt_state');
+      if(_sv && _sv!=='{}') _restoreWidgets(); else showDefault();
+    }
   } else {
     setMode('cam');
   }
@@ -4258,9 +4393,68 @@ function initWidget(id){
     let nh=Math.max(cfg.minH,Math.min(cfg.maxH,sh+(e.clientY-sy)));
     el.style.width=snapV(nw)+'px'; el.style.height=snapV(nh)+'px';
   });
-  document.addEventListener('mouseup',()=>{ resizing=false; });
+  document.addEventListener('mouseup',()=>{
+    if(resizing){ resizing=false; _saveWidgetGeom(id, el); }
+  });
 }
 allWgts.forEach(initWidget);
+
+// ── Widget persistence helpers ────────────────────────────────
+const _WGT_GEOM_KEY  = 'izach_wgt_geom';   // {id:{left,top,w,h}}
+const _WGT_STATE_KEY = 'izach_wgt_state';  // {id: bool}
+
+function _saveWidgetGeom(id, el){
+  try{
+    const g=JSON.parse(localStorage.getItem(_WGT_GEOM_KEY)||'{}');
+    g[id]={left:el.style.left||'',top:el.style.top||'',w:el.style.width||'',h:el.style.height||''};
+    localStorage.setItem(_WGT_GEOM_KEY,JSON.stringify(g));
+  }catch(e){}
+}
+
+function _saveWidgetOpen(id,open){
+  try{
+    const s=JSON.parse(localStorage.getItem(_WGT_STATE_KEY)||'{}');
+    s[id]=open;
+    localStorage.setItem(_WGT_STATE_KEY,JSON.stringify(s));
+  }catch(e){}
+}
+
+function _restoreWidgets(){
+  try{
+    const geom =JSON.parse(localStorage.getItem(_WGT_GEOM_KEY)||'{}');
+    const state=JSON.parse(localStorage.getItem(_WGT_STATE_KEY)||'{}');
+    for(const id of Object.keys(state)){
+      if(!state[id]) continue;
+      const el=document.getElementById(id); if(!el) continue;
+      const g=geom[id];
+      if(g){
+        if(g.left) el.style.left  =g.left;
+        if(g.top)  el.style.top   =g.top;
+        if(g.w)    el.style.width =g.w;
+        if(g.h)    el.style.height=g.h;
+        el.style.right='auto'; el.style.bottom='auto';
+      }
+      if(!el.classList.contains('show')){
+        el.classList.add('show');
+        const bId=wpMap[id]; if(bId){const b=document.getElementById(bId);if(b)b.classList.add('on');}
+        const dk=dkMap[id];  if(dk){ const b=document.getElementById(dk); if(b)b.classList.add('on');}
+      }
+    }
+  }catch(e){console.warn('[iZACH] Widget restore error:',e);}
+}
+
+// After every drag/resize mouseup, persist open widget geometries
+document.addEventListener('mouseup',function(){
+  allWgts.forEach(function(id){
+    const el=document.getElementById(id);
+    if(el && el.classList.contains('show') && el.style.left && el.style.top){
+      _saveWidgetGeom(id,el);
+    }
+  });
+});
+
+// Restore on load
+_restoreWidgets();
 
 // ════════════════════════════════════════════════════
 // DOCK DRAG-TO-SPAWN + CLOSE BUTTONS
@@ -4316,6 +4510,9 @@ allWgts.forEach(id=>{
     ev.stopPropagation();
     el.classList.remove('show');
     const dk=dkMap[id]; if(dk){const b=document.getElementById(dk);if(b)b.classList.remove('on');}
+    const wpb=wpMap[id]; if(wpb){const b=document.getElementById(wpb);if(b)b.classList.remove('on');}
+    // Persist close so _restoreWidgets() doesn't reopen it next boot
+    if(typeof _saveWidgetOpen==='function') _saveWidgetOpen(id,false);
   });
   phCat.appendChild(x);
 });
@@ -4653,7 +4850,14 @@ pollIdleVitals();
     document.getElementById('boot').classList.add('fade');
     setTimeout(()=>{
       const b=document.getElementById('boot'); if(b) b.remove();
-      showDefault();
+      // Only show default layout on first-ever load (no saved widget state).
+      // If user has explicitly arranged/closed widgets, respect that.
+      try{
+        const _savedWgtState=localStorage.getItem('izach_wgt_state');
+        const _hasSavedState=_savedWgtState && _savedWgtState!=='{}';
+        if(!_hasSavedState) showDefault();
+        // _restoreWidgets() already ran at script load; no need to call again
+      }catch(e){ showDefault(); }
       loadMicDevices();
       loadCamDevices();
     },1000);
@@ -7002,6 +7206,7 @@ async function loadConfig(){
     const s=d.settings||{};
     // UI mode
     document.querySelectorAll('input[name="ui-mode"]').forEach(el=>{ el.checked=(el.value===(s.ui||'scifi')); });
+    const askBoot=document.getElementById('cfg-ask-boot'); if(askBoot) askBoot.checked=!!s.ask_ui_on_boot;
     // Voice & audio
     const voice=document.getElementById('cfg-voice'); if(voice && s.voice) voice.value=s.voice;
     const speed=document.getElementById('cfg-speed'); if(speed && s.tts_speed!=null) speed.value=s.tts_speed;
@@ -7039,6 +7244,9 @@ async function loadConfig(){
     for(const [id,key] of Object.entries(briefItems)){
       const el=document.getElementById(id); if(el && s[key]!=null) el.checked=!!s[key];
     }
+    // Font size
+    const fsEl=document.getElementById('cfg-font-size'); if(fsEl && s.font_size) fsEl.value=s.font_size;
+    if(s.font_size) applyFontSize(s.font_size);
     // Load mic devices into settings dropdown
     _loadMicDevicesSettings();
   }catch(e){}
@@ -7105,6 +7313,7 @@ async function saveConfig(){
   const msg=document.getElementById('cfg-msg');
   const payload={};
   const sel=document.querySelector('input[name="ui-mode"]:checked'); if(sel) payload.ui=sel.value;
+  const askBoot=document.getElementById('cfg-ask-boot'); if(askBoot) payload.ask_ui_on_boot=askBoot.checked;
   const voice=document.getElementById('cfg-voice'); if(voice) payload.voice=voice.value;
   const speed=document.getElementById('cfg-speed'); if(speed) payload.tts_speed=Number(speed.value);
   const style=document.getElementById('cfg-style'); if(style) payload.response_style=style.value;
@@ -7114,6 +7323,7 @@ async function saveConfig(){
   const logRet=document.getElementById('cfg-log-ret'); if(logRet) payload.log_retention_days=Number(logRet.value);
   const bt=document.getElementById('cfg-brief-time'); if(bt && bt.value) payload.morning_briefing_time=bt.value;
   // Boolean toggles
+  const fsEl2=document.getElementById('cfg-font-size'); if(fsEl2) payload.font_size=Number(fsEl2.value);
   ['wake_word_enabled','safe_mode_enabled','notif_performance','notif_whatsapp','notif_downloads','command_history_enabled','briefing_enabled']
     .forEach(k=>{ payload[k]=_cfgBools[k]!=null?!!_cfgBools[k]:(k==='safe_mode_enabled'); });
   // Briefing items
@@ -7161,6 +7371,7 @@ function switchSettingsTab(tab){
   else if(tab==='security') loadSecurityTab();
   else if(tab==='commands') buildCommandsAccordion();
   else if(tab==='links') clLoad();
+  else if(tab==='bgmode') { loadBgConfig(); loadAliases(); }
 }
 
 // ════════════════════════════════════════════════════════════
@@ -7230,6 +7441,126 @@ function loadIdleWallpaper(){
 }
 // Run on startup
 loadIdleWallpaper();
+
+// ── BG MODE tab ───────────────────────────────────────
+async function loadBgConfig(){
+  try{
+    const r=await fetch(API+'/settings'); const d=await r.json(); if(!d.ok) return;
+    const s=d.settings||{};
+    // UI mode radios (shared with settings tab — same name, different tab)
+    const askBg=document.getElementById('cfg-ask-boot-bg'); if(askBg) askBg.checked=!!s.ask_ui_on_boot;
+    const hkBarBg=document.getElementById('cfg-hotkey-bar-bg'); if(hkBarBg) hkBarBg.value=s.hotkey_bar||'ctrl+shift+space';
+    const hkMicBg=document.getElementById('cfg-hotkey-mic-bg'); if(hkMicBg) hkMicBg.value=s.hotkey_mic||'ctrl+shift+m';
+    // Toggles
+    const bgTogMap={
+      'push_to_talk':        ['tog-ptt',       !!(s.push_to_talk)],
+      'battery_auto_switch': ['tog-batt-auto', !!(s.battery_auto_switch)],
+      'lid_close_trigger':   ['tog-lid',       !!(s.lid_close_trigger)],
+      'toast_enabled':       ['tog-toast',     !!(s.toast_enabled)],
+      'toast_bg_only':       ['tog-toast-bg',  !!(s.toast_bg_only)],
+    };
+    for(const [key,[id,val]] of Object.entries(bgTogMap)){
+      _cfgBools[key]=val;
+      const el=document.getElementById(id); if(el) el.classList.toggle('on',val);
+    }
+    // Font size
+    const fs=document.getElementById('cfg-font-size'); if(fs && s.font_size) fs.value=s.font_size;
+    if(s.font_size) applyFontSize(s.font_size);
+  }catch(e){}
+}
+
+async function saveBgConfig(){
+  const msg=document.getElementById('bgcfg-msg');
+  const payload={};
+  const sel=document.querySelector('input[name="ui-mode"]:checked'); if(sel) payload.ui=sel.value;
+  const askBg=document.getElementById('cfg-ask-boot-bg'); if(askBg) payload.ask_ui_on_boot=askBg.checked;
+  const hkBarBg=document.getElementById('cfg-hotkey-bar-bg'); if(hkBarBg&&hkBarBg.value.trim()) payload.hotkey_bar=hkBarBg.value.trim().toLowerCase();
+  const hkMicBg=document.getElementById('cfg-hotkey-mic-bg'); if(hkMicBg&&hkMicBg.value.trim()) payload.hotkey_mic=hkMicBg.value.trim().toLowerCase();
+  const fs=document.getElementById('cfg-font-size'); if(fs) payload.font_size=Number(fs.value);
+  ['push_to_talk','battery_auto_switch','lid_close_trigger','toast_enabled','toast_bg_only']
+    .forEach(k=>{ if(_cfgBools[k]!=null) payload[k]=!!_cfgBools[k]; });
+  try{
+    const r=await fetch(API+'/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    const d=await r.json();
+    if(d.ok){ msg.style.color='rgba(0,148,255,0.7)'; msg.textContent='BG mode settings saved.'; }
+    else { msg.style.color='rgba(255,80,80,0.7)'; msg.textContent='Error: '+(d.error||'save failed'); }
+  }catch(e){ msg.style.color='rgba(255,80,80,0.7)'; msg.textContent='Backend offline.'; }
+  setTimeout(()=>{ if(msg) msg.textContent=''; },5000);
+}
+
+function applyFontSize(sz){
+  try{
+    let st=document.getElementById('_cortex-font-style');
+    if(!st){ st=document.createElement('style'); st.id='_cortex-font-style'; document.head.appendChild(st); }
+    st.textContent=`.chat-line,.chat-entry,.chat-input{font-size:${sz}px!important;}`;
+  }catch(e){}
+}
+
+async function exportChat(fmt){
+  try{
+    const r=await fetch(API+'/export-chat?format='+fmt);
+    const blob=await r.blob();
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    a.href=url;
+    a.download=fmt==='pdf'?'iZACH-chat-export.pdf':'iZACH-chat-export.txt';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }catch(e){}
+}
+
+// ── Voice Aliases ──────────────────────────────────────
+async function loadAliases(){
+  try{
+    const d=await fetch(API+'/aliases').then(r=>r.json());
+    const list=document.getElementById('alias-list');
+    const empty=document.getElementById('alias-empty');
+    const aliases=d.aliases||[];
+    if(!list) return;
+    // Remove old rows (keep empty)
+    Array.from(list.querySelectorAll('.alias-row')).forEach(el=>el.remove());
+    if(aliases.length===0){ if(empty) empty.style.display=''; return; }
+    if(empty) empty.style.display='none';
+    aliases.forEach(({trigger,command,created})=>{
+      const row=document.createElement('div');
+      row.className='alias-row';
+      row.style.cssText='display:flex;align-items:center;gap:8px;padding:6px 8px;margin-bottom:4px;background:rgba(0,148,255,0.04);border:1px solid rgba(0,148,255,0.12);border-radius:3px;';
+      row.innerHTML=`<div style="flex:1;overflow:hidden;min-width:0;">
+        <span style="color:#00e5ff;font-family:'Share Tech Mono',monospace;font-size:9px;">${trigger}</span>
+        <span style="color:rgba(0,148,255,0.4);margin:0 6px;font-size:9px;">→</span>
+        <span style="color:rgba(200,232,240,0.85);font-family:'JetBrains Mono',monospace;font-size:9px;">${command}</span>
+      </div>
+      <button onclick="deleteAlias('${trigger.replace(/'/g,"\\'")}');this.closest('.alias-row').remove();"
+        style="background:rgba(255,61,61,0.1);border:1px solid rgba(255,61,61,0.25);border-radius:2px;color:rgba(255,61,61,0.7);font-family:'Share Tech Mono',monospace;font-size:8px;cursor:pointer;padding:2px 6px;flex-shrink:0;">✕</button>`;
+      list.appendChild(row);
+    });
+  }catch(e){}
+}
+
+async function addAlias(){
+  const trig=document.getElementById('alias-trigger')?.value.trim();
+  const cmd =document.getElementById('alias-command')?.value.trim();
+  const msg =document.getElementById('alias-msg');
+  if(!trig||!cmd){ if(msg) msg.textContent='Both fields required.'; return; }
+  try{
+    const r=await fetch(API+'/aliases',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({trigger:trig,command:cmd})}).then(r=>r.json());
+    if(r.ok){
+      if(msg) msg.textContent='Alias added.';
+      document.getElementById('alias-trigger').value='';
+      document.getElementById('alias-command').value='';
+      loadAliases();
+    } else { if(msg) msg.textContent=r.error||'Error.'; }
+  }catch(e){ if(msg) msg.textContent='Connection error.'; }
+  setTimeout(()=>{ const m=document.getElementById('alias-msg'); if(m) m.textContent=''; },3500);
+}
+
+async function deleteAlias(trigger){
+  try{
+    const b64=btoa(unescape(encodeURIComponent(trigger)));
+    await fetch(API+'/aliases/'+b64,{method:'DELETE'});
+    loadAliases();
+  }catch(e){}
+}
 
 // ── Custom Links tab ──────────────────────────────────
 let _clLinks = [];   // [{title, url}, ...]
@@ -8573,6 +8904,14 @@ async function toggleDND(){
   }catch(e){ showToast('DND toggle failed','error','DND'); }
 }
 
+// ── Switch to Background Mode — close window, keep backend + tray running ──
+async function goBackgroundMode(){
+  try{ showToast('Switching to Background Mode…','info','BG'); }catch(e){}
+  try{ await fetch(API + '/background-mode', {method:'POST'}); }catch(e){}
+  // Backend now has ui=background + tray running; closing the window won't kill it.
+  setTimeout(()=>{ if(window.electronAPI?.close) window.electronAPI.close(); }, 400);
+}
+
 // ── Load initial state on page open ────────────────────────
 async function loadDNDStatus(){
   try{
@@ -8957,8 +9296,18 @@ async function initBusyStatus() {
 }
 
 function handleBusyStatus(d) {
-  _callsBusyActive = !!d.active;
-  _updateBusyUI(d.active, d.reason, d.remaining_sec ? Math.ceil(d.remaining_sec/60) : null);
+  const active = !!d.active;
+  _callsBusyActive = active;
+  _updateBusyUI(active, d.reason, d.remaining_sec ? Math.ceil(d.remaining_sec/60) : null);
+  // Sync taskbar BUSY button so phone-triggered toggles reflect immediately
+  _busyActive = active;
+  const btn = document.getElementById('tb-busy');
+  if(btn){
+    btn.classList.toggle('on', active);
+    btn.title = active ? 'BUSY MODE ACTIVE — click to turn off' : 'BUSY MODE';
+    const lbl = btn.querySelector('.tb-lbl');
+    if(lbl) lbl.textContent = active ? 'BUSY ON' : 'BUSY';
+  }
 }
 
 // WA call update via WS

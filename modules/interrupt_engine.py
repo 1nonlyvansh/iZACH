@@ -9,8 +9,6 @@ Two modes:
 """
 
 import threading
-import time
-import queue
 import speech_recognition as sr
 from modules.audio_init_lock import PYAUDIO_INIT_LOCK
 

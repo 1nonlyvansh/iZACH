@@ -12,10 +12,9 @@ Checks every loop:
 
 import json
 import logging
-import os
 import threading
 import time
-from datetime import datetime, timedelta
+from datetime import datetime
 from zoneinfo import ZoneInfo
 
 import requests
@@ -109,29 +108,43 @@ def _deliver_morning_briefing():
         now = datetime.now(tz=IST)
         greeting = _time_greeting(now.hour)
 
-        battery = psutil.sensors_battery()
-        bat_str = f"Battery at {int(battery.percent)}%." if battery else ""
+        parts = [greeting]
 
-        events = []
-        events_err = None
-        try:
-            from modules.calendar_agent import get_today_events, format_event_for_speech
-            events = get_today_events() or []
-        except Exception as ce:
-            events_err = ce
-            logger.warning(f"[ProactiveAgent] Calendar unavailable for briefing: {ce}")
+        # Calendar events — check briefing_calendar (UI key); fall back to briefing_events
+        _cal_default = _get_setting("briefing_events", True)
+        if _get_setting("briefing_calendar", _cal_default):
+            try:
+                from modules.calendar_agent import get_today_events, format_event_for_speech
+                events = get_today_events() or []
+                if not events:
+                    parts.append("No events on your calendar today")
+                elif len(events) == 1:
+                    parts.append(f"One event today: {format_event_for_speech(events[0])}")
+                else:
+                    ev_parts = [format_event_for_speech(e) for e in events[:4]]
+                    parts.append(f"{len(events)} events today: {', then '.join(ev_parts)}")
+            except Exception as ce:
+                logger.warning(f"[ProactiveAgent] Calendar unavailable for briefing: {ce}")
 
-        if events_err:
-            msg = f"{greeting}. Calendar unavailable right now. {bat_str}".strip()
-        elif not events:
-            msg = f"{greeting}. No events on your calendar today. {bat_str}".strip()
-        elif len(events) == 1:
-            e_str = format_event_for_speech(events[0])
-            msg = f"{greeting}. One event today: {e_str}. {bat_str}".strip()
-        else:
-            parts = [format_event_for_speech(e) for e in events[:4]]
-            msg = f"{greeting}. {len(events)} events today. {', then '.join(parts)}. {bat_str}".strip()
+        # Battery status — briefing_system (UI key) or briefing_battery_status
+        _sys_default = _get_setting("briefing_battery_status", False)
+        if _get_setting("briefing_system", _sys_default):
+            battery = psutil.sensors_battery()
+            if battery:
+                parts.append(f"Battery at {int(battery.percent)}%")
 
+        # RAM — briefing_system (UI key) or briefing_ram
+        _ram_default = _get_setting("briefing_ram", False)
+        if _get_setting("briefing_system", _ram_default):
+            vm = psutil.virtual_memory()
+            parts.append(f"Memory at {vm.percent:.0f}%")
+
+        if len(parts) == 1:
+            # Only greeting — no items enabled, skip
+            logger.info("[ProactiveAgent] Morning briefing skipped — no items enabled.")
+            return
+
+        msg = ". ".join(parts) + "."
         _speak_func(msg)
         logger.info("[ProactiveAgent] Morning briefing delivered.")
     except Exception as e:

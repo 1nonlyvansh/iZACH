@@ -1217,6 +1217,7 @@ function GeneralSection({ settings, onSave }) {
     briefing_whatsapp:        settings.briefing_whatsapp        ?? false,
     ui:                       settings.ui                       ?? 'classic',
     _savedUi:                 settings.ui                       ?? 'classic',
+    font_size:                settings.font_size                ?? 13,
   })
   const [dirty,      setDirty]      = useState(false)
   const [micDevices, setMicDevices] = useState([])
@@ -1309,8 +1310,9 @@ function GeneralSection({ settings, onSave }) {
         value={form.ui || 'classic'}
         onChange={v => set('ui', v)}
         options={[
-          { value: 'classic', label: 'Forge UI' },
-          { value: 'scifi',   label: 'Cortex UI' },
+          { value: 'classic',    label: 'Forge UI' },
+          { value: 'scifi',      label: 'Cortex UI' },
+          { value: 'background', label: 'Background Mode (no window, low RAM)' },
         ]}
       />
       {(form.ui || 'classic') !== (form._savedUi || 'classic') && (
@@ -1320,6 +1322,31 @@ function GeneralSection({ settings, onSave }) {
           </p>
         </div>
       )}
+      <div style={{ padding: '0 20px 8px' }}>
+        <p style={{ color: '#3a6070', fontFamily: "'JetBrains Mono'", fontSize: '9px' }}>
+          Hotkeys, battery auto-switch, toast notifications → <strong style={{ color: '#00e5ff' }}>BG MODE</strong> tab
+        </p>
+      </div>
+      <SelectField
+        label="FONT SIZE"
+        value={form.font_size}
+        onChange={v => {
+          const sz = Number(v)
+          set('font_size', sz)
+          // Apply immediately to chat area
+          try {
+            let st = document.getElementById('_forge-font-style')
+            if (!st) { st = document.createElement('style'); st.id = '_forge-font-style'; document.head.appendChild(st) }
+            st.textContent = `.chat-message,.chat-input{font-size:${sz}px!important;}`
+          } catch {}
+        }}
+        options={[
+          { value: 11, label: 'Small (11px)' },
+          { value: 13, label: 'Normal (13px)' },
+          { value: 15, label: 'Large (15px)' },
+          { value: 17, label: 'X-Large (17px)' },
+        ]}
+      />
 
       {/* ── AI BEHAVIOUR ──────────────────────────── */}
       <SectionHeader label="AI BEHAVIOUR" />
@@ -1887,6 +1914,219 @@ function ContactsSection() {
   )
 }
 
+// ── Background Mode Section ───────────────────────────────────
+function BackgroundModeSection({ settings, onSave }) {
+  const [form, setForm] = useState({
+    ui:                  settings.ui                  ?? 'classic',
+    _savedUi:            settings.ui                  ?? 'classic',
+    ask_ui_on_boot:      settings.ask_ui_on_boot      ?? false,
+    hotkey_bar:          settings.hotkey_bar          ?? 'ctrl+shift+space',
+    hotkey_mic:          settings.hotkey_mic          ?? 'ctrl+shift+m',
+    push_to_talk:        settings.push_to_talk        ?? false,
+    battery_auto_switch: settings.battery_auto_switch ?? false,
+    lid_close_trigger:   settings.lid_close_trigger   ?? false,
+    toast_enabled:       settings.toast_enabled       ?? false,
+    toast_bg_only:       settings.toast_bg_only       ?? false,
+  })
+  const [dirty, setDirty] = useState(false)
+  const [aliases, setAliases] = useState([])
+  const [aliasMsg, setAliasMsg] = useState('')
+  const [newTrigger, setNewTrigger] = useState('')
+  const [newCommand, setNewCommand] = useState('')
+
+  const set = (key, val) => { setForm(f => ({ ...f, [key]: val })); setDirty(true) }
+  const handleSave = () => { onSave(form); setDirty(false) }
+
+  const flashAlias = (t) => { setAliasMsg(t); setTimeout(() => setAliasMsg(''), 3500) }
+
+  const loadAliases = useCallback(async () => {
+    try {
+      const d = await fetch(`${BASE}/aliases`).then(r => r.json())
+      setAliases(d.aliases || [])
+    } catch {}
+  }, [])
+
+  useEffect(() => { loadAliases() }, [loadAliases])
+
+  async function addAlias() {
+    if (!newTrigger.trim() || !newCommand.trim()) return
+    try {
+      const r = await fetch(`${BASE}/aliases`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ trigger: newTrigger.trim(), command: newCommand.trim() }),
+      }).then(r => r.json())
+      if (r.ok) {
+        flashAlias('Alias added')
+        setNewTrigger(''); setNewCommand('')
+        loadAliases()
+      } else { flashAlias(r.error || 'Error') }
+    } catch { flashAlias('Failed to connect') }
+  }
+
+  async function deleteAlias(trigger) {
+    try {
+      const b64 = btoa(unescape(encodeURIComponent(trigger)))
+      await fetch(`${BASE}/aliases/${b64}`, { method: 'DELETE' })
+      loadAliases()
+    } catch {}
+  }
+
+  async function exportChat(fmt) {
+    try {
+      const r = await fetch(`${BASE}/export-chat?format=${fmt}`)
+      const blob = await r.blob()
+      const url  = URL.createObjectURL(blob)
+      const a    = document.createElement('a')
+      a.href     = url
+      a.download = fmt === 'pdf' ? 'iZACH-chat-export.pdf' : 'iZACH-chat-export.txt'
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    } catch {}
+  }
+
+  return (
+    <div>
+      {/* ── INTERFACE MODE ──────────────────────────── */}
+      <SectionHeader label="INTERFACE MODE" />
+      <SelectField
+        label="UI STYLE (restart to apply)"
+        value={form.ui || 'classic'}
+        onChange={v => set('ui', v)}
+        options={[
+          { value: 'classic',    label: 'Forge UI' },
+          { value: 'scifi',      label: 'Cortex UI' },
+          { value: 'background', label: 'Background Mode (no window, low RAM)' },
+        ]}
+      />
+      {(form.ui || 'classic') !== (form._savedUi || 'classic') && (
+        <div style={{ padding: '0 20px 10px' }}>
+          <p style={{ color: '#ffb300', fontFamily: "'Share Tech Mono'", fontSize: '9px', letterSpacing: '0.1em' }}>
+            Save changes then restart iZACH to switch UI
+          </p>
+        </div>
+      )}
+      <Toggle
+        label="Ask Every Time During Boot"
+        checked={form.ask_ui_on_boot}
+        onChange={v => set('ask_ui_on_boot', v)}
+      />
+
+      {/* ── OVERLAYS ─────────────────────────────────── */}
+      <SectionHeader label="OVERLAYS" />
+      {[
+        { label: 'COMMAND BAR HOTKEY',  key: 'hotkey_bar', placeholder: 'ctrl+shift+space' },
+        { label: 'MIC TOGGLE HOTKEY',   key: 'hotkey_mic', placeholder: 'ctrl+shift+m' },
+      ].map(({ label, key, placeholder }) => (
+        <div key={key} style={{ padding: '4px 20px 8px' }}>
+          <p style={{ color: '#3a6070', fontFamily: "'Share Tech Mono'", fontSize: '9px',
+                      letterSpacing: '0.1em', marginBottom: 4 }}>{label}</p>
+          <input
+            value={form[key] || ''}
+            onChange={e => set(key, e.target.value.toLowerCase())}
+            placeholder={placeholder}
+            style={{ width: '100%', padding: '7px 10px', boxSizing: 'border-box',
+              background: '#071020', border: '1px solid #0d2a3a', borderRadius: 4,
+              color: '#00e5ff', fontFamily: "'JetBrains Mono'", fontSize: '11px', outline: 'none' }}
+          />
+          <p style={{ color: '#1a4a5a', fontFamily: "'JetBrains Mono'", fontSize: '9px', marginTop: 3 }}>
+            e.g. ctrl+shift+space · restart to apply
+          </p>
+        </div>
+      ))}
+      <Toggle
+        label="Push-to-Talk Mode (hold hotkey to talk)"
+        checked={form.push_to_talk}
+        onChange={v => set('push_to_talk', v)}
+      />
+      <div style={{ padding: '0 20px 8px' }}>
+        <p style={{ color: '#1a4a5a', fontFamily: "'JetBrains Mono'", fontSize: '9px' }}>
+          PTT mic recording is phase 2 — UI wired now.
+        </p>
+      </div>
+
+      {/* ── POWER SETTINGS ───────────────────────────── */}
+      <SectionHeader label="POWER SETTINGS" />
+      <Toggle
+        label="Auto Background on Battery"
+        checked={form.battery_auto_switch}
+        onChange={v => set('battery_auto_switch', v)}
+      />
+      <Toggle
+        label="Auto Background on Lid Close"
+        checked={form.lid_close_trigger}
+        onChange={v => set('lid_close_trigger', v)}
+      />
+
+      {/* ── NOTIFICATIONS ────────────────────────────── */}
+      <SectionHeader label="NOTIFICATIONS" />
+      <Toggle
+        label="Windows Toast Notifications"
+        checked={form.toast_enabled}
+        onChange={v => set('toast_enabled', v)}
+      />
+      <Toggle
+        label="Toast in Background Mode Only"
+        checked={form.toast_bg_only}
+        onChange={v => set('toast_bg_only', v)}
+      />
+
+      {/* ── EXPORT ───────────────────────────────────── */}
+      <SectionHeader label="EXPORT" />
+      <div style={{ padding: '0 20px 12px', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <Btn label="EXPORT CHAT (TXT)" onClick={() => exportChat('txt')} />
+        <Btn label="EXPORT CHAT (PDF)" onClick={() => exportChat('pdf')} />
+      </div>
+
+      {/* ── VOICE ALIASES ────────────────────────────── */}
+      <SectionHeader label="VOICE ALIASES" />
+      <div style={{ padding: '0 20px 8px' }}>
+        <p style={{ color: '#3a6070', fontFamily: "'JetBrains Mono'", fontSize: '9px', margin: 0, lineHeight: 1.6 }}>
+          Say the trigger phrase — iZACH runs the aliased command instead.
+        </p>
+      </div>
+      <Row>
+        <Input value={newTrigger} onChange={setNewTrigger} placeholder="Trigger (e.g. fire it up)" />
+        <Input value={newCommand} onChange={setNewCommand} placeholder="Command (e.g. play my gym playlist)" />
+        <Btn label="ADD" onClick={addAlias} />
+      </Row>
+      {aliasMsg && (
+        <div style={{ padding: '0 20px 6px', color: '#5a9ab0', fontFamily: "'JetBrains Mono'", fontSize: '9px' }}>
+          {aliasMsg}
+        </div>
+      )}
+      <div style={{ padding: '0 20px', maxHeight: 220, overflowY: 'auto' }}>
+        {aliases.length === 0 ? (
+          <p style={{ color: '#1a4a5a', fontFamily: "'JetBrains Mono'", fontSize: '10px', padding: '4px 0' }}>
+            No aliases yet.
+          </p>
+        ) : aliases.map(({ trigger, command, created }) => (
+          <div key={trigger} style={{
+            display: 'flex', alignItems: 'center', gap: 10, padding: '6px 8px', marginBottom: 4,
+            background: 'rgba(0,229,255,0.03)', border: '1px solid #0d2a3a', borderRadius: 4,
+          }}>
+            <div style={{ flex: 1, overflow: 'hidden' }}>
+              <span style={{ color: '#00e5ff', fontFamily: "'Share Tech Mono'", fontSize: '10px' }}>{trigger}</span>
+              <span style={{ color: '#3a6070', margin: '0 8px', fontSize: '10px' }}>→</span>
+              <span style={{ color: '#c8e8f0', fontFamily: "'JetBrains Mono'", fontSize: '10px' }}>{command}</span>
+            </div>
+            {created && <span style={{ color: '#1a4a5a', fontFamily: "'JetBrains Mono'", fontSize: '9px', flexShrink: 0 }}>{created}</span>}
+            <Btn label="✕" danger onClick={() => deleteAlias(trigger)} />
+          </div>
+        ))}
+      </div>
+
+      {dirty && (
+        <div style={{ padding: '8px 20px 16px' }}>
+          <Btn label="SAVE SETTINGS" onClick={handleSave} />
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Main SettingsPanel export ─────────────────────────────────
 export default function SettingsPanel({
   memoryEntries,
@@ -1901,6 +2141,7 @@ export default function SettingsPanel({
     { id: 'memory',   label: 'MEMORY'   },
     { id: 'skills',   label: 'SKILLS'   },
     { id: 'general',  label: 'SETTINGS' },
+    { id: 'bgmode',   label: 'BG MODE'  },
     { id: 'websites', label: 'WEBSITES' },
     { id: 'keys',     label: 'KEYS & ID'},
     { id: 'contacts', label: 'CONTACTS' },
@@ -1966,6 +2207,9 @@ export default function SettingsPanel({
             settings={settings}
             onSave={onSaveSettings}
           />
+        )}
+        {tab === 'bgmode' && (
+          <BackgroundModeSection settings={settings} onSave={onSaveSettings} />
         )}
         {tab === 'websites' && (
           <CustomWebsitesSection />

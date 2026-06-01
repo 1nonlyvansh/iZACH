@@ -290,28 +290,36 @@ def _read_stream_frame():
 def _capture_frame(flip_h: bool = True):
     """
     Grab one frame — reuses streaming cam if active, else opens/closes.
-
-    flip_h=True (default) mirrors horizontally for selfie-style preview.
-    Set flip_h=False for OCR / document reading so text is not mirrored.
+    Retries up to 2× if camera fails (e.g. briefly held by Cortex UI optics
+    screen / getUserMedia — on Windows only one process can hold a cam handle).
+    flip_h=True mirrors horizontally (selfie view).
     """
+    import time as _t
+
     with _stream_lock:
         if _stream_cap is not None:
-            ret, frame = _stream_cap.read()
-            if not ret:
-                return None
-            return cv2.flip(frame, 1) if flip_h else frame
-
-    cap = _open_camera(_cam_device_index)
-    cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-    try:
-        for _ in range(3):
-            cap.read()   # flush stale buffer frames
-        ret, frame = cap.read()
-        if not ret:
+            for _try in range(3):
+                ret, frame = _stream_cap.read()
+                if ret:
+                    return cv2.flip(frame, 1) if flip_h else frame
+                _t.sleep(0.15)
             return None
-        return cv2.flip(frame, 1) if flip_h else frame
-    finally:
-        cap.release()
+
+    for _attempt in range(2):
+        cap = _open_camera(_cam_device_index)
+        cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+        try:
+            for _ in range(3):
+                cap.read()   # flush stale buffer frames
+            ret, frame = cap.read()
+            if ret:
+                return cv2.flip(frame, 1) if flip_h else frame
+        except Exception:
+            pass
+        finally:
+            cap.release()
+        _t.sleep(0.5)   # brief wait — browser may release handle between attempts
+    return None
 
 
 def _frame_to_b64(frame) -> str | None:

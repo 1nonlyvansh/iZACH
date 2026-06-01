@@ -15,7 +15,7 @@
 
 ---
 
-[![Version](https://img.shields.io/badge/Version-v2.0.0-00e5ff?style=flat-square&labelColor=050d1a)](.)
+[![Version](https://img.shields.io/badge/Version-v2.1.0-00e5ff?style=flat-square&labelColor=050d1a)](.)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-00e5ff?style=flat-square&logo=python&logoColor=00e5ff&labelColor=050d1a)](https://python.org)
 [![React](https://img.shields.io/badge/React-18-00e5ff?style=flat-square&logo=react&logoColor=00e5ff&labelColor=050d1a)](https://react.dev)
 [![Electron](https://img.shields.io/badge/Electron-Desktop-00e5ff?style=flat-square&logo=electron&logoColor=00e5ff&labelColor=050d1a)](https://electronjs.org)
@@ -33,7 +33,62 @@
 
 iZACH is a local-first, voice-controlled AI assistant that runs natively on Windows. It doesn't just answer questions — it **acts**. Control Spotify, automate WhatsApp, execute PowerShell, manage files, browse the web, read your calendar, watch your camera, and learn your behavioral patterns — all through natural speech or a neural-themed desktop UI.
 
-**v2.0.0** ships a persistent smart memory system (ChatGPT/Claude-style), the redesigned **Cortex UI** single-file frontend, a new **Obsidian Brain** sync engine, and a fully rewritten Android companion app with live WebSocket integration.
+**v2.1.0** ships a full Skills system (on-demand AI agents with `#id` activation), a modular widget UI with an API usage monitor, 5 critical backend crash fixes, and a heavily upgraded Android app with PC audio streaming, DND inline reply, Quick Tiles, and App Shortcuts.
+
+---
+
+## What's New in v2.1.0
+
+### Skills System
+
+| Feature | Detail |
+|---|---|
+| **`#skill-id` activation** | Type `#html-builder build me a portfolio site` — routes to specialised AI agent with a domain-tuned prompt |
+| **DeepSeek routing** | Code skills (`python-dev`, `react-builder`, `api-builder`, `bash-scripter`) route to DeepSeek for better code output |
+| **Project file saving** | Skill output saved as a file in a dated project folder automatically |
+| **Multi-skill `&` operator** | Chain skills: `#python-dev & #bash-scripter` — runs both in sequence |
+| **NEVER ASK mandate** | Skills never ask clarifying questions — always produce full output on first message |
+| **10 built-in skills** | html-builder v2.1, python-dev, react-builder, data-science, api-builder, bash-scripter, hindi-mode, math-solver, and more |
+| **Skills widget** | RightPanel widget shows all skills with activation instructions and recent projects |
+
+### UI Upgrades
+
+| Feature | Detail |
+|---|---|
+| **Modular widget system** | RightPanel widgets are independently collapsible, reorderable by drag, with per-widget settings |
+| **API Key Usage Monitor** | Live widget showing token consumption, cost estimate, and key rotation status across Gemini/Groq/OpenRouter |
+| **Widget picker z-fix** | Widget picker now renders above taskbar (z-index 9001) |
+| **Device bar alignment** | Phone/device status bar pixel-aligned to taskbar centre via `getBoundingClientRect` |
+| **DND/busy bar layout** | DND and busy mode banners moved into flex flow — no longer overlap TitleBar navigation |
+
+### Backend Fixes & Stability
+
+| Fix | Detail |
+|---|---|
+| **`web_automation` NameError** | `web_automation` + `_bg` referenced outside their defining scope in `command_chain.py` → NameError on any "open in browser" branch |
+| **DND `_queue` UnboundLocalError** | `_queue = _queue[-cap:]` made queue local → `UnboundLocalError` when queue hit cap. Added `global _queue` |
+| **`_ai_handle_reply` NameError** | `number` undefined in DND AI reply handler — should be `sender` parameter |
+| **`forge_ui` lambda NameError** | `except Exception as e` captured in deferred `lambda` — `e` cleared by Python after except block exits → NameError on any print error |
+| **Duplicate `execute_voice_command`** | `smart_home_engine.py` had two definitions — old Nest-only one silently shadowed the full SmartThings+TV+Cast version. Renamed dead copy. |
+| **PyAudio crash fix** | `PYAUDIO_INIT_LOCK` held across `Pa_Initialize` in both `listen()` and `interrupt_engine` — prevents access violation on concurrent mic init |
+| **Camera enumeration crash** | Serialised camera enumeration — prevents `VideoCapture` crash when multiple threads enumerate simultaneously |
+| **Printer false-positive camera** | Printer/scanner devices now skipped in camera enumeration |
+| **Gemini key rotation** | Improved round-robin key rotation + OpenRouter as final fallback when all Gemini keys exhaust |
+| **Werkzeug poll flood** | Suppressed repetitive werkzeug dev server polling logs from terminal output |
+| **DND queue cap** | Queue capped at configurable max — prevents unbounded memory growth during long DND sessions |
+| **RAG memory pruning** | Stale RAG entries pruned on load — reduces context injection overhead |
+| **Double logging removed** | Removed duplicate log handler registration that doubled every log line |
+| **41 unused imports removed** | Cleaned across 35 files — `os`, `re`, `time`, `json`, `threading`, `timezone`, `Path`, `rapidfuzz`, etc. |
+
+### Android App v2.1.0
+
+| Feature | Detail |
+|---|---|
+| **PC Audio Stream** | New `AudioStreamActivity` — streams raw PCM audio from PC to phone over local Wi-Fi. Backend: `GET /audio/stream` (s16le 22050Hz mono). Low-latency via `AudioTrack` in STREAM mode |
+| **DND Inline Reply** | `DndInlineReplyReceiver` — reply to DND WhatsApp alerts directly from Android notification tray without opening the app |
+| **Quick Tiles (5 new)** | Pull-down Quick Settings tiles: **DND Mode**, **Busy Mode**, **Lock PC**, **Mute PC** — toggle directly from Android notification shade |
+| **App Shortcuts** | Long-press iZACH app icon: **Lock PC**, **Take Screenshot**, **Voice Command** (launches mic instantly) |
+| **DndStatusWidget improvements** | Home screen widget updated — shows DND queue count + last sender; toggle receiver wired up |
 
 ---
 
@@ -60,7 +115,7 @@ iZACH is a local-first, voice-controlled AI assistant that runs natively on Wind
 - Continuous wake-word detection
 - Natural language command parsing
 - Groq LLM (`llama-3.3-70b`) for intent resolution
-- Gemini fallback (3 rotated keys)
+- Gemini fallback (3 rotated keys) + OpenRouter final fallback
 - Context memory across sessions
 - Disambiguation for ambiguous commands
 - Hinglish language matching
@@ -91,6 +146,18 @@ iZACH is a local-first, voice-controlled AI assistant that runs natively on Wind
 - Export all memories as text
 - Obsidian vault sync (Identity/ · Instructions/ · Automations/)
 - Enable/disable individual memories
+
+**⚡ Skills System (v2.1.0)**
+- `#html-builder` — full multi-page websites, no placeholder hrefs
+- `#python-dev` — complete Python scripts, DeepSeek-routed
+- `#react-builder` — full React apps with hooks/state
+- `#api-builder` — REST API scaffolding (FastAPI/Express)
+- `#bash-scripter` — complete shell scripts
+- `#data-science` — pandas/numpy/matplotlib pipelines
+- `#math-solver` — step-by-step solutions
+- `#hindi-mode` — full Hindi responses
+- Multi-skill: `#skill-a & #skill-b` chains two agents
+- All projects auto-saved to dated folders
 
 </td>
 <td width="50%" valign="top">
@@ -130,11 +197,17 @@ iZACH is a local-first, voice-controlled AI assistant that runs natively on Wind
 - Screen element detection
 - MJPEG live stream (`GET /vision/stream` at ~15 fps)
 
+**🎵 PC Audio Stream (v2.1.0)**
+- Stream PC system audio to Android phone over Wi-Fi
+- Raw PCM s16le 22050Hz mono → `AudioTrack` stream mode
+- Low-latency playback, stop/start controls in app
+
 **⚡ Performance**
 - WhatsApp bridge lazy-starts — Puppeteer not loaded until first WA command
 - Face auth lazy-loads — dlib/cv2 not imported until first face command
 - `api_keys.json` + `memory.json` reads cached (30s TTL / dirty-flag)
 - Playwright browser freed after idle — no persistent Chromium in background
+- RAG memory pruned on load — stale entries removed automatically
 
 </td>
 </tr>
@@ -146,7 +219,7 @@ iZACH is a local-first, voice-controlled AI assistant that runs natively on Wind
 
 The **Cortex UI** (`cortex-ui.html`) is iZACH's primary desktop interface — a single-file Electron app with zero build steps.
 
-**Features shipped in v2.0.0:**
+**Features:**
 
 | Feature | Description |
 |---|---|
@@ -161,6 +234,83 @@ The **Cortex UI** (`cortex-ui.html`) is iZACH's primary desktop interface — a 
 | **Phone Status Widget** | Shows Android companion connection state in real time |
 | **Memory Tab** | Full memory management UI — categories, search, cards, import/export |
 | **IDLE Screen** | Animated ambient screen when idle; shows clock, phone status, quick stats |
+| **Modular Widget System** | RightPanel widgets drag-reorderable, independently collapsible, per-widget settings *(v2.1.0)* |
+| **API Usage Monitor** | Live token consumption, cost estimate, key rotation status *(v2.1.0)* |
+| **Skills Widget** | Lists all skills with `#id` activation hints and recent project history *(v2.1.0)* |
+
+---
+
+## Android Companion App
+
+<table>
+<tr>
+<td width="50%" valign="top">
+
+**Features**
+- Chat interface — send voice or text commands
+- Real-time WebSocket connection (live status in Cortex UI)
+- Commands sent from phone appear in PC chatbox instantly
+- Floating mic overlay — trigger iZACH from any app
+- File transfer — send files from phone → PC
+- **PC Audio Stream** — hear PC audio through phone speaker *(v2.1.0)*
+- Spotify remote control
+- System dashboard (CPU, RAM, battery, processes)
+- Screenshot viewer
+- Quick command shortcuts
+- Download monitor
+- Clipboard sync
+- Notification history
+- **DND Inline Reply** — reply to WhatsApp DND alerts from notification tray *(v2.1.0)*
+- **5 Quick Settings Tiles** — DND, Busy, Lock PC, Mute PC toggles in notification shade *(v2.1.0)*
+- **App Shortcuts** — long-press icon for Lock PC / Screenshot / Voice Command *(v2.1.0)*
+
+</td>
+<td width="50%" valign="top">
+
+**Requirements**
+- Android 7.0+
+- Same Wi-Fi network as PC
+- iZACH backend running on PC (port 5050)
+
+**Download**
+
+[![Download APK](https://img.shields.io/badge/Download-iZACH.apk-00e5ff?style=for-the-badge&logo=android&logoColor=00e5ff&labelColor=050d1a)](https://github.com/1nonlyvansh/iZACH/releases/latest)
+
+> Enable *Install from unknown sources* in Android Settings → Security before installing.
+
+**Quick Tiles Setup**
+
+1. Pull down notification shade → tap pencil (edit tiles)
+2. Find **iZACH DND**, **iZACH Busy**, **iZACH Lock PC**, **iZACH Mute PC**
+3. Drag into active tiles row
+
+</td>
+</tr>
+</table>
+
+### Connecting the App
+
+**Both devices must be on the same Wi-Fi network.**
+
+1. Find your PC's local IP:
+   ```
+   ipconfig
+   ```
+   Look for `IPv4 Address` under your Wi-Fi adapter — e.g. `192.168.1.105`
+
+2. Start iZACH: `python launch_izach.py`
+
+3. Open iZACH app → **Settings** (gear icon)
+
+4. Enter backend URL:
+   ```
+   http://192.168.1.105:5050
+   ```
+   Or tap the **QR** button — Cortex UI can display a QR code.
+
+5. Tap **Save** — app tests connection and shows status.
+
+> If it fails: check Windows Firewall allows port 5050, and both devices are on the same subnet.
 
 ---
 
@@ -174,7 +324,7 @@ The **Cortex UI** (`cortex-ui.html`) is iZACH's primary desktop interface — a 
                            │
 ┌──────────────────────────▼──────────────────────────────────────┐
 │             CORTEX UI  (cortex-ui.html · Electron)              │
-│   Neural Orb  •  Chat  •  Settings  •  Memory  •  Processes     │
+│   Neural Orb  •  Chat  •  Skills  •  Widgets  •  Memory         │
 └──────────────────────────┬──────────────────────────────────────┘
                            │  HTTP :5050  /  WS :5051
 ┌──────────────────────────▼──────────────────────────────────────┐
@@ -183,11 +333,15 @@ The **Cortex UI** (`cortex-ui.html`) is iZACH's primary desktop interface — a 
 │  ┌──────────────┐  ┌───────────────┐  ┌──────────────────────┐  │
 │  │ CommandChain │  │ IntentRouter  │  │   AutoScheduler      │  │
 │  └──────┬───────┘  └──────┬────────┘  └─────────┬────────────┘  │
-│         └────────────────┬┘───────────────────────┘             │
-│                          │                                      │
-│  ┌──────────┬────────────┼─────────────┬──────────────────────┐  │
+│         │                 │                     │               │
+│  ┌──────▼─────────────────┘                     │               │
+│  │      Skill Engine  (#id · DeepSeek route)    │               │
+│  └───────────────────────────────────────────────               │
+│                                                                 │
+│  ┌──────────┬────────────┬─────────────┬──────────────────────┐  │
 │  │ AI Layer │  System    │   Vision    │  Smart Memory        │  │
-│  │Groq/Gem  │  Control   │   Camera   │  Profile/Instr/Auto  │  │
+│  │Groq/Gem/ │  Control   │   Camera   │  Profile/Instr/Auto  │  │
+│  │OpenRouter│            │  /audio    │  APScheduler crons   │  │
 │  └──────────┴────────────┴─────────────┴──────────────────────┘  │
 └────────┬───────────────────────┬────────────────────────────────┘
          │                       │
@@ -206,7 +360,7 @@ The **Cortex UI** (`cortex-ui.html`) is iZACH's primary desktop interface — a 
 
 ## Smart Memory System
 
-iZACH v2.0.0 ships a full persistent memory system modeled after ChatGPT and Claude memory.
+iZACH v2.0.0+ ships a full persistent memory system modeled after ChatGPT and Claude memory.
 
 ### Memory Types
 
@@ -241,81 +395,34 @@ Access via **Settings → Memory** tab in Cortex UI:
 - Export button: copy all memories as text
 - Obsidian Sync button: push all memories to vault
 
-### Obsidian Sync
-
-Each memory becomes a `.md` file with YAML frontmatter:
-```
-iZACH-Brain/Memory/
-├── Identity/       ← profile memories
-├── Instructions/   ← instruction memories
-└── Automations/    ← automation memories
-```
-
-Superseded instructions contain `[[wikilink]]` back-references for graph view.
-
 ---
 
-## Android Companion App
+## Skills System
 
-<table>
-<tr>
-<td width="50%" valign="top">
+Activate any skill by prefixing your message with `#skill-id`:
 
-**Features**
-- Chat interface — send voice or text commands
-- Real-time WebSocket connection (live status in Cortex UI)
-- Commands sent from phone appear in PC chatbox instantly
-- Floating mic overlay — trigger iZACH from any app
-- File transfer — send files from phone → PC
-- Spotify remote control
-- System dashboard (CPU, RAM, battery, processes)
-- Screenshot viewer
-- Quick command shortcuts
-- Download monitor
-- Clipboard sync
-- Notification history
+```
+#html-builder   build me a portfolio website for a photographer
+#python-dev     write a web scraper for Amazon product prices
+#react-builder  create a dashboard with charts and dark mode
+#api-builder    scaffold a REST API for a todo app with auth
+#bash-scripter  script to backup /home and upload to S3
+#data-science   analyse this CSV: sales.csv
+#math-solver    solve ∫(x² + 3x) dx with full working
+#hindi-mode     apna din kaisa raha?
+```
 
-</td>
-<td width="50%" valign="top">
+Chain multiple skills with `&`:
+```
+#python-dev & #bash-scripter  write a Python ETL script and a cron job to run it nightly
+```
 
-**Requirements**
-- Android 7.0+
-- Same Wi-Fi network as PC
-- iZACH backend running on PC (port 5050)
-
-**Download**
-
-[![Download APK](https://img.shields.io/badge/Download-iZACH.apk-00e5ff?style=for-the-badge&logo=android&logoColor=00e5ff&labelColor=050d1a)](https://github.com/1nonlyvansh/iZACH/releases/latest)
-
-> Enable *Install from unknown sources* in Android Settings → Security before installing.
-
-</td>
-</tr>
-</table>
-
-### Connecting the App
-
-**Both devices must be on the same Wi-Fi network.**
-
-1. Find your PC's local IP:
-   ```
-   ipconfig
-   ```
-   Look for `IPv4 Address` under your Wi-Fi adapter — e.g. `192.168.1.105`
-
-2. Start iZACH: `python launch_izach.py`
-
-3. Open iZACH app → **Settings** (gear icon)
-
-4. Enter backend URL:
-   ```
-   http://192.168.1.105:5050
-   ```
-   Or tap the **QR** button — Cortex UI can display a QR code.
-
-5. Tap **Save** — app tests connection and shows status.
-
-> If it fails: check Windows Firewall allows port 5050, and both devices are on the same subnet.
+All skill output is saved automatically to:
+```
+projects/
+└── YYYY-MM-DD_skill-name_[title]/
+    └── output file
+```
 
 ---
 
@@ -347,6 +454,7 @@ Superseded instructions contain `[[wikilink]]` back-references for graph view.
 "Play my gym playlist on Spotify"
 "Skip this song"
 "Play lo-fi music on YouTube"
+"Stream PC audio to my phone"
 
 // Files
 "Find my resume"
@@ -458,6 +566,8 @@ copy .env.example .env
 | `SPOTIPY_CLIENT_ID` | [developer.spotify.com](https://developer.spotify.com) → create app |
 | `SPOTIPY_REDIRECT_URI` | set `http://127.0.0.1:8888/callback` in Spotify dashboard |
 | `SMARTTHINGS_TOKEN` | [account.smartthings.com/tokens](https://account.smartthings.com/tokens) |
+| `DEEPSEEK_API_KEY` | [platform.deepseek.com](https://platform.deepseek.com) — for code skills |
+| `OPENROUTER_API_KEY` | [openrouter.ai](https://openrouter.ai) — LLM fallback |
 
 **Google Calendar** (optional):
 1. Google Cloud Console → enable Calendar API
@@ -527,7 +637,8 @@ iZACH/
 ├── cortex-ui.html                # Single-file Electron UI (primary)
 ├── modules/
 │   ├── command_chain.py          # Central command router
-│   ├── ai_handler.py             # Groq / Gemini inference
+│   ├── ai_handler.py             # Groq / Gemini / OpenRouter inference
+│   ├── skill_engine.py           # Skills system — #id routing + DeepSeek (v2.1.0)
 │   ├── smart_memory.py           # Smart memory engine (v2.0.0)
 │   ├── automation_scheduler.py   # APScheduler cron jobs (v2.0.0)
 │   ├── system_control.py         # Volume, brightness, WiFi, drives
@@ -542,7 +653,9 @@ iZACH/
 │   ├── obsidian_brain.py         # Obsidian vault writer + brain graph
 │   ├── relationship_memory.py    # People profiles (MongoDB + Obsidian)
 │   ├── wa_draft_engine.py        # WhatsApp auto-draft + voice approval
-│   ├── smart_home_engine.py      # Samsung SmartThings integration
+│   ├── smart_home_engine.py      # Samsung SmartThings + Nest SDM
+│   ├── audio_streamer.py         # PC audio stream endpoint (v2.1.0)
+│   ├── dnd_mode.py               # DND mode + WhatsApp alert queue
 │   ├── spotify_controller.py
 │   ├── whatsapp_handler.py
 │   ├── camera_vision.py          # Gemini Vision + MJPEG stream
@@ -559,8 +672,19 @@ iZACH/
 ├── izach-android/                # Android companion app (Kotlin)
 │   └── app/src/main/java/com/izach/android/
 │       ├── MainActivity.kt
-│       ├── network/IZACHApi.kt
-│       └── ws/IZACHWebSocket.kt
+│       ├── AudioStreamActivity.kt        ← (v2.1.0)
+│       ├── DndInlineReplyReceiver.kt     ← (v2.1.0)
+│       ├── tile/                         ← Quick Tiles (v2.1.0)
+│       │   ├── DndTileService.kt
+│       │   ├── BusyTileService.kt
+│       │   ├── LockPcTileService.kt
+│       │   └── MutePcTileService.kt
+│       ├── widget/
+│       │   └── DndStatusWidget.kt
+│       └── network/
+│           ├── IZACHApi.kt
+│           └── IZACHWebSocket.kt
+├── skills/                       # Skill definition files (v2.1.0)
 ├── chrome_extension/             # Browser extension helper
 ├── whatsapp_bridge.js            # WhatsApp Web.js bridge
 ├── iZACH-Brain/                  # Obsidian vault (gitignored contents)
@@ -578,7 +702,8 @@ iZACH/
 
 | Layer | Technology |
 |---|---|
-| LLM | Groq (`llama-3.3-70b-versatile`) + Google Gemini |
+| LLM | Groq (`llama-3.3-70b-versatile`) + Google Gemini + OpenRouter (fallback) |
+| Code Skills | DeepSeek (routed via skill engine for `#python-dev`, `#react-builder`, etc.) |
 | Speech | `SpeechRecognition` + `edge-tts` (Microsoft Neural voices) |
 | Backend | Python 3.12 · Flask · WebSockets |
 | Primary UI | Single-file HTML/JS — `cortex-ui.html` (Electron) |
@@ -588,8 +713,8 @@ iZACH/
 | System Automation | PyAutoGUI · pywin32 · psutil |
 | Memory | MongoDB · Obsidian vault (`[[wikilinks]]`) · JSON fallback |
 | Smart Memory | `smart_memory.json` · APScheduler · Obsidian sync |
-| Android | Kotlin · OkHttp · WebSocket (Scarlet) |
-| Smart Home | Samsung SmartThings API |
+| Android | Kotlin · OkHttp · WebSocket · Quick Tiles API · AudioTrack |
+| Smart Home | Samsung SmartThings API · Google Nest SDM |
 
 ---
 
@@ -605,14 +730,17 @@ iZACH/
 | WhatsApp QR not showing | Run `node whatsapp_bridge.js` manually; wait 30s for browser |
 | Android app can't connect | Firewall must allow port 5050; both devices same Wi-Fi subnet |
 | Android shows DISCONNECTED | Backend must be running before opening app; check IP address |
+| Audio stream crackling | Ensure both devices on same subnet; check `/audio/stream` endpoint |
+| Quick tiles not appearing | Pull down shade → edit tiles → find iZACH tiles in available list |
 | Smart memory not persisting | Check `smart_memory.json` not gitignored locally (it is by default) |
 | Spotify OAuth fails | Verify `SPOTIPY_REDIRECT_URI` matches Spotify dashboard exactly |
+| Skills not activating | Prefix must be exactly `#skill-id` with no space between `#` and id |
 
 ---
 
 <div align="center">
 
-**iZACH v2.0.0** — Smart memory · Cortex UI · Android WebSocket · Obsidian sync
+**iZACH v2.1.0** — Skills system · Android audio stream · Quick Tiles · 5 crash fixes · 41 unused imports cleaned
 
 *Voice → AI → Action.*
 

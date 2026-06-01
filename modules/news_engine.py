@@ -20,8 +20,7 @@ import re
 import time
 import threading
 import xml.etree.ElementTree as ET
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import timezone
 
 import requests
 

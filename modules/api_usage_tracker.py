@@ -4,7 +4,7 @@ Tracks API call counts per key, resets daily at midnight UTC.
 Persists to api_usage.json. Thread-safe.
 """
 from __future__ import annotations
-import json, os, threading
+import json, threading
 from datetime import datetime, timezone
 
 _USAGE_FILE = "api_usage.json"

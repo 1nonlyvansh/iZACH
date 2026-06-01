@@ -366,6 +366,69 @@
             </LinearLayout>
         </LinearLayout>
 
+        <!-- ── VIP CONTACTS (DND BYPASS) ─────────────────────── -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="VIP CONTACTS (DND BYPASS)"
+            android:textColor="@color/cyan"
+            android:textSize="11sp"
+            android:fontFamily="monospace"
+            android:letterSpacing="0.15"
+            android:paddingTop="20dp"
+            android:paddingBottom="8dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Messages from these numbers/names bypass DND and notify immediately."
+            android:textColor="@color/text_sec"
+            android:textSize="10sp"
+            android:fontFamily="monospace"
+            android:paddingBottom="8dp" />
+
+        <!-- VIP list container — populated by code -->
+        <LinearLayout
+            android:id="@+id/vipListContainer"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:layout_marginBottom="6dp" />
+
+        <!-- Add VIP row -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="4dp">
+
+            <EditText
+                android:id="@+id/etVipInput"
+                android:layout_width="0dp"
+                android:layout_height="44dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_input"
+                android:hint="+91XXXXXXXXXX or Name"
+                android:textColor="@color/text_pri"
+                android:textColorHint="@color/text_sec"
+                android:textSize="12sp"
+                android:fontFamily="monospace"
+                android:paddingHorizontal="10dp"
+                android:inputType="text"
+                android:layout_marginEnd="8dp" />
+
+            <Button
+                android:id="@+id/btnVipAdd"
+                android:layout_width="wrap_content"
+                android:layout_height="44dp"
+                android:text="ADD"
+                android:textColor="@color/bg_deep"
+                android:backgroundTint="@color/cyan"
+                android:fontFamily="monospace"
+                android:paddingHorizontal="14dp" />
+        </LinearLayout>
+
         <Button
             android:id="@+id/btnSave"
             android:layout_width="match_parent"

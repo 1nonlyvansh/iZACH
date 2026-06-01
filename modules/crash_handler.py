@@ -25,7 +25,6 @@ import sys
 import threading
 import time
 import traceback
-from logging.handlers import RotatingFileHandler
 
 _INSTALLED = False
 _LOG_DIR   = "logs"

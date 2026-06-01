@@ -4,7 +4,6 @@ Registry-based app detection + official installer download for iZACH.
 """
 
 import os
-import re
 import winreg
 import platform
 import subprocess
@@ -246,12 +245,38 @@ def get_installer_info(app_name: str) -> dict | None:
         "xampp":           {"url": "https://sourceforge.net/projects/xampp/files/XAMPP%20Windows/8.2.12/xampp-windows-x64-8.2.12-0-VS17-installer.exe/download", "filename": "XAMPPSetup.exe"},
         "inkscape":        {"url": "https://inkscape.org/gallery/item/44616/inkscape-1.3.2_2023-11-25_091e20e-x64.exe" if arch == "x64" else "", "filename": "InkscapeSetup.exe"},
         "telegram desktop":{"url": "https://telegram.org/dl/desktop/win64" if arch == "x64" else "https://telegram.org/dl/desktop/win", "filename": "TelegramSetup.exe"},
+        "opera":           {"url": "https://net.geo.opera.com/opera/stable/windows",                          "filename": "OperaSetup.exe"},
+        "opera gx":        {"url": "https://net.geo.opera.com/opera_gx/stable/windows",                       "filename": "OperaGXSetup.exe"},
+        "operagx":         {"url": "https://net.geo.opera.com/opera_gx/stable/windows",                       "filename": "OperaGXSetup.exe"},
+        "edge":            {"url": "https://go.microsoft.com/fwlink/?linkid=2109047&Channel=Stable&language=en", "filename": "MicrosoftEdgeSetup.exe"},
+        "microsoft edge":  {"url": "https://go.microsoft.com/fwlink/?linkid=2109047&Channel=Stable&language=en", "filename": "MicrosoftEdgeSetup.exe"},
+        "winzip":          {"url": "https://www.winzip.com/en/download/winzip/",                               "filename": "WinZipSetup.exe"},
+        "epicgames":       {"url": "https://launcher-public-service-prod06.ol.epicgames.com/launcher/api/installer/download/EpicGamesLauncherInstaller.msi", "filename": "EpicGamesSetup.msi"},
+        "epic games":      {"url": "https://launcher-public-service-prod06.ol.epicgames.com/launcher/api/installer/download/EpicGamesLauncherInstaller.msi", "filename": "EpicGamesSetup.msi"},
     }
 
     return db.get(app_name.lower().strip())
 
 
 # ── Download installer ─────────────────────────────────────────
+
+def get_installer_download_path() -> Path:
+    """Returns the user-configured installer download directory. Falls back to Downloads\\Installations."""
+    default = Path.home() / "Downloads" / "Installations"
+    try:
+        import json as _j
+        with open("api_keys.json", encoding="utf-8") as _f:
+            cfg = _j.load(_f)
+        custom = cfg.get("installer_download_path", "").strip()
+        if custom:
+            p = Path(custom)
+            p.mkdir(parents=True, exist_ok=True)
+            return p
+    except Exception:
+        pass
+    default.mkdir(parents=True, exist_ok=True)
+    return default
+
 
 def download_installer(app_name: str, speak_fn=None) -> tuple[bool, str]:
     info = get_installer_info(app_name)
@@ -260,7 +285,8 @@ def download_installer(app_name: str, speak_fn=None) -> tuple[bool, str]:
 
     url      = info["url"]
     filename = info.get("filename") or f"{app_name.replace(' ', '_')}_setup.exe"
-    dest     = Path.home() / "Downloads" / filename
+    dest_dir = get_installer_download_path()
+    dest     = dest_dir / filename
 
     if speak_fn:
         speak_fn(f"Downloading {app_name} installer. I'll tell you when it's ready.")
@@ -268,7 +294,7 @@ def download_installer(app_name: str, speak_fn=None) -> tuple[bool, str]:
     try:
         import requests
         headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
-        r = requests.get(url, stream=True, timeout=30, allow_redirects=True, headers=headers)
+        r = requests.get(url, stream=True, timeout=60, allow_redirects=True, headers=headers)
         r.raise_for_status()
 
         downloaded = 0
@@ -279,6 +305,6 @@ def download_installer(app_name: str, speak_fn=None) -> tuple[bool, str]:
                     downloaded += len(chunk)
 
         size_mb = downloaded / (1024 * 1024)
-        return True, f"{app_name.title()} installer saved to Downloads. {size_mb:.1f} MB. Run it to install."
+        return True, f"{app_name.title()} installer saved to {dest_dir.name}. {size_mb:.1f} MB. Run it to install."
     except Exception as e:
         return False, f"Download failed: {e}"

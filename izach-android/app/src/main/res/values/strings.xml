@@ -8,4 +8,21 @@
     <string name="hint_ws_host">192.168.1.100  (leave blank to auto-detect)</string>
     <string name="widget_pc_status_desc">Shows PC CPU, RAM, GPU usage and WhatsApp status</string>
     <string name="widget_quick_mic_desc">One-tap mic button to issue voice commands to iZACH</string>
+
+    <!-- App icon shortcuts -->
+    <string name="shortcut_lock_pc_short">Lock PC</string>
+    <string name="shortcut_lock_pc_long">Lock the PC</string>
+    <string name="shortcut_screenshot_short">Screenshot</string>
+    <string name="shortcut_screenshot_long">Take a Screenshot</string>
+    <string name="shortcut_voice_short">Voice</string>
+    <string name="shortcut_voice_long">Quick Voice Command</string>
+    <string name="shortcut_dnd_short">Toggle DND</string>
+    <string name="shortcut_dnd_long">Toggle Do Not Disturb</string>
+    <string name="shortcut_disabled">iZACH shortcut unavailable</string>
+
+    <!-- Quick Settings tile labels -->
+    <string name="tile_dnd">iZACH DND</string>
+    <string name="tile_busy">iZACH Busy</string>
+    <string name="tile_lock_pc">Lock PC</string>
+    <string name="tile_mute_pc">Mute PC</string>
 </resources>

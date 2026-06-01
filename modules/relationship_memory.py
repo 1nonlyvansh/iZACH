@@ -11,7 +11,6 @@ Voice triggers handled in command_chain:
 """
 
 import logging
-import os
 import re
 from datetime import datetime
 

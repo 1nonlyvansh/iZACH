@@ -9,7 +9,6 @@ import time
 import shutil
 import logging
 import hashlib
-import threading
 from pathlib import Path
 from typing import Optional
 from datetime import datetime

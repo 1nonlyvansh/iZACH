@@ -28,6 +28,9 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <meta-data
+                android:name="android.app.shortcuts"
+                android:resource="@xml/shortcuts" />
         </activity>
 
         <activity
@@ -89,6 +92,73 @@
             <intent-filter>
                 <action android:name="com.izach.android.DND_HANDLE" />
                 <action android:name="com.izach.android.DND_BUSY" />
+            </intent-filter>
+        </receiver>
+
+        <receiver
+            android:name=".DndInlineReplyReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.izach.android.DND_INLINE_REPLY" />
+            </intent-filter>
+        </receiver>
+
+        <activity
+            android:name=".AudioStreamActivity"
+            android:label="PC Audio"
+            android:exported="false" />
+
+        <!-- ── Quick Settings Tiles ───────────────────────────── -->
+        <service
+            android:name=".tile.DndTileService"
+            android:exported="true"
+            android:label="@string/tile_dnd"
+            android:icon="@drawable/ic_bell"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
+
+        <service
+            android:name=".tile.BusyTileService"
+            android:exported="true"
+            android:label="@string/tile_busy"
+            android:icon="@drawable/ic_bell"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
+
+        <service
+            android:name=".tile.LockPcTileService"
+            android:exported="true"
+            android:label="@string/tile_lock_pc"
+            android:icon="@drawable/ic_settings"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
+
+        <service
+            android:name=".tile.MutePcTileService"
+            android:exported="true"
+            android:label="@string/tile_mute_pc"
+            android:icon="@drawable/ic_equalizer"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
+
+        <receiver
+            android:name=".widget.WidgetToggleReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.izach.android.TOGGLE_DND" />
+                <action android:name="com.izach.android.TOGGLE_BUSY" />
             </intent-filter>
         </receiver>
 

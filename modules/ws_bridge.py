@@ -165,6 +165,11 @@ def start_ws_bridge():
     global _loop
     if _loop and _loop.is_running():
         return
+    # Silence noisy handshake tracebacks: bare TCP probes (port scanners, a
+    # client that connects then drops before the WS upgrade) make the websockets
+    # server log a full "did not receive a valid HTTP request" traceback. Benign.
+    import logging as _logging
+    _logging.getLogger("websockets.server").setLevel(_logging.CRITICAL)
     _loop = asyncio.new_event_loop()
     t = threading.Thread(target=_loop.run_until_complete, args=(_server(),), daemon=True)
     t.start()

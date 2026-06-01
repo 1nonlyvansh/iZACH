@@ -964,7 +964,8 @@ class PrinterPanel(tk.Frame):
                     self.after(0, lambda: self._preview_lbl.config(
                         text="Print failed — check printer", fg=RED))
             except Exception as e:
-                self.after(0, lambda: self._preview_lbl.config(text=f"Error: {e}", fg=RED))
+                err = str(e)
+                self.after(0, lambda err=err: self._preview_lbl.config(text=f"Error: {err}", fg=RED))
             self.after(0, lambda: self._print_btn.config(text="⎙ PRINT ALL", state="normal"))
         threading.Thread(target=_run, daemon=True).start()
 

@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Lock PC — always available -->
+    <shortcut
+        android:shortcutId="lock_pc"
+        android:enabled="true"
+        android:icon="@drawable/ic_settings"
+        android:shortcutShortLabel="@string/shortcut_lock_pc_short"
+        android:shortcutLongLabel="@string/shortcut_lock_pc_long"
+        android:shortcutDisabledMessage="@string/shortcut_disabled">
+        <intent
+            android:action="com.izach.android.SHORTCUT_ACTION"
+            android:targetPackage="com.izach.android"
+            android:targetClass="com.izach.android.MainActivity">
+            <extra android:name="shortcut_command" android:value="lock the pc" />
+        </intent>
+        <categories android:name="android.shortcut.conversation" />
+    </shortcut>
+
+    <!-- Screenshot -->
+    <shortcut
+        android:shortcutId="screenshot"
+        android:enabled="true"
+        android:icon="@drawable/ic_screenshot"
+        android:shortcutShortLabel="@string/shortcut_screenshot_short"
+        android:shortcutLongLabel="@string/shortcut_screenshot_long"
+        android:shortcutDisabledMessage="@string/shortcut_disabled">
+        <intent
+            android:action="com.izach.android.SHORTCUT_ACTION"
+            android:targetPackage="com.izach.android"
+            android:targetClass="com.izach.android.MainActivity">
+            <extra android:name="shortcut_command" android:value="take a screenshot" />
+        </intent>
+        <categories android:name="android.shortcut.conversation" />
+    </shortcut>
+
+    <!-- Voice command — opens app with mic active -->
+    <shortcut
+        android:shortcutId="voice_command"
+        android:enabled="true"
+        android:icon="@drawable/ic_mic"
+        android:shortcutShortLabel="@string/shortcut_voice_short"
+        android:shortcutLongLabel="@string/shortcut_voice_long"
+        android:shortcutDisabledMessage="@string/shortcut_disabled">
+        <intent
+            android:action="com.izach.android.SHORTCUT_ACTION"
+            android:targetPackage="com.izach.android"
+            android:targetClass="com.izach.android.MainActivity">
+            <extra android:name="start_voice" android:value="true" />
+        </intent>
+        <categories android:name="android.shortcut.conversation" />
+    </shortcut>
+
+</shortcuts>

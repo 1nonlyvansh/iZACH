@@ -477,6 +477,37 @@ class IZACHApi(context: Context) {
     fun saveBackendUrl(url: String) = prefs.edit().putString("backend_url", url).apply()
     fun saveWsHost(host: String) = prefs.edit().putString("ws_host", host).apply()
 
+    // ── VIP contacts ──────────────────────────────────────────
+    suspend fun getVipContacts(): Result<List<String>> = withContext(Dispatchers.IO) {
+        runCatching {
+            val resp = client.newCall(Request.Builder().url("${baseUrl()}/dnd/vip").build()).execute()
+            val obj  = gson.fromJson(resp.body?.string() ?: "{}", JsonObject::class.java)
+            obj.getAsJsonArray("vip")?.map { it.asString } ?: emptyList()
+        }
+    }
+
+    suspend fun setVipContacts(list: List<String>): Result<Unit> = withContext(Dispatchers.IO) {
+        runCatching {
+            val body = gson.toJson(mapOf("vip" to list))
+                .toRequestBody("application/json".toMediaType())
+            client.newCall(Request.Builder().url("${baseUrl()}/dnd/vip").post(body).build()).execute()
+            Unit
+        }
+    }
+
+    // ── Audio streaming ────────────────────────────────────────
+    fun audioStreamUrl(): String = "${baseUrl()}/audio/stream"
+
+    suspend fun stopAudioStream(): Result<Unit> = withContext(Dispatchers.IO) {
+        runCatching {
+            client.newCall(
+                Request.Builder().url("${baseUrl()}/audio/stop")
+                    .post("".toRequestBody(null)).build()
+            ).execute()
+            Unit
+        }
+    }
+
     // ── Process manager ────────────────────────────────────────────
     suspend fun getProcesses(baseUrl: String = baseUrl()): Result<List<com.izach.android.model.ProcessInfo>> =
         withContext(Dispatchers.IO) {
@@ -589,6 +620,41 @@ class IZACHApi(context: Context) {
                 obj.get("message")?.asString ?: obj.get("response")?.asString ?: "Done."
             }
         }
+
+    // ── Background Mode ───────────────────────────────────────────
+    /** GET /settings — returns current ui mode */
+    suspend fun getUiMode(): Result<String> = withContext(Dispatchers.IO) {
+        runCatching {
+            val resp = client.newCall(Request.Builder().url("${baseUrl()}/settings").build()).execute()
+            val obj  = gson.fromJson(resp.body?.string() ?: "{}", JsonObject::class.java)
+            obj.getAsJsonObject("settings")?.get("ui")?.asString ?: "classic"
+        }
+    }
+
+    /** POST /background-mode  — switches PC to headless background mode */
+    suspend fun activateBackgroundMode(): Result<Boolean> = withContext(Dispatchers.IO) {
+        runCatching {
+            val resp = client.newCall(
+                Request.Builder().url("${baseUrl()}/background-mode")
+                    .post("".toRequestBody(null)).build()
+            ).execute()
+            gson.fromJson(resp.body?.string() ?: "{}", JsonObject::class.java)
+                .get("ok")?.asBoolean ?: false
+        }
+    }
+
+    /** Restore UI mode to given value (e.g. "classic" or "scifi") */
+    suspend fun setUiMode(mode: String): Result<Boolean> = withContext(Dispatchers.IO) {
+        runCatching {
+            val body = gson.toJson(mapOf("ui" to mode))
+                .toRequestBody("application/json".toMediaType())
+            val resp = client.newCall(
+                Request.Builder().url("${baseUrl()}/settings").post(body).build()
+            ).execute()
+            gson.fromJson(resp.body?.string() ?: "{}", JsonObject::class.java)
+                .get("ok")?.asBoolean ?: false
+        }
+    }
 
     // ── Auto-DND schedule ──────────────────────────────────────────
     suspend fun pushDndSchedule(enabled: Boolean, startHour: Int, startMin: Int, endHour: Int, endMin: Int): Result<Unit> =

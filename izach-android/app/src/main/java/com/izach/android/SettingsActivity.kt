@@ -5,6 +5,10 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings
+import android.view.Gravity
+import android.widget.ImageButton
+import android.widget.LinearLayout
+import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
@@ -19,6 +23,7 @@ class SettingsActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivitySettingsBinding
     private lateinit var api: IZACHApi
+    private val vipList = mutableListOf<String>()
 
     private val qrLauncher = registerForActivityResult(ScanContract()) { result ->
         if (result?.contents != null) {
@@ -126,6 +131,9 @@ class SettingsActivity : AppCompatActivity() {
                 api.pushDndSchedule(schedEnabled, sh, sm, eh, em)
             }
 
+            // Save VIP contacts to backend
+            launch { api.setVipContacts(vipList) }
+
             toast("Saved. Restart app to reconnect.")
             finish()
         }
@@ -147,7 +155,71 @@ class SettingsActivity : AppCompatActivity() {
         }
 
         binding.btnBack.setOnClickListener { finish() }
+
+        // ── VIP contacts ──────────────────────────────────────
+        loadVipContacts()
+        binding.btnVipAdd.setOnClickListener {
+            val entry = binding.etVipInput.text.toString().trim()
+            if (entry.isBlank()) return@setOnClickListener
+            if (!vipList.contains(entry)) {
+                vipList.add(entry)
+                addVipRow(entry)
+            }
+            binding.etVipInput.text?.clear()
+        }
     }
+
+    private fun loadVipContacts() {
+        lifecycleScope.launch {
+            api.getVipContacts()
+                .onSuccess { list ->
+                    vipList.clear()
+                    vipList.addAll(list)
+                    runOnUiThread {
+                        binding.vipListContainer.removeAllViews()
+                        list.forEach { addVipRow(it) }
+                    }
+                }
+        }
+    }
+
+    private fun addVipRow(entry: String) {
+        val dp = resources.displayMetrics.density
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(0, (4 * dp).toInt(), 0, (4 * dp).toInt())
+        }
+        val tv = TextView(this).apply {
+            text = entry
+            setTextColor(getColor(R.color.text_pri))
+            textSize = 12f
+            typeface = android.graphics.Typeface.MONOSPACE
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+        }
+        val btn = ImageButton(this).apply {
+            setImageResource(R.drawable.ic_task_failed)  // X icon
+            background = null
+            contentDescription = "Remove"
+            setOnClickListener {
+                vipList.remove(entry)
+                binding.vipListContainer.removeView(row)
+                saveVipToBackend()
+            }
+        }
+        row.addView(tv)
+        row.addView(btn)
+        binding.vipListContainer.addView(row)
+    }
+
+    private fun saveVipToBackend() {
+        lifecycleScope.launch {
+            api.setVipContacts(vipList)
+        }
+    }
+
+    // Also save VIP when hitting main SAVE button
+    // (handled via btnSave click — override saveVip there)
 
     private fun toast(msg: String) = Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
 }

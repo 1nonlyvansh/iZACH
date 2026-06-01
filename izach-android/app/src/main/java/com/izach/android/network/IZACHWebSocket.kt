@@ -42,6 +42,8 @@ class IZACHWebSocket(private val api: IZACHApi) {
     var onDownloadEvent: ((type: String, filename: String, size: Long, speedStr: String) -> Unit)? = null
     var onDndAlert: ((DndAlert) -> Unit)? = null
     var onDndStatus: ((DndStatus) -> Unit)? = null
+    var onBusyStatus: ((active: Boolean, reason: String) -> Unit)? = null
+    var onReminder:   ((title: String, body: String) -> Unit)?     = null
 
     private fun scheduleReconnect() {
         if (reconnectScheduled || !shouldReconnect) return
@@ -106,15 +108,26 @@ class IZACHWebSocket(private val api: IZACHApi) {
                             val type   = json.get("alert_type")?.asString
                                 ?: json.get("type")?.asString ?: ""
                             val ts     = json.get("ts")?.asLong ?: (System.currentTimeMillis() / 1000L)
-                            val action = if (json.has("action") && !json.get("action").isJsonNull)
+                            val action     = if (json.has("action") && !json.get("action").isJsonNull)
                                 json.get("action").asString else null
-                            onDndAlert?.invoke(DndAlert(id, from, number, text, type, ts, action))
+                            val isPriority = json.get("is_priority")?.asBoolean ?: false
+                            onDndAlert?.invoke(DndAlert(id, from, number, text, type, ts, action, isPriority))
                         }
                         "dnd_status" -> {
                             val active     = json.get("active")?.asBoolean ?: return
                             val reason     = json.get("reason")?.asString ?: ""
                             val queueCount = json.get("queue_count")?.asInt ?: 0
                             onDndStatus?.invoke(DndStatus(active, reason, queueCount))
+                        }
+                        "busy_status" -> {
+                            val active = json.get("active")?.asBoolean ?: return
+                            val reason = json.get("reason")?.asString ?: "manual"
+                            onBusyStatus?.invoke(active, reason)
+                        }
+                        "reminder_alert" -> {
+                            val title = json.get("title")?.asString ?: return
+                            val body  = json.get("body")?.asString  ?: title
+                            onReminder?.invoke(title, body)
                         }
                         "task_started", "task_progress", "task_completed", "task_failed" -> {
                             val type = json.get("type")?.asString ?: return
@@ -164,15 +177,26 @@ class IZACHWebSocket(private val api: IZACHApi) {
                 val text   = payload.get("text")?.asString ?: ""
                 val type   = payload.get("type")?.asString ?: ""
                 val ts     = payload.get("ts")?.asLong ?: (System.currentTimeMillis() / 1000L)
-                val action = if (payload.has("action") && !payload.get("action").isJsonNull)
+                val action     = if (payload.has("action") && !payload.get("action").isJsonNull)
                     payload.get("action").asString else null
-                onDndAlert?.invoke(DndAlert(id, from, number, text, type, ts, action))
+                val isPriority = payload.get("is_priority")?.asBoolean ?: false
+                onDndAlert?.invoke(DndAlert(id, from, number, text, type, ts, action, isPriority))
             }
             "dnd_status" -> {
                 val active     = payload.get("active")?.asBoolean ?: return
                 val reason     = payload.get("reason")?.asString ?: ""
                 val queueCount = payload.get("queue_count")?.asInt ?: 0
                 onDndStatus?.invoke(DndStatus(active, reason, queueCount))
+            }
+            "busy_status" -> {
+                val active = payload.get("active")?.asBoolean ?: return
+                val reason = payload.get("reason")?.asString ?: "manual"
+                onBusyStatus?.invoke(active, reason)
+            }
+            "reminder_alert" -> {
+                val title = payload.get("title")?.asString ?: return
+                val body  = payload.get("body")?.asString  ?: title
+                onReminder?.invoke(title, body)
             }
             "download_started", "download_progress", "download_completed", "download_failed" -> {
                 val filename = payload.get("filename")?.asString ?: return

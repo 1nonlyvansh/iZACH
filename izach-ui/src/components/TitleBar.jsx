@@ -105,6 +105,32 @@ export default function TitleBar({ activePage = 'home', onNav, activeAgent = nul
             🔶 {busyActive ? busyReason.slice(0, 4).toUpperCase() : 'BUSY'}
           </button>
 
+          {/* Background mode — close window, keep running in tray */}
+          <button
+            onClick={async () => {
+              try { await fetch('http://localhost:5050/background-mode', { method: 'POST' }) } catch {}
+              window.electronAPI?.close?.()
+            }}
+            title="Switch to Background Mode — close window, run from system tray (low RAM)"
+            style={{
+              padding: '2px 10px',
+              background: 'transparent',
+              border: '1px solid transparent',
+              borderRadius: 3,
+              color: '#3a6070',
+              fontFamily: "'Share Tech Mono'",
+              fontSize: 9,
+              letterSpacing: '0.15em',
+              cursor: 'pointer',
+              transition: 'all 0.15s',
+              display: 'flex', alignItems: 'center', gap: 4,
+            }}
+            onMouseEnter={e => { e.currentTarget.style.color = '#00e5ff' }}
+            onMouseLeave={e => { e.currentTarget.style.color = '#3a6070' }}
+          >
+            ⊟ BG
+          </button>
+
           {/* Optics toggle */}
           <button
             onClick={onToggleCam}

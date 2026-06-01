@@ -1,6 +1,5 @@
 import os
 import time
-import re
 import httpx
 from groq import Groq
 from google import genai
@@ -31,15 +30,17 @@ def _check_internet() -> bool:
 
 
 class AIProvider:
-    def __init__(self, groq_key, gemini_keys):
+    def __init__(self, groq_key, gemini_keys, anthropic_key: str = ""):
         self.groq_client = Groq(api_key=groq_key, http_client=httpx.Client(limits=_HTTP_LIMITS))
         self.gemini_keys = gemini_keys
         self.current_gem_idx = 0
         self.gemini_client = None
         self.gemini_chat = None
+        self.anthropic_key = (anthropic_key or "").strip()
         self._init_gemini()
 
-    def reload_keys(self, groq_key: str = None, gemini_keys: list = None):
+    def reload_keys(self, groq_key: str = None, gemini_keys: list = None,
+                    anthropic_key: str = None):
         """Hot-swap API keys at runtime. Rebuilds underlying clients."""
         if groq_key:
             try:
@@ -47,6 +48,12 @@ class AIProvider:
                 print(f"[AIProvider] Groq client rebuilt with new key ({groq_key[:8]}...).")
             except Exception as e:
                 print(f"[AIProvider] Groq reload failed: {e}")
+        if anthropic_key is not None:
+            self.anthropic_key = anthropic_key.strip()
+            if self.anthropic_key:
+                print(f"[AIProvider] Anthropic/Claude key set ({self.anthropic_key[:12]}...).")
+            else:
+                print("[AIProvider] Anthropic/Claude key cleared — reverting to Groq primary.")
         if gemini_keys:
             self.gemini_keys = gemini_keys
             self.current_gem_idx = 0
@@ -63,15 +70,64 @@ class AIProvider:
         except Exception as e:
             print(f"[SYSTEM] Gemini Init Failed: {e}")
 
+    def _call_claude(self, query, model: str = "claude-sonnet-4-5") -> str:
+        """
+        Call Anthropic-compatible Claude endpoint.
+        Supports:
+          sk-ant-...  → standard Anthropic API (api.anthropic.com)
+          ksk_...     → Kiro / Amazon endpoint (set KIRO_API_BASE in .env)
+          Any key     → falls back to ANTHROPIC_API_BASE env override if set
+        """
+        import anthropic as _ant, os as _os
+        key = self.anthropic_key
+
+        # Determine base URL
+        base_url = (
+            _os.getenv("KIRO_API_BASE") or
+            _os.getenv("ANTHROPIC_API_BASE") or
+            None
+        )
+        # Kiro keys (ksk_...) need their own endpoint if KIRO_API_BASE is set;
+        # if not set, try standard Anthropic endpoint anyway (may 401 — will fall to Groq)
+        client_kwargs = {"api_key": key}
+        if base_url:
+            client_kwargs["base_url"] = base_url
+
+        client = _ant.Anthropic(**client_kwargs)
+        system_content = self._build_system_prompt(query)
+        msg = client.messages.create(
+            model=model,
+            max_tokens=1024,
+            system=system_content,
+            messages=[{"role": "user", "content": query}],
+        )
+        result = msg.content[0].text
+        try:
+            from modules.api_usage_tracker import record as _rec
+            _rec("anthropic")
+        except Exception:
+            pass
+        return result
+
     def send_message(self, query):
-        """Online cloud providers only: Groq → Gemini (all 3 keys) → OpenRouter."""
+        """Online cloud providers only: Claude (if key set) → Groq → Gemini."""
         online = _check_internet()
         if not online:
             return "Offline — cloud providers unreachable."
 
         response = None
 
-        # 1. TRY GROQ (Primary)
+        # 0. CLAUDE PRIMARY (if Anthropic/Kiro key configured)
+        if self.anthropic_key:
+            try:
+                response = self._call_claude(query)
+            except Exception as e:
+                print(f"[CLAUDE ERROR]: {e} — falling back to Groq")
+
+        if response is not None:
+            return response
+
+        # 1. TRY GROQ (Primary when no Claude key)
         try:
             response = self._call_groq(query)
         except Exception as e:
@@ -133,7 +189,7 @@ class AIProvider:
         import httpx as _hx
         sys_prompt = self._build_system_prompt(query)
         payload = {
-            "model": "meta-llama/llama-3.1-8b-instruct:free",
+            "model": "meta-llama/llama-3.3-70b-instruct:free",
             "messages": [
                 {"role": "system", "content": sys_prompt},
                 {"role": "user",   "content": query},
@@ -209,7 +265,11 @@ class AIProvider:
     def _build_system_prompt(self, query: str) -> str:
         style = self._style_instruction()
         dt_ctx = self._datetime_context()
-        base = f"You are iZACH, a concise AI assistant. {dt_ctx}"
+        try:
+            from modules.personality import PERSONALITY_PROMPT as _pp
+            base = f"{_pp}\n{dt_ctx}"
+        except Exception:
+            base = f"You are iZACH, a sharp witty AI assistant. {dt_ctx}"
         parts = [base, self._TABLE_INSTR]
         if style:
             parts.append(style)
@@ -227,6 +287,8 @@ class AIProvider:
         completion = self.groq_client.chat.completions.create(
             model="llama-3.3-70b-versatile",
             messages=messages,
+            max_tokens=300,   # keeps replies short and punchy — no essays
+            temperature=0.85, # slight warmth for more natural tone
         )
         result = completion.choices[0].message.content
         try:

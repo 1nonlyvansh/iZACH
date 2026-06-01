@@ -11,7 +11,6 @@ Generated code files are saved to C:/iZACH-Projects/<ProjectName>/
 from __future__ import annotations
 import os, re, json, shutil
 from datetime import datetime
-from pathlib import Path
 
 ROOT         = os.path.dirname(os.path.dirname(__file__))
 SKILLS_DIR   = os.path.join(ROOT, "skills")

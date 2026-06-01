@@ -19,7 +19,6 @@ import time
 import logging
 import re
 import threading
-from pathlib import Path
 from typing import Optional
 
 logger = logging.getLogger("iZACH.SmartHome")
@@ -541,10 +540,10 @@ def cast_media_url(url: str, title: str = "", content_type: str = "video/mp4",
 # Unified command dispatcher (called from command_chain / voice)
 # =============================================================================
 
-def execute_voice_command(command: str, context: dict = None) -> dict:
+def _execute_voice_command_nest_legacy(command: str, context: dict = None) -> dict:
     """
-    Parse natural-language smart home command and execute it.
-    Returns {success, message, action}.
+    DEAD/LEGACY — superseded by execute_voice_command() below (line ~1146).
+    Nest-SDM-only parser kept for reference; not called anywhere.
     """
     import re
     cmd = command.lower().strip()

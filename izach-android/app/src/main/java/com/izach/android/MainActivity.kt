@@ -24,7 +24,11 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.biometric.BiometricPrompt
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
+import androidx.core.app.RemoteInput
 import androidx.core.content.ContextCompat
+import androidx.core.content.pm.ShortcutInfoCompat
+import androidx.core.content.pm.ShortcutManagerCompat
+import androidx.core.graphics.drawable.IconCompat
 import androidx.core.net.toUri
 import androidx.core.view.GravityCompat
 import androidx.core.view.ViewCompat
@@ -80,11 +84,15 @@ class MainActivity : AppCompatActivity() {
     private var dndAlertNotifCounter = 0
 
     companion object {
-        private const val NOTIF_CHANNEL_ID     = "izach_pc_events"
-        private const val NOTIF_CHANNEL_DND    = "izach_dnd_alerts"
-        private const val NOTIF_ID_BASE        = 1000
-        private const val NOTIF_ID_DND_BASE    = 3000
-        private var notifCounter = 0
+        private const val NOTIF_CHANNEL_ID       = "izach_pc_events"
+        private const val NOTIF_CHANNEL_DND      = "izach_dnd_alerts"
+        private const val NOTIF_CHANNEL_VIP      = "izach_vip_alerts"   // bypasses phone DND
+        private const val NOTIF_CHANNEL_REMINDER = "izach_reminders"
+        private const val NOTIF_ID_BASE          = 1000
+        private const val NOTIF_ID_DND_BASE      = 3000
+        private const val NOTIF_ID_REMINDER_BASE = 5000
+        private var notifCounter      = 0
+        private var reminderCounter   = 0
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -115,6 +123,7 @@ class MainActivity : AppCompatActivity() {
         setupInput()
         setupSidebar()
         setupDndBusy()
+        setupAppShortcuts()
         loadHistory()
         checkStatus()
         pollDndBusyStatus()
@@ -162,6 +171,23 @@ class MainActivity : AppCompatActivity() {
                 .apply {
                     description = "Do Not Disturb alerts — messages & calls intercepted by iZACH"
                     enableVibration(true)
+                }
+        )
+        nm.createNotificationChannel(
+            NotificationChannel(NOTIF_CHANNEL_REMINDER, "iZACH Reminders", NotificationManager.IMPORTANCE_HIGH)
+                .apply {
+                    description = "Calendar event reminders from iZACH"
+                    enableVibration(true)
+                }
+        )
+        // VIP channel: IMPORTANCE_HIGH + bypass DND — shows even when phone is silenced
+        nm.createNotificationChannel(
+            NotificationChannel(NOTIF_CHANNEL_VIP, "iZACH VIP Alerts", NotificationManager.IMPORTANCE_HIGH)
+                .apply {
+                    description = "Priority contact messages — bypass Do Not Disturb"
+                    enableVibration(true)
+                    // BYPASS_DND requires system privilege — use setBypassDnd carefully
+                    // On API 29+: users must manually enable bypass in channel settings
                 }
         )
     }
@@ -260,6 +286,17 @@ class MainActivity : AppCompatActivity() {
                 updateDndChip()
                 if (status.queueCount > 0) updateDndBadge()
             }
+        }
+
+        ws.onBusyStatus = { active, reason ->
+            runOnUiThread {
+                busyActive = active
+                updateBusyChip()
+            }
+        }
+
+        ws.onReminder = { title, body ->
+            runOnUiThread { showReminderNotification(title, body) }
         }
 
         ws.onDownloadEvent = { type, filename, size, speedStr ->
@@ -409,6 +446,10 @@ class MainActivity : AppCompatActivity() {
             closeThen { startActivity(Intent(this, SpotifyRemoteActivity::class.java)) }
         }
 
+        binding.sidebarAudioStream.setOnClickListener {
+            closeThen { openAudioStream() }
+        }
+
         binding.sidebarAlliedNode.setOnClickListener {
             closeThen { startActivity(Intent(this, AlliedNodeActivity::class.java)) }
         }
@@ -427,8 +468,11 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setupDndBusy() {
-        binding.chipDnd.setOnClickListener { openDndSheet() }
+        binding.chipDnd.setOnClickListener { showDndToggleDialog() }
         binding.chipBusy.setOnClickListener { showBusyToggleDialog() }
+        binding.chipBgMode.setOnClickListener {
+            startActivity(Intent(this, QuickShortcutsActivity::class.java))
+        }
     }
 
     private fun pollDndBusyStatus() {
@@ -556,6 +600,34 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun showDndToggleDialog() {
+        val action = if (dndActive) "off" else "on"
+        val label  = if (dndActive) "Turn DND OFF?" else "Turn DND ON?"
+        val msg    = if (dndActive) "Disable Do Not Disturb. Queued alerts will be shown."
+                     else "Enable Do Not Disturb. Incoming messages will be held silently."
+        AlertDialog.Builder(this)
+            .setTitle(label)
+            .setMessage(msg)
+            .setPositiveButton(action.uppercase()) { _, _ ->
+                lifecycleScope.launch {
+                    api.toggleDnd(action, "manual")
+                        .onSuccess { status ->
+                            dndActive = status.active
+                            updateDndChip()
+                            Toast.makeText(this@MainActivity,
+                                if (dndActive) "DND ON" else "DND OFF",
+                                Toast.LENGTH_SHORT).show()
+                            // If DND just turned off and queue has items, open queue sheet
+                            if (!dndActive && dndAlerts.any { it.action == null }) openDndSheet()
+                        }
+                        .onFailure { Toast.makeText(this@MainActivity, "Failed: ${it.message}", Toast.LENGTH_SHORT).show() }
+                }
+            }
+            .setNeutralButton("VIEW QUEUE") { _, _ -> openDndSheet() }
+            .setNegativeButton("CANCEL", null)
+            .show()
+    }
+
     private fun showBusyToggleDialog() {
         val action = if (busyActive) "off" else "on"
         val label  = if (busyActive) "Turn Busy Mode OFF?" else "Turn Busy Mode ON?"
@@ -586,31 +658,136 @@ class MainActivity : AppCompatActivity() {
             ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
             != PackageManager.PERMISSION_GRANTED) return
 
-        val isCall = alert.type == "phone_call"
-        val title  = if (isCall) "📞 DND — Call from ${alert.from}" else "💬 DND — Message from ${alert.from}"
-        val body   = if (isCall) "Incoming WhatsApp call blocked" else alert.text.take(120)
+        val isCall     = alert.type == "phone_call"
+        val isPriority = alert.isPriority
+        val channel    = if (isPriority) NOTIF_CHANNEL_VIP else NOTIF_CHANNEL_DND
+        val titlePrefix = when {
+            isPriority && isCall -> "⭐📞 VIP CALL from ${alert.from}"
+            isPriority           -> "⭐💬 VIP MSG from ${alert.from}"
+            isCall               -> "📞 DND — Call from ${alert.from}"
+            else                 -> "💬 DND — Msg from ${alert.from}"
+        }
+        val title   = titlePrefix
+        val body    = if (isCall) "Incoming WhatsApp call blocked" else alert.text.take(120)
+        val notifId = NOTIF_ID_DND_BASE + dndAlertNotifCounter++
 
-        fun makePi(action: String): PendingIntent {
+        fun makeActionPi(action: String, reqCode: Int): PendingIntent {
             val i = Intent(this, DndActionReceiver::class.java).apply {
                 this.action = action
                 putExtra(DndActionReceiver.EXTRA_INDEX, queueIndex)
             }
-            val flags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            return PendingIntent.getBroadcast(this, queueIndex * 10 + if (action == DndActionReceiver.ACTION_HANDLE) 0 else 1, i, flags)
+            return PendingIntent.getBroadcast(this, reqCode,
+                i, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         }
 
-        val notif = NotificationCompat.Builder(this, NOTIF_CHANNEL_DND)
+        val builder = NotificationCompat.Builder(this, channel)
             .setSmallIcon(R.drawable.ic_bell)
             .setContentTitle(title)
             .setContentText(body)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setAutoCancel(true)
-            .addAction(0, "✅ HANDLE", makePi(DndActionReceiver.ACTION_HANDLE))
-            .addAction(0, "📵 BUSY",   makePi(DndActionReceiver.ACTION_BUSY))
-            .build()
+            // Lock-screen visibility — show full content
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .addAction(0, "✅ HANDLE", makeActionPi(DndActionReceiver.ACTION_HANDLE, queueIndex * 10))
+            .addAction(0, "📵 BUSY",   makeActionPi(DndActionReceiver.ACTION_BUSY,   queueIndex * 10 + 1))
+
+        // Add inline WhatsApp reply action for messages (not calls)
+        if (!isCall && alert.number.isNotBlank()) {
+            val remoteInput = RemoteInput.Builder(DndInlineReplyReceiver.KEY_REPLY_TEXT)
+                .setLabel("Reply to ${alert.from}…")
+                .build()
+
+            val replyIntent = Intent(this, DndInlineReplyReceiver::class.java).apply {
+                action = DndInlineReplyReceiver.ACTION_INLINE_REPLY
+                putExtra(DndInlineReplyReceiver.EXTRA_REPLY_NUMBER, alert.number)
+                putExtra(DndInlineReplyReceiver.EXTRA_REPLY_NAME,   alert.from)
+                putExtra(DndInlineReplyReceiver.EXTRA_NOTIF_ID,     notifId)
+            }
+            // FLAG_MUTABLE required for RemoteInput on API 31+; not available on older APIs
+            val replyFlags = PendingIntent.FLAG_UPDATE_CURRENT or
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) PendingIntent.FLAG_MUTABLE else 0
+            val replyPi = PendingIntent.getBroadcast(
+                this, queueIndex * 10 + 2, replyIntent, replyFlags
+            )
+            val replyAction = NotificationCompat.Action.Builder(
+                R.drawable.ic_bell, "↩ REPLY", replyPi
+            ).addRemoteInput(remoteInput).build()
+
+            builder.addAction(replyAction)
+        }
 
         (getSystemService(NOTIFICATION_SERVICE) as NotificationManager)
-            .notify(NOTIF_ID_DND_BASE + dndAlertNotifCounter++, notif)
+            .notify(notifId, builder.build())
+    }
+
+    private fun showReminderNotification(title: String, body: String) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
+            != PackageManager.PERMISSION_GRANTED) return
+
+        val tapIntent = Intent(this, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        val tapPi = PendingIntent.getActivity(
+            this, 0, tapIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val notif = NotificationCompat.Builder(this, NOTIF_CHANNEL_REMINDER)
+            .setSmallIcon(R.drawable.ic_bell)
+            .setContentTitle("⏰ $title")
+            .setContentText(body)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setAutoCancel(true)
+            .setContentIntent(tapPi)
+            .build()
+        (getSystemService(NOTIFICATION_SERVICE) as NotificationManager)
+            .notify(NOTIF_ID_REMINDER_BASE + reminderCounter++, notif)
+    }
+
+    private fun setupAppShortcuts() {
+        if (!ShortcutManagerCompat.isRequestPinShortcutSupported(this)) return
+
+        fun makeIntent(command: String? = null, startVoice: Boolean = false): Intent =
+            Intent(this, MainActivity::class.java).apply {
+                action = "com.izach.android.SHORTCUT_ACTION"
+                flags  = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                if (command != null) putExtra("shortcut_command", command)
+                if (startVoice)      putExtra("start_voice", true)
+            }
+
+        val shortcuts = listOf(
+            ShortcutInfoCompat.Builder(this, "lock_pc")
+                .setShortLabel("Lock PC")
+                .setLongLabel("Lock the PC")
+                .setIcon(IconCompat.createWithResource(this, R.drawable.ic_settings))
+                .setIntent(makeIntent("lock the pc"))
+                .build(),
+            ShortcutInfoCompat.Builder(this, "screenshot")
+                .setShortLabel("Screenshot")
+                .setLongLabel("Take a Screenshot")
+                .setIcon(IconCompat.createWithResource(this, R.drawable.ic_screenshot))
+                .setIntent(makeIntent("take a screenshot"))
+                .build(),
+            ShortcutInfoCompat.Builder(this, "voice_command")
+                .setShortLabel("Voice")
+                .setLongLabel("Quick Voice Command")
+                .setIcon(IconCompat.createWithResource(this, R.drawable.ic_mic))
+                .setIntent(makeIntent(startVoice = true))
+                .build(),
+            ShortcutInfoCompat.Builder(this, "toggle_dnd")
+                .setShortLabel("Toggle DND")
+                .setLongLabel("Toggle Do Not Disturb")
+                .setIcon(IconCompat.createWithResource(this, R.drawable.ic_bell))
+                .setIntent(makeIntent("toggle dnd"))
+                .build(),
+        )
+
+        ShortcutManagerCompat.setDynamicShortcuts(this, shortcuts)
+    }
+
+    private fun openAudioStream() {
+        startActivity(Intent(this, AudioStreamActivity::class.java))
     }
 
     private fun sendCommand(text: String) {
@@ -747,6 +924,10 @@ class MainActivity : AppCompatActivity() {
         listening = false
         binding.btnVoice.setImageResource(R.drawable.ic_mic)
         speechRecognizer?.stopListening()
+        // Destroy and null out so next tap gets a fresh recognizer.
+        // Reusing the same instance after onResults/onError causes silent failures.
+        speechRecognizer?.destroy()
+        speechRecognizer = null
     }
 
     private fun setStatus(connected: Boolean) {

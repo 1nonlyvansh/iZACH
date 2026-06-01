@@ -9,9 +9,8 @@ import re
 import time
 import threading
 import uuid as _uuid
-import hashlib as _hashlib
 import psutil
-from flask import Blueprint, request, jsonify, send_from_directory
+from flask import Blueprint, request, jsonify, send_from_directory, Response, stream_with_context
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
 
@@ -868,11 +867,24 @@ def settings_post():
             "notif_performance", "notif_whatsapp", "notif_downloads",
             "command_history_enabled", "log_retention_days",
             "theme", "language", "ui", "screensaver_timeout",
+            "ask_ui_on_boot", "command_only",
+            "hotkey_bar", "hotkey_mic",
             "morning_briefing_time", "weather_city",
             "briefing_enabled", "briefing_greeting", "briefing_news",
             "briefing_gold_rate", "briefing_silver_rate", "briefing_weather",
             "briefing_battery_status", "briefing_battery_health",
             "briefing_ram", "briefing_events", "briefing_whatsapp",
+            "briefing_calendar", "briefing_reminders", "briefing_tasks",
+            "briefing_stocks", "briefing_sports", "briefing_commute", "briefing_system",
+            # ── Notification settings ──
+            "meeting_join_alert_enabled", "meeting_join_alert_mins",
+            "meeting_dnd_toast_enabled",
+            "installer_download_path",
+            # ── New settings (Feature 7 / 10 / 11 / 12) ──
+            "toast_enabled", "toast_bg_only",
+            "font_size",
+            "battery_auto_switch", "lid_close_trigger",
+            "push_to_talk",
         }
         for k, v in incoming.items():
             if k in allowed:
@@ -1659,6 +1671,100 @@ def ui_history():
 
 
 # ─────────────────────────────────────────────────────────────
+# GET  /aliases              → list all voice aliases
+# POST /aliases              → add alias {trigger, command}
+# DELETE /aliases/<b64>      → delete alias by base64-encoded trigger
+# ─────────────────────────────────────────────────────────────
+
+@ui_bp.route("/aliases", methods=["GET"])
+def aliases_list():
+    try:
+        from modules.alias_engine import list_aliases as _list_al
+        return jsonify({"ok": True, "aliases": _list_al()})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@ui_bp.route("/aliases", methods=["POST"])
+def aliases_add():
+    try:
+        data    = request.get_json(silent=True) or {}
+        trigger = data.get("trigger", "").strip()
+        command = data.get("command", "").strip()
+        if not trigger or not command:
+            return jsonify({"ok": False, "error": "trigger and command required"}), 400
+        from modules.alias_engine import add_alias as _add_al
+        _add_al(trigger, command)
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@ui_bp.route("/aliases/<trigger_b64>", methods=["DELETE"])
+def aliases_delete(trigger_b64):
+    try:
+        import base64 as _b64
+        trigger = _b64.b64decode(trigger_b64.encode()).decode("utf-8")
+        from modules.alias_engine import delete_alias as _del_al
+        _del_al(trigger)
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+# ─────────────────────────────────────────────────────────────
+# GET /export-chat?format=txt|pdf — download conversation log
+# ─────────────────────────────────────────────────────────────
+
+@ui_bp.route("/export-chat", methods=["GET"])
+def export_chat():
+    fmt = request.args.get("format", "txt").lower()
+    try:
+        messages = _message_log[-200:]
+        lines = []
+        for m in messages:
+            sender = m.get("sender", "?")
+            text   = m.get("text", "")
+            ts     = m.get("ts", "")
+            lines.append(f"[{ts}] {sender}: {text}")
+        plain = "\n".join(lines)
+
+        if fmt == "pdf":
+            try:
+                from fpdf import FPDF  # type: ignore
+                pdf = FPDF()
+                pdf.add_page()
+                pdf.set_font("Helvetica", size=10)
+                pdf.set_auto_page_break(auto=True, margin=15)
+                for line in lines:
+                    safe = line.encode("latin-1", errors="replace").decode("latin-1")
+                    pdf.multi_cell(0, 6, safe)
+                from io import BytesIO
+                buf = BytesIO()
+                pdf_bytes = pdf.output()
+                buf.write(pdf_bytes)
+                buf.seek(0)
+                from flask import send_file
+                return send_file(
+                    buf,
+                    mimetype="application/pdf",
+                    as_attachment=True,
+                    download_name="iZACH-chat-export.pdf",
+                )
+            except Exception:
+                fmt = "txt"  # fallback to txt
+
+        from flask import Response
+        return Response(
+            plain,
+            mimetype="text/plain",
+            headers={"Content-Disposition": "attachment; filename=iZACH-chat-export.txt"},
+        )
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+# ─────────────────────────────────────────────────────────────
 # POST /stop  — stop TTS mid-speech
 # ─────────────────────────────────────────────────────────────
 
@@ -1685,6 +1791,28 @@ def ui_mic():
         _mic_active = bool(data.get("active", True))
         return jsonify({"ok": True, "mic_active": _mic_active})
     return jsonify({"ok": True, "mic_active": _mic_active})
+
+
+@ui_bp.route("/background-mode", methods=["POST"])
+def background_mode():
+    """Switch the running instance to Background Mode: persist ui=background and
+    start the system-tray icon. The caller (UI) then closes its Electron window;
+    Electron's window-all-closed handler sees ui=background and keeps the Python
+    backend alive instead of killing it."""
+    try:
+        try:
+            with open(SETTINGS_FILE, encoding="utf-8") as f:
+                data = _json.load(f)
+        except Exception:
+            data = {}
+        data["ui"] = "background"
+        with open(SETTINGS_FILE, "w", encoding="utf-8") as f:
+            _json.dump(data, f, indent=2)
+        from modules import tray_icon
+        tray_icon.start()
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
 
 
 @ui_bp.route("/diagnostics/voice", methods=["GET"])
@@ -4832,3 +4960,75 @@ def news_settings_post():
         return jsonify(save_settings(data))
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+# ── PC Audio Stream ───────────────────────────────────────────────────────────
+
+@ui_bp.route("/audio/info", methods=["GET"])
+def audio_stream_info():
+    try:
+        from modules.audio_streamer import get_stream_info
+        return jsonify({"ok": True, **get_stream_info()})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@ui_bp.route("/audio/stream", methods=["GET"])
+def audio_stream():
+    """
+    Streams raw PCM audio from PC speakers to the Android client.
+    Format: s16le, 22050Hz, mono — ready for Android AudioTrack.
+    Client disconnects to stop streaming.
+    """
+    try:
+        from modules.audio_streamer import stream_generator
+        return Response(
+            stream_with_context(stream_generator()),
+            mimetype="application/octet-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "X-Audio-SampleRate": "22050",
+                "X-Audio-Channels": "1",
+                "X-Audio-Encoding": "pcm_s16le",
+            },
+        )
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@ui_bp.route("/audio/stop", methods=["POST"])
+def audio_stream_stop():
+    try:
+        from modules.audio_streamer import stop_stream
+        stop_stream()
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+# ── VIP / Priority DND Contacts ───────────────────────────────────────────────
+
+@ui_bp.route("/dnd/vip", methods=["GET"])
+def dnd_vip_get():
+    try:
+        with open("api_keys.json") as f:
+            data = _json.load(f)
+        return jsonify({"ok": True, "vip": data.get("dnd_priority_contacts", [])})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@ui_bp.route("/dnd/vip", methods=["POST"])
+def dnd_vip_post():
+    """Body: {"vip": ["number_or_name", ...]} — replaces full list."""
+    try:
+        incoming = (request.get_json(silent=True) or {}).get("vip", [])
+        if not isinstance(incoming, list):
+            return jsonify({"ok": False, "error": "vip must be a list"}), 400
+        with open("api_keys.json") as f:
+            data = _json.load(f)
+        data["dnd_priority_contacts"] = [str(v).strip() for v in incoming if v]
+        with open("api_keys.json", "w") as f:
+            _json.dump(data, f, indent=2)
+        return jsonify({"ok": True, "vip": data["dnd_priority_contacts"]})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500

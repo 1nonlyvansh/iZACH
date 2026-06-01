@@ -2,9 +2,7 @@
 PC introspection — RAM, CPU, disk, battery, internet, apps, file search.
 Uses psutil (already installed) + stdlib only. No full disk scans.
 """
-import os
 import socket
-import time
 import psutil
 from pathlib import Path
 

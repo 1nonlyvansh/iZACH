@@ -2,7 +2,6 @@
 Screenshot capture — uses pyautogui (already in venv) + PIL.
 Stores in temp/screenshots/, max 20 files.
 """
-import os
 import time
 import threading
 from pathlib import Path
