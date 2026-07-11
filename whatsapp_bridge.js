@@ -11,6 +11,7 @@ const app = express();
 app.use(express.json());
 
 let isReady = false;
+let activeClient = null;
 
 function createClient() {
     const client = new Client({
@@ -20,6 +21,7 @@ function createClient() {
             args: ['--no-sandbox', '--disable-setuid-sandbox']
         }
     });
+    activeClient = client;
 
     client.on('qr', qr => {
         console.log('[WHATSAPP] Scan QR code:');
@@ -112,112 +114,6 @@ function createClient() {
         }
     });
 
-    // Send message endpoint
-    app.post('/send-message', async (req, res) => {
-        let { number, text } = req.body;
-        if (!number || !text) {
-            return res.json({ status: 'error', message: 'number and text are required' });
-        }
-        // Normalize number to WA format: strip non-digits, ensure @c.us suffix
-        number = number.toString().replace(/[^0-9]/g, '');
-        if (!number.endsWith('@c.us')) number = number + '@c.us';
-        try {
-            await client.sendMessage(number, text);
-            res.json({ status: 'sent' });
-        } catch (e) {
-            const errMsg = e.message || String(e) || 'unknown bridge error';
-            console.log(`[BRIDGE] Send failed to ${number}: ${errMsg}`);
-            res.json({ status: 'error', message: errMsg });
-        }
-    });
-
-    // Send voice note endpoint
-    app.post('/send-voice', async (req, res) => {
-        const { number, audio_path } = req.body;
-        try {
-            const resolved = path.resolve(audio_path);
-            const allowed = path.resolve(__dirname);
-            if (!resolved.startsWith(allowed + path.sep) && resolved !== allowed) {
-                return res.status(403).json({ status: 'error', message: 'Path outside allowed directory' });
-            }
-            const media = MessageMedia.fromFilePath(resolved);
-            await client.sendMessage(number, media, { sendAudioAsVoice: true });
-            res.json({ status: 'sent' });
-        } catch (e) {
-            res.json({ status: 'error', message: e.message });
-        }
-    });
-
-    // Health check
-    app.get('/health', (req, res) => {
-        res.json({ status: isReady ? 'connected' : 'connecting' });
-    });
-
-    // Fetch message history for past N hours (used by Phase 3 context engine)
-    app.get('/messages/history', async (req, res) => {
-        const hours = parseInt(req.query.hours) || 24;
-        const since = Date.now() - (hours * 60 * 60 * 1000);
-        try {
-            const chats = await client.getChats();
-            const messages = [];
-            for (const chat of chats.slice(0, 30)) { // limit to 30 chats
-                try {
-                    const chatMsgs = await chat.fetchMessages({ limit: 50 });
-                    for (const msg of chatMsgs) {
-                        if (msg.fromMe) continue;
-                        if (msg.isStatus) continue;
-                        if ((msg.timestamp * 1000) < since) continue;
-                        const contact = await msg.getContact();
-                        const name = contact.pushname || contact.name || contact.number || msg.from;
-                        messages.push({
-                            id: msg.id._serialized,
-                            sender: name,
-                            number: msg.from,
-                            text: msg.body,
-                            timestamp: msg.timestamp,
-                            chat: chat.name || name,
-                        });
-                    }
-                } catch (e) { /* skip unreadable chat */ }
-            }
-            messages.sort((a, b) => a.timestamp - b.timestamp);
-            res.json({ messages, count: messages.length });
-        } catch (e) {
-            res.status(500).json({ error: e.message });
-        }
-    });
-
-    // Fetch recent messages from a specific chat (for draft engine)
-    app.get('/messages/chat', async (req, res) => {
-        const { number, limit = 10 } = req.query;
-        if (!number) return res.status(400).json({ error: 'number required' });
-        try {
-            const chats = await client.getChats();
-            const chat = chats.find(c => c.id._serialized === number || c.id.user === number.replace('@c.us', ''));
-            if (!chat) return res.json({ messages: [], count: 0 });
-            const msgs = await chat.fetchMessages({ limit: parseInt(limit) });
-            const out = [];
-            for (const msg of msgs) {
-                if (msg.isStatus) continue;
-                const contact = msg.fromMe ? null : await msg.getContact().catch(() => null);
-                const name = msg.fromMe ? 'Me' : (contact?.pushname || contact?.name || number);
-                out.push({ id: msg.id._serialized, sender: name, fromMe: msg.fromMe, text: msg.body, timestamp: msg.timestamp });
-            }
-            res.json({ messages: out, count: out.length });
-        } catch (e) {
-            res.status(500).json({ error: e.message });
-        }
-    });
-
-    app.post('/logout', async (req, res) => {
-        try {
-            await client.logout();
-            res.json({ status: 'logged_out' });
-        } catch (e) {
-            res.json({ status: 'error', message: e.message });
-        }
-    });
-
     return client;
 }
 
@@ -233,8 +129,137 @@ async function notifyIZACH(endpoint, data) {
     }
 }
 
+// ── Routes ──────────────────────────────────────────────────────────────
+// Registered once against the shared `app` instance. Handlers read
+// `activeClient`, which is repointed at the current client on every
+// reconnect/restart, instead of closing over a specific client instance.
+
+// Send message endpoint
+app.post('/send-message', async (req, res) => {
+    let { number, text } = req.body;
+    if (!number || !text) {
+        return res.json({ status: 'error', message: 'number and text are required' });
+    }
+    // Normalize number to WA format: strip non-digits, ensure @c.us suffix
+    number = number.toString().replace(/[^0-9]/g, '');
+    if (!number.endsWith('@c.us')) number = number + '@c.us';
+    try {
+        await activeClient.sendMessage(number, text);
+        res.json({ status: 'sent' });
+    } catch (e) {
+        const errMsg = e.message || String(e) || 'unknown bridge error';
+        console.log(`[BRIDGE] Send failed to ${number}: ${errMsg}`);
+        res.json({ status: 'error', message: errMsg });
+    }
+});
+
+// Send voice note endpoint
+app.post('/send-voice', async (req, res) => {
+    const { number, audio_path } = req.body;
+    try {
+        const resolved = path.resolve(audio_path);
+        const allowed = path.resolve(__dirname);
+        if (!resolved.startsWith(allowed + path.sep) && resolved !== allowed) {
+            return res.status(403).json({ status: 'error', message: 'Path outside allowed directory' });
+        }
+        const media = MessageMedia.fromFilePath(resolved);
+        await activeClient.sendMessage(number, media, { sendAudioAsVoice: true });
+        res.json({ status: 'sent' });
+    } catch (e) {
+        res.json({ status: 'error', message: e.message });
+    }
+});
+
+// Health check
+app.get('/health', (req, res) => {
+    res.json({ status: isReady ? 'connected' : 'connecting' });
+});
+
+// Fetch message history for past N hours (used by Phase 3 context engine)
+app.get('/messages/history', async (req, res) => {
+    const hours = parseInt(req.query.hours) || 24;
+    const since = Date.now() - (hours * 60 * 60 * 1000);
+    try {
+        const chats = await activeClient.getChats();
+        const messages = [];
+        for (const chat of chats.slice(0, 30)) { // limit to 30 chats
+            try {
+                const chatMsgs = await chat.fetchMessages({ limit: 50 });
+                for (const msg of chatMsgs) {
+                    if (msg.fromMe) continue;
+                    if (msg.isStatus) continue;
+                    if ((msg.timestamp * 1000) < since) continue;
+                    const contact = await msg.getContact();
+                    const name = contact.pushname || contact.name || contact.number || msg.from;
+                    messages.push({
+                        id: msg.id._serialized,
+                        sender: name,
+                        number: msg.from,
+                        text: msg.body,
+                        timestamp: msg.timestamp,
+                        chat: chat.name || name,
+                    });
+                }
+            } catch (e) { /* skip unreadable chat */ }
+        }
+        messages.sort((a, b) => a.timestamp - b.timestamp);
+        res.json({ messages, count: messages.length });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// Fetch recent messages from a specific chat (for draft engine)
+app.get('/messages/chat', async (req, res) => {
+    const { number, limit = 10 } = req.query;
+    if (!number) return res.status(400).json({ error: 'number required' });
+    try {
+        const chats = await activeClient.getChats();
+        const chat = chats.find(c => c.id._serialized === number || c.id.user === number.replace('@c.us', ''));
+        if (!chat) return res.json({ messages: [], count: 0 });
+        const msgs = await chat.fetchMessages({ limit: parseInt(limit) });
+        const out = [];
+        for (const msg of msgs) {
+            if (msg.isStatus) continue;
+            const contact = msg.fromMe ? null : await msg.getContact().catch(() => null);
+            const name = msg.fromMe ? 'Me' : (contact?.pushname || contact?.name || number);
+            out.push({ id: msg.id._serialized, sender: name, fromMe: msg.fromMe, text: msg.body, timestamp: msg.timestamp });
+        }
+        res.json({ messages: out, count: out.length });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.post('/logout', async (req, res) => {
+    try {
+        await activeClient.logout();
+        res.json({ status: 'logged_out' });
+    } catch (e) {
+        res.json({ status: 'error', message: e.message });
+    }
+});
+
+app.post('/restart', async (req, res) => {
+    try {
+        isReady = false;
+        notifyIZACH('/whatsapp/status', { status: 'disconnected' });
+        setTimeout(() => {
+            activeClient.destroy()
+                .then(() => createClient())
+                .catch(err => {
+                    console.log(`[BRIDGE] Restart error: ${err.message}`);
+                    createClient();
+                });
+        }, 250);
+        res.json({ status: 'restarting' });
+    } catch (e) {
+        res.json({ status: 'error', message: e.message });
+    }
+});
+
 app.listen(3000, () => console.log('[BRIDGE] Running on port 3000'));
-const activeClient = createClient();
+createClient();
 
 process.on('SIGINT', async () => {
     console.log('[BRIDGE] Shutting down gracefully...');
