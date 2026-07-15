@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="14dp"
+    android:layout_margin="6dp"
+    android:background="@drawable/bg_shortcut_tile">
+
+    <TextView android:id="@+id/tvTitle"
+        android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:text="Headline title" android:textColor="@color/text_pri"
+        android:textSize="13sp" android:fontFamily="monospace" android:maxLines="3" android:ellipsize="end" />
+
+    <TextView android:id="@+id/tvSource"
+        android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:text="Source · time" android:textColor="@color/text_sec"
+        android:textSize="10sp" android:fontFamily="monospace" />
+
+</LinearLayout>

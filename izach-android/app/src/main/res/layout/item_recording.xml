@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:paddingHorizontal="16dp"
+    android:paddingVertical="12dp"
+    android:background="@color/bg_panel">
+
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:orientation="vertical">
+
+        <TextView android:id="@+id/tvName"
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:text="Recording name" android:textColor="@color/text_pri"
+            android:textSize="14sp" android:fontFamily="monospace" android:textStyle="bold" />
+
+        <TextView android:id="@+id/tvMeta"
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:text="5 steps" android:textColor="@color/text_sec"
+            android:textSize="11sp" android:fontFamily="monospace" />
+
+        <TextView android:id="@+id/tvTriggers"
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:text="&quot;check my messages&quot;" android:textColor="@color/cyan"
+            android:textSize="10sp" android:fontFamily="monospace"
+            android:visibility="gone" />
+    </LinearLayout>
+
+    <ImageButton android:id="@+id/btnPlay"
+        android:layout_width="40dp" android:layout_height="40dp"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:src="@drawable/ic_play" android:contentDescription="Replay" />
+
+    <ImageButton android:id="@+id/btnDelete"
+        android:layout_width="40dp" android:layout_height="40dp"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:src="@android:drawable/ic_menu_delete" android:contentDescription="Delete" />
+
+</LinearLayout>

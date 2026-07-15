@@ -858,6 +858,10 @@ body.tb-autohide.tb-reveal #device-bar { opacity:0.5; pointer-events:all; }
 #p-skills { right:18px; top:50px; width:280px; height:360px; }
 /* ── API USAGE MONITOR WIDGET ── */
 #p-apimon { right:320px; top:50px; width:300px; height:480px; }
+/* ── BROWSER WIDGET ── */
+#p-browser { left:340px; top:50px; width:520px; height:440px; }
+/* ── STATUS DASHBOARD WIDGET ── */
+#p-dashboard { right:320px; top:50px; width:300px; height:480px; }
 .api-key-row { padding:6px 14px 8px; border-bottom:1px solid rgba(0,148,255,0.06); }
 .api-key-row:last-child { border-bottom:none; }
 .api-key-name { font-size:8px; letter-spacing:.15em; color:rgba(0,148,255,0.7); font-family:'Share Tech Mono',monospace; margin-bottom:4px; display:flex; justify-content:space-between; align-items:center; }
@@ -1252,9 +1256,35 @@ body.spotlight-mode .pnl:not(.spotlighted) {
 
 <div id="p-sched" class="pnl">
   <div class="cb cb-tl"></div><div class="cb cb-tr"></div><div class="cb cb-bl"></div><div class="cb cb-br"></div>
-  <div class="ph"><span class="ph-id">03 · SCHED</span><span class="ph-cat"><div class="ph-dot"></div>CALENDAR<span class="ph-min">—</span></span></div>
-  <div class="pnl-body" id="p-sched-body">
-    <div class="ev"><div class="ev-info" style="padding:8px 0;color:rgba(0,148,255,0.3);font-size:9px;letter-spacing:.2em;">NO EVENTS LOADED</div></div>
+  <div class="ph"><span class="ph-id">03 · SCHED</span><span class="ph-cat"><div class="ph-dot" id="cal-dot"></div>CALENDAR<span class="ph-min">—</span></span></div>
+  <div class="pnl-body">
+    <!-- Auth status + connect button -->
+    <div style="padding:10px 14px 8px;">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+        <div id="cal-status-dot" style="width:7px;height:7px;border-radius:50%;background:rgba(0,148,255,0.2);flex-shrink:0;transition:background .3s;"></div>
+        <span id="cal-status-lbl" style="font-size:8px;letter-spacing:.25em;color:rgba(0,148,255,0.4);">NOT CONNECTED</span>
+      </div>
+      <div id="cal-auth-row" style="display:flex;gap:6px;">
+        <button onclick="calConnectStart()"
+          style="flex:1;padding:5px 0;background:rgba(0,148,255,0.1);border:1px solid rgba(0,148,255,0.3);
+                 border-radius:3px;color:rgba(0,200,255,0.8);font-family:'Share Tech Mono';font-size:8px;
+                 letter-spacing:.15em;cursor:pointer;">
+          ⊕ CONNECT GOOGLE CALENDAR
+        </button>
+      </div>
+      <div id="cal-disconnect-row" style="display:none;">
+        <button onclick="calDisconnect()"
+          style="width:100%;padding:5px 0;background:rgba(255,61,61,0.08);border:1px solid rgba(255,61,61,0.25);
+                 border-radius:3px;color:rgba(255,100,100,0.8);font-family:'Share Tech Mono';font-size:8px;
+                 letter-spacing:.15em;cursor:pointer;">
+          DISCONNECT
+        </button>
+      </div>
+    </div>
+    <div style="height:1px;margin:0 14px;background:rgba(0,148,255,0.07);"></div>
+    <div id="p-sched-body">
+      <div class="ev"><div class="ev-info" style="padding:8px 0;color:rgba(0,148,255,0.3);font-size:9px;letter-spacing:.2em;">NO EVENTS LOADED</div></div>
+    </div>
   </div>
   <div class="rh"></div>
 </div>
@@ -1453,6 +1483,9 @@ body.spotlight-mode .pnl:not(.spotlighted) {
     <button class="tb-btn" id="tb-idle"     onclick="setMode('idle')"            title="IDLE MODE">
       <span class="tb-ic">◉</span><span class="tb-lbl">IDLE</span>
     </button>
+    <button class="tb-btn" id="tb-browser"  onclick="togWgt('p-browser')"        title="BROWSER">
+      <span class="tb-ic">🌐</span><span class="tb-lbl">BROWSER</span>
+    </button>
     <div class="tb-sep"></div>
     <button class="tb-btn" id="tb-wgt"      onclick="toggleWidgetPicker()"       title="WIDGETS">
       <span class="tb-ic">⊞</span><span class="tb-lbl">WIDGETS</span>
@@ -1537,6 +1570,7 @@ body.spotlight-mode .pnl:not(.spotlighted) {
     <button class="wp-btn" id="wpb-fit"   onclick="togWgt('p-fit')"   title="Fitness"><span class="wp-ic">🏃</span><span class="wp-lbl">FITNESS</span></button>
     <button class="wp-btn" id="wpb-loc"   onclick="togWgt('p-loc')"   title="Location"><span class="wp-ic">◎</span><span class="wp-lbl">LOCATION</span></button>
     <button class="wp-btn" id="wpb-sh"    onclick="togWgt('p-sh')"    title="Smart Home"><span class="wp-ic">⌂</span><span class="wp-lbl">SMART HOME</span></button>
+    <button class="wp-btn" id="wpb-browser" onclick="togWgt('p-browser')" title="Browser"><span class="wp-ic">◈</span><span class="wp-lbl">BROWSER</span></button>
   </div>
 
   <!-- AI: Subconsciousness, Agents, Skills -->
@@ -1548,6 +1582,7 @@ body.spotlight-mode .pnl:not(.spotlighted) {
     <button class="wp-btn" id="wpb-agents" onclick="togWgt('p-agents')" title="Agents"><span class="wp-ic">🤖</span><span class="wp-lbl">AGENTS</span></button>
     <button class="wp-btn" id="wpb-skills"  onclick="togWgt('p-skills')"  title="Skills"><span class="wp-ic">⚡</span><span class="wp-lbl">SKILLS</span></button>
     <button class="wp-btn" id="wpb-apimon" onclick="togWgt('p-apimon')" title="API Usage Monitor"><span class="wp-ic">📊</span><span class="wp-lbl">API KEYS</span></button>
+    <button class="wp-btn" id="wpb-dashboard" onclick="togWgt('p-dashboard')" title="What's Running"><span class="wp-ic">🖥</span><span class="wp-lbl">STATUS</span></button>
   </div>
   <!-- NEWS widget removed — iZACH speaks live news on demand via voice cmd "tell me the news" -->
 </div>
@@ -1591,6 +1626,7 @@ body.spotlight-mode .pnl:not(.spotlighted) {
     <button class="sp-tab" data-tab="security" onclick="switchSettingsTab('security')">SECURITY</button>
     <button class="sp-tab" data-tab="commands" onclick="switchSettingsTab('commands')">COMMANDS</button>
     <button class="sp-tab" data-tab="links"    onclick="switchSettingsTab('links')">CUSTOM LINKS</button>
+    <button class="sp-tab" data-tab="browser"  onclick="switchSettingsTab('browser')">BROWSER SETTINGS</button>
     <button class="sp-tab" data-tab="bgmode"   onclick="switchSettingsTab('bgmode')">BG MODE</button>
   </div>
   <div class="sp-body">
@@ -1784,6 +1820,8 @@ body.spotlight-mode .pnl:not(.spotlighted) {
             <span>Wake Word "Hey iZACH"</span>
             <div class="cfg-tog" id="tog-wake" onclick="cfgToggle('tog-wake','wake_word_enabled')"></div>
           </div>
+          <div class="cfg-label" style="margin-top:10px;">NICKNAME (restart required)</div>
+          <input class="cfg-inp" id="cfg-nickname" placeholder="e.g. Neo — also works as a wake word" autocomplete="off">
         </div>
         <div class="sp-divider"></div>
         <div class="sp-sec">
@@ -1881,6 +1919,16 @@ body.spotlight-mode .pnl:not(.spotlighted) {
         </div>
         <div class="sp-divider"></div>
         <div class="sp-sec">
+          <div class="sp-sec-title">MEETINGS</div>
+          <div class="cfg-toggle-row">
+            <span>Auto-DND Before Calendar Meetings</span>
+            <div class="cfg-tog" id="tog-auto-dnd" onclick="cfgToggle('tog-auto-dnd','auto_dnd_before_meetings')"></div>
+          </div>
+          <div class="cfg-label" style="margin-top:10px;">LEAD TIME (MINUTES)</div>
+          <input class="cfg-inp" id="cfg-auto-dnd-lead" type="number" min="0" max="60" placeholder="5" style="width:80px;">
+        </div>
+        <div class="sp-divider"></div>
+        <div class="sp-sec">
           <div class="sp-sec-title">PRIVACY</div>
           <div class="cfg-toggle-row">
             <span>Save Command History</span>
@@ -1893,6 +1941,85 @@ body.spotlight-mode .pnl:not(.spotlighted) {
             <option value="30">30 days</option>
             <option value="90">90 days</option>
           </select>
+        </div>
+        <div class="sp-divider"></div>
+        <div class="sp-sec">
+          <div class="sp-sec-title">PROACTIVE AGENT</div>
+          <div class="cfg-toggle-row">
+            <span>Proactive Agent Enabled</span>
+            <div class="cfg-tog on" id="tog-proactive" onclick="cfgToggle('tog-proactive','proactive_enabled')"></div>
+          </div>
+          <div class="cfg-toggle-row">
+            <span>Pattern-to-Automation Suggestions</span>
+            <div class="cfg-tog on" id="tog-pattern-suggest" onclick="cfgToggle('tog-pattern-suggest','pattern_automation_suggestions_enabled')"></div>
+          </div>
+          <div class="cfg-toggle-row" style="margin-top:10px;">
+            <span>Screen-Aware Assistance (reads active window text)</span>
+            <div class="cfg-tog" id="tog-screen-aware" onclick="cfgToggle('tog-screen-aware','screen_aware_enabled')"></div>
+          </div>
+          <div class="cfg-label" style="margin-top:10px;">EXCLUDED APPS (comma-separated, checked before any OCR)</div>
+          <input class="cfg-inp" id="cfg-screen-aware-excl" placeholder="keepass, 1password, bitwarden, lastpass" autocomplete="off">
+        </div>
+        <div class="sp-divider"></div>
+        <div class="sp-sec">
+          <div class="sp-sec-title">EMAIL AGENT</div>
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+            <div id="email-status-dot" style="width:7px;height:7px;border-radius:50%;background:rgba(0,148,255,0.2);flex-shrink:0;transition:background .3s;"></div>
+            <span id="email-status-lbl" style="font-size:8px;letter-spacing:.2em;color:rgba(0,148,255,0.4);">NOT CONNECTED</span>
+          </div>
+          <div id="email-auth-row" style="display:flex;gap:6px;margin-bottom:10px;">
+            <button onclick="emailConnectStart()"
+              style="flex:1;padding:5px 0;background:rgba(0,148,255,0.1);border:1px solid rgba(0,148,255,0.3);
+                     border-radius:3px;color:rgba(0,200,255,0.8);font-family:'Share Tech Mono';font-size:8px;
+                     letter-spacing:.15em;cursor:pointer;">
+              ⊕ CONNECT GMAIL (read-only)
+            </button>
+          </div>
+          <div id="email-disconnect-row" style="display:none;margin-bottom:10px;">
+            <button onclick="emailDisconnect()"
+              style="width:100%;padding:5px 0;background:rgba(255,61,61,0.08);border:1px solid rgba(255,61,61,0.25);
+                     border-radius:3px;color:rgba(255,100,100,0.8);font-family:'Share Tech Mono';font-size:8px;
+                     letter-spacing:.15em;cursor:pointer;">
+              DISCONNECT
+            </button>
+          </div>
+          <div class="cfg-toggle-row">
+            <span>Email Agent Enabled</span>
+            <div class="cfg-tog" id="tog-email-agent" onclick="cfgToggle('tog-email-agent','email_agent_enabled')"></div>
+          </div>
+          <div class="cfg-toggle-row" style="margin-top:6px;">
+            <span>Watch for OTPs</span>
+            <div class="cfg-tog on" id="tog-email-otp" onclick="cfgToggle('tog-email-otp','email_watch_otp')"></div>
+          </div>
+          <div class="cfg-toggle-row" style="margin-top:6px;">
+            <span>Watch for Replies</span>
+            <div class="cfg-tog on" id="tog-email-replies" onclick="cfgToggle('tog-email-replies','email_watch_replies')"></div>
+          </div>
+          <div class="cfg-toggle-row" style="margin-top:6px;">
+            <span>Watch Keywords/Senders (list below)</span>
+            <div class="cfg-tog on" id="tog-email-keywords" onclick="cfgToggle('tog-email-keywords','email_watch_keywords')"></div>
+          </div>
+          <div class="cfg-toggle-row" style="margin-top:6px;">
+            <span>Track Orders/Shipments</span>
+            <div class="cfg-tog on" id="tog-email-orders" onclick="cfgToggle('tog-email-orders','email_track_orders')"></div>
+          </div>
+          <div class="cfg-label" style="margin-top:10px;">WATCHLIST (comma-separated senders/subjects, e.g. "Dell Support Assist, Amazon Delivery")</div>
+          <input class="cfg-inp" id="cfg-email-watchlist" placeholder="Dell Support Assist, Amazon Delivery" autocomplete="off">
+          <button onclick="emailSaveWatchlist()"
+            style="margin-top:6px;padding:4px 10px;background:rgba(0,148,255,0.1);border:1px solid rgba(0,148,255,0.3);
+                   border-radius:3px;color:rgba(0,200,255,0.8);font-family:'Share Tech Mono';font-size:8px;
+                   letter-spacing:.1em;cursor:pointer;">SAVE WATCHLIST</button>
+          <div class="cfg-label" style="margin-top:12px;">TRACKED ORDERS</div>
+          <div id="email-orders-list" style="font-size:10px;color:rgba(0,148,255,0.5);font-family:'Share Tech Mono';">No tracked orders yet.</div>
+        </div>
+        <div class="sp-divider"></div>
+        <div class="sp-sec">
+          <div class="sp-sec-title">NOTIFICATIONS <span style="font-size:8px;opacity:.6;">(WhatsApp + Calendar + System + Email, ranked)</span></div>
+          <div id="notif-feed-list" style="font-size:10px;color:rgba(0,148,255,0.5);font-family:'Share Tech Mono';">Loading…</div>
+          <button onclick="loadNotificationFeed()"
+            style="margin-top:8px;padding:4px 10px;background:rgba(0,148,255,0.1);border:1px solid rgba(0,148,255,0.3);
+                   border-radius:3px;color:rgba(0,200,255,0.8);font-family:'Share Tech Mono';font-size:8px;
+                   letter-spacing:.1em;cursor:pointer;">↻ REFRESH</button>
         </div>
         <div class="sp-divider"></div>
         <div class="sp-sec">
@@ -2090,14 +2217,16 @@ body.spotlight-mode .pnl:not(.spotlighted) {
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
           <input class="sp-add-inp" id="cl-inp-title" placeholder="Link Title  e.g. Google Slides" style="flex:1;min-width:140px;">
           <input class="sp-add-inp" id="cl-inp-url"   placeholder="URL  e.g. https://slides.google.com" style="flex:2;min-width:180px;">
+          <input class="sp-add-inp" id="cl-inp-folder" placeholder="Folder  e.g. Work (optional)" style="flex:1;min-width:120px;">
           <button class="sp-add-btn" onclick="clAdd()">+ ADD</button>
         </div>
         <div style="font-size:8px;letter-spacing:.1em;color:rgba(0,148,255,0.4);margin-top:6px;" id="cl-msg"></div>
       </div>
       <!-- Table header -->
-      <div style="display:grid;grid-template-columns:1fr 2fr 28px;gap:0;padding:6px 28px 3px;flex-shrink:0;border-bottom:1px solid rgba(0,148,255,0.06);">
+      <div style="display:grid;grid-template-columns:1fr 2fr 1fr 28px;gap:0;padding:6px 28px 3px;flex-shrink:0;border-bottom:1px solid rgba(0,148,255,0.06);">
         <div style="font-size:7px;letter-spacing:.35em;color:rgba(0,148,255,0.28);">TITLE</div>
         <div style="font-size:7px;letter-spacing:.35em;color:rgba(0,148,255,0.28);">URL</div>
+        <div style="font-size:7px;letter-spacing:.35em;color:rgba(0,148,255,0.28);">FOLDER</div>
         <div></div>
       </div>
       <!-- Scrollable list -->
@@ -2107,6 +2236,75 @@ body.spotlight-mode .pnl:not(.spotlighted) {
       <div class="sp-save-row" style="flex-shrink:0;">
         <button class="sp-save-btn" onclick="clSave()">SAVE TO iZACH</button>
         <span class="sp-save-msg" id="cl-save-msg"></span>
+      </div>
+    </div>
+
+    <!-- ── BROWSER SETTINGS TAB ── -->
+    <div class="sp-panel" id="sptab-browser">
+      <div class="sp-scroll">
+
+        <!-- HISTORY -->
+        <div style="padding:14px 28px 6px;border-bottom:1px solid rgba(0,148,255,0.07);">
+          <div style="font-size:7px;letter-spacing:.4em;color:rgba(0,148,255,0.32);margin-bottom:8px;">BROWSING HISTORY</div>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+            <input class="sp-add-inp" id="bh-search" placeholder="Search history..." oninput="bhSearch(this.value)" style="flex:1;min-width:160px;">
+            <button class="sp-add-btn" onclick="bhClearAll()" style="background:rgba(255,61,61,0.1);border-color:rgba(255,61,61,0.3);color:#ff8080;">CLEAR ALL</button>
+          </div>
+        </div>
+        <div class="sp-list-wrap" id="bh-list" style="padding:8px 28px 16px;max-height:220px;overflow-y:auto;">
+          <div class="sp-empty" id="bh-empty">No history yet.</div>
+        </div>
+
+        <!-- CACHE -->
+        <div style="padding:14px 28px;border-bottom:1px solid rgba(0,148,255,0.07);display:flex;align-items:center;justify-content:space-between;gap:12px;">
+          <div>
+            <div style="font-size:7px;letter-spacing:.4em;color:rgba(0,148,255,0.32);margin-bottom:4px;">CACHE</div>
+            <div style="font-size:8px;color:rgba(0,148,255,0.4);">Clears the internal browser's cached files, cookies for cached resources, and service workers.</div>
+          </div>
+          <button class="sp-add-btn" onclick="bClearCache()">CLEAR CACHE</button>
+        </div>
+        <div style="padding:0 28px;font-size:8px;letter-spacing:.1em;color:rgba(0,148,255,0.4);" id="bh-cache-msg"></div>
+
+        <!-- PASSWORDS -->
+        <div style="padding:14px 28px 6px;border-top:1px solid rgba(0,148,255,0.07);margin-top:10px;">
+          <div style="font-size:7px;letter-spacing:.4em;color:rgba(0,148,255,0.32);margin-bottom:8px;">SAVED PASSWORDS — encrypted at rest (OS-level)</div>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+            <input class="sp-add-inp" id="bp-inp-site" placeholder="Site  e.g. instagram.com" style="flex:1;min-width:140px;">
+            <input class="sp-add-inp" id="bp-inp-user" placeholder="Username / email" style="flex:1;min-width:140px;">
+            <input class="sp-add-inp" id="bp-inp-pass" type="password" placeholder="Password" style="flex:1;min-width:120px;">
+            <button class="sp-add-btn" onclick="bpAdd()">+ ADD</button>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;margin-top:8px;">
+            <input type="file" id="bp-import-file" accept=".csv" style="display:none;" onchange="bpImportFile(this)">
+            <button class="sp-add-btn" onclick="document.getElementById('bp-import-file').click()">IMPORT FROM GOOGLE PASSWORDS (.CSV)</button>
+            <span style="font-size:8px;letter-spacing:.1em;color:rgba(0,148,255,0.4);" id="bp-msg"></span>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1.2fr 1.2fr 1fr 50px;gap:0;padding:6px 28px 3px;border-bottom:1px solid rgba(0,148,255,0.06);">
+          <div style="font-size:7px;letter-spacing:.35em;color:rgba(0,148,255,0.28);">SITE</div>
+          <div style="font-size:7px;letter-spacing:.35em;color:rgba(0,148,255,0.28);">USERNAME</div>
+          <div style="font-size:7px;letter-spacing:.35em;color:rgba(0,148,255,0.28);">PASSWORD</div>
+          <div></div>
+        </div>
+        <div class="sp-list-wrap" id="bp-list" style="padding:0 28px 24px;">
+          <div class="sp-empty" id="bp-empty">No saved passwords yet.</div>
+        </div>
+
+        <!-- AUTOFILL / WINDOWS HELLO -->
+        <div style="padding:14px 28px 20px;border-top:1px solid rgba(0,148,255,0.07);margin-top:6px;">
+          <div style="font-size:7px;letter-spacing:.4em;color:rgba(0,148,255,0.32);margin-bottom:8px;">AUTOFILL — VERIFIED BY WINDOWS HELLO</div>
+          <div style="font-size:8px;color:rgba(0,148,255,0.4);margin-bottom:10px;line-height:1.6;">
+            The 🔑 button in the browser toolbar fills a saved login into the page. Every use re-verifies with your
+            PIN, fingerprint, or face via Windows Hello first — the password is never decrypted without it.
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <span id="wh-status-dot" style="width:8px;height:8px;border-radius:50%;background:rgba(255,80,80,0.5);flex-shrink:0;"></span>
+            <span id="wh-status-txt" style="font-size:9px;letter-spacing:.1em;color:rgba(0,148,255,0.5);">Checking…</span>
+            <button class="sp-add-btn" id="wh-enroll-btn" onclick="whEnroll()">SET UP WINDOWS HELLO</button>
+            <span style="font-size:8px;letter-spacing:.1em;color:rgba(0,148,255,0.4);" id="wh-msg"></span>
+          </div>
+        </div>
+
       </div>
     </div>
 
@@ -2253,6 +2451,12 @@ body.spotlight-mode .pnl:not(.spotlighted) {
         <span id="phone-qr-ph" style="font-size:8px;color:rgba(0,148,255,0.65);letter-spacing:.15em;">QR LOADING</span>
       </div>
       <div class="ph-qr-hint" style="margin-top:6px;">SCAN WITH iZACH ANDROID APP</div>
+      <div style="margin-top:8px;text-align:center;">
+        <span style="font-size:7px;letter-spacing:.15em;color:rgba(0,148,255,0.4);">MANUAL PAIRING — TAP TO COPY SECRET</span>
+        <div id="phone-pairing-secret" onclick="_copyPairingSecret()" title="Copy pairing secret"
+             style="cursor:pointer;font-size:8px;color:rgba(0,148,255,0.6);word-break:break-all;padding:4px 8px;
+                    background:rgba(0,148,255,0.05);border:1px solid rgba(0,148,255,0.15);border-radius:3px;margin-top:3px;">···</div>
+      </div>
     </div>
     <div id="phone-on-state" style="display:none;flex-direction:column;align-items:center;gap:6px;padding:10px 12px;">
       <div style="display:flex;align-items:center;gap:8px;">
@@ -2471,6 +2675,205 @@ body.spotlight-mode .pnl:not(.spotlighted) {
     </div>
   </div>
   <div class="rh"></div>
+</div>
+
+<!-- STATUS DASHBOARD — at-a-glance view of what's currently running/enrolled -->
+<div id="p-dashboard" class="pnl">
+  <div class="cb cb-tl"></div><div class="cb cb-tr"></div><div class="cb cb-bl"></div><div class="cb cb-br"></div>
+  <div class="ph">
+    <span class="ph-id">SD · WHAT'S RUNNING</span>
+    <span class="ph-cat">
+      <div class="ph-dot"></div>STATUS
+      <span class="ph-min">—</span>
+    </span>
+  </div>
+  <div class="pnl-body" id="p-dashboard-body" style="overflow-y:auto;">
+    <div style="padding:6px 14px 2px;display:flex;justify-content:space-between;align-items:center;">
+      <span style="font-size:7px;letter-spacing:.3em;color:rgba(0,148,255,0.32);">LIVE STATUS · ALL SUBSYSTEMS</span>
+      <button onclick="loadDashboard()" style="background:transparent;border:none;color:rgba(0,148,255,0.4);font-size:12px;cursor:pointer;">↻</button>
+    </div>
+    <div id="dashboard-list">
+      <div style="padding:20px 14px;color:rgba(0,148,255,0.25);font-size:9px;letter-spacing:.2em;text-align:center;">LOADING...</div>
+    </div>
+  </div>
+  <div class="rh"></div>
+</div>
+
+<!-- BROWSER PANEL -->
+<div id="p-browser" class="pnl">
+  <div class="cb cb-tl"></div><div class="cb cb-tr"></div><div class="cb cb-bl"></div><div class="cb cb-br"></div>
+  <div class="ph"><span class="ph-id">25 · BROWSER</span><span class="ph-cat"><div class="ph-dot"></div>WEB<span class="ph-min">—</span></span></div>
+  <div class="pnl-body" style="display:flex;flex-direction:column;padding:0;">
+    <div id="browser-tabstrip" style="display:flex;align-items:center;gap:2px;padding:6px 6px 0;overflow-x:auto;flex-shrink:0;"></div>
+    <div style="display:flex;align-items:center;gap:6px;padding:6px 10px 8px;border-bottom:1px solid rgba(0,148,255,0.10);flex-shrink:0;flex-wrap:wrap;">
+      <button onclick="browserNav('back')"  title="Back"    style="background:transparent;border:none;color:rgba(0,148,255,0.55);font-size:13px;cursor:pointer;padding:2px 4px;">‹</button>
+      <button onclick="browserNav('fwd')"   title="Forward" style="background:transparent;border:none;color:rgba(0,148,255,0.55);font-size:13px;cursor:pointer;padding:2px 4px;">›</button>
+      <button onclick="browserNav('reload')" title="Reload" style="background:transparent;border:none;color:rgba(0,148,255,0.55);font-size:12px;cursor:pointer;padding:2px 4px;">↻</button>
+      <button onclick="browserGoHome()" title="Home" style="background:transparent;border:none;color:rgba(0,148,255,0.55);font-size:12px;cursor:pointer;padding:2px 4px;">⌂</button>
+      <input id="browser-addr" type="text" placeholder="Search Google or enter a URL"
+             onkeydown="if(event.key==='Enter')browserGo(this.value)"
+             style="flex:1;min-width:120px;background:rgba(0,148,255,0.05);border:1px solid rgba(0,148,255,0.15);border-radius:4px;
+                    color:var(--th);font-family:'JetBrains Mono',monospace;font-size:10px;padding:5px 8px;outline:none;">
+      <button id="browser-bookmark-btn" onclick="browserToggleBookmark()" title="Bookmark this page"
+              style="background:transparent;border:none;color:rgba(0,148,255,0.55);font-size:13px;cursor:pointer;padding:2px 4px;">☆</button>
+      <div style="position:relative;">
+        <button id="browser-settings-btn" onclick="browserToggleSettingsMenu()" title="Browser menu"
+                style="background:transparent;border:none;color:rgba(0,148,255,0.55);font-size:12px;cursor:pointer;padding:2px 6px;">⚙</button>
+        <div id="browser-settings-menu" style="display:none;position:absolute;top:100%;right:0;z-index:50;width:250px;
+             max-height:70vh;overflow-y:auto;
+             background:#050d1a;border:1px solid rgba(0,148,255,0.25);border-radius:4px;box-shadow:0 8px 24px rgba(0,0,0,0.5);
+             font-family:'JetBrains Mono',monospace;padding:8px;">
+          <div style="font-size:7px;letter-spacing:.25em;color:rgba(0,148,255,0.35);padding:2px 4px 6px;">ZOOM</div>
+          <div style="display:flex;align-items:center;gap:6px;padding:0 4px 8px;">
+            <button onclick="browserZoom(-0.5)" style="flex:1;background:rgba(0,148,255,0.07);border:1px solid rgba(0,148,255,0.15);color:var(--th);font-size:12px;padding:4px 0;cursor:pointer;border-radius:3px;">−</button>
+            <span id="browser-zoom-label" style="font-size:9px;color:rgba(0,148,255,0.6);width:38px;text-align:center;">100%</span>
+            <button onclick="browserZoom(0.5)" style="flex:1;background:rgba(0,148,255,0.07);border:1px solid rgba(0,148,255,0.15);color:var(--th);font-size:12px;padding:4px 0;cursor:pointer;border-radius:3px;">+</button>
+            <button onclick="browserZoomReset()" title="Reset zoom" style="background:rgba(0,148,255,0.07);border:1px solid rgba(0,148,255,0.15);color:rgba(0,148,255,0.55);font-size:9px;padding:4px 6px;cursor:pointer;border-radius:3px;">100%</button>
+          </div>
+          <div style="height:1px;background:rgba(0,148,255,0.08);margin:2px 4px 6px;"></div>
+
+          <div style="font-size:7px;letter-spacing:.25em;color:rgba(0,148,255,0.35);padding:2px 4px 6px;">TAB &amp; PAGE</div>
+          <button onclick="browserNewTab();browserToggleSettingsMenu(true)" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:var(--th);font-size:10px;padding:6px 4px;cursor:pointer;">+ New Tab</button>
+          <button id="browser-rec-btn" onclick="browserToggleRecording()" title="Record actions for replay later"
+                  style="display:block;width:100%;text-align:left;background:transparent;border:none;color:rgba(255,80,80,0.55);font-size:10px;padding:6px 4px;cursor:pointer;">● Start Recording</button>
+          <button id="browser-autofill-btn" onclick="browserAutofill();browserToggleSettingsMenu(true)" title="No saved login for this site" disabled
+                  style="display:block;width:100%;text-align:left;background:transparent;border:none;color:rgba(0,148,255,0.2);font-size:10px;padding:6px 4px;cursor:default;">🔑 Autofill Saved Login</button>
+          <div style="height:1px;background:rgba(0,148,255,0.08);margin:6px 4px;"></div>
+
+          <div style="font-size:7px;letter-spacing:.25em;color:rgba(0,148,255,0.35);padding:2px 4px 6px;">PANELS</div>
+          <button onclick="browserOpenDownloadsPage()" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:var(--th);font-size:10px;padding:6px 4px;cursor:pointer;">⬇ Downloads</button>
+          <button onclick="browserOpenHistoryPage()" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:var(--th);font-size:10px;padding:6px 4px;cursor:pointer;">🕘 History</button>
+          <button onclick="browserToggleBookmarksPanel();browserToggleSettingsMenu(true)" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:var(--th);font-size:10px;padding:6px 4px;cursor:pointer;">★ Bookmarks</button>
+          <button onclick="browserToggleRecordingsPanel();browserToggleSettingsMenu(true)" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:var(--th);font-size:10px;padding:6px 4px;cursor:pointer;">☰ Recordings</button>
+          <button onclick="browserTogglePermissionsPanel();browserToggleSettingsMenu(true)" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:var(--th);font-size:10px;padding:6px 4px;cursor:pointer;">🔒 Permissions</button>
+          <div style="height:1px;background:rgba(0,148,255,0.08);margin:6px 4px;"></div>
+
+          <div style="font-size:7px;letter-spacing:.25em;color:rgba(0,148,255,0.35);padding:2px 4px 6px;">TOOLS</div>
+          <button onclick="browserSendToPhone();browserToggleSettingsMenu(true)" title="Push this page to the paired iZACH phone app" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:var(--th);font-size:10px;padding:6px 4px;cursor:pointer;">📱 Send to Phone</button>
+          <button onclick="browserTogglePhoneTabsPanel()" title="See what's open on the phone right now" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:var(--th);font-size:10px;padding:6px 4px;cursor:pointer;">📲 Tabs from Phone</button>
+          <button onclick="browserOpenInExternalWindow();browserToggleSettingsMenu(true)" title="Continue this page in the standalone iZACH Browser window" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:var(--th);font-size:10px;padding:6px 4px;cursor:pointer;">⧉ Open in Browser Window</button>
+          <button id="browser-reader-btn" onclick="browserToggleReaderMode();browserToggleSettingsMenu(true)" title="Reader mode — strip ads/clutter" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:var(--th);font-size:10px;padding:6px 4px;cursor:pointer;">📖 Reader Mode</button>
+          <button onclick="browserRequestPiP();browserToggleSettingsMenu(true)" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:var(--th);font-size:10px;padding:6px 4px;cursor:pointer;">⧈ Picture-in-Picture</button>
+          <button onclick="browserClipToOcr();browserToggleSettingsMenu(true)" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:var(--th);font-size:10px;padding:6px 4px;cursor:pointer;">✂ Clip to OCR</button>
+          <button onclick="browserToggleDevTools();browserToggleSettingsMenu(true)" title="F12" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:var(--th);font-size:10px;padding:6px 4px;cursor:pointer;">&lt;/&gt; Inspect (DevTools)</button>
+          <div style="height:1px;background:rgba(0,148,255,0.08);margin:6px 4px;"></div>
+
+          <button onclick="bClearCache();browserToggleSettingsMenu(true)" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:rgba(255,80,80,0.6);font-size:10px;padding:6px 4px;cursor:pointer;">⌫ Clear Cache</button>
+        </div>
+      </div>
+    </div>
+    <div id="browser-permissions-panel" style="display:none;flex-direction:column;gap:4px;padding:8px 10px;border-bottom:1px solid rgba(0,148,255,0.10);
+         max-height:140px;overflow-y:auto;flex-shrink:0;font-family:'JetBrains Mono',monospace;font-size:9px;"></div>
+    <div id="browser-recordings-panel" style="display:none;flex-direction:column;gap:4px;padding:8px 10px;border-bottom:1px solid rgba(0,148,255,0.10);
+         max-height:120px;overflow-y:auto;flex-shrink:0;font-family:'JetBrains Mono',monospace;font-size:9px;"></div>
+    <div id="browser-bookmarks-panel" style="display:none;flex-direction:column;gap:6px;padding:8px 10px;border-bottom:1px solid rgba(0,148,255,0.10);
+         max-height:160px;overflow-y:auto;flex-shrink:0;font-family:'JetBrains Mono',monospace;font-size:9px;"></div>
+    <div id="browser-phone-tabs-panel" style="display:none;flex-direction:column;gap:6px;padding:8px 10px;border-bottom:1px solid rgba(0,148,255,0.10);
+         max-height:160px;overflow-y:auto;flex-shrink:0;font-family:'JetBrains Mono',monospace;font-size:9px;"></div>
+    <div id="browser-webviews" style="flex:1;position:relative;">
+      <div id="browser-findbar" style="display:none;position:absolute;top:8px;right:8px;z-index:5;
+           background:#050d1a;border:1px solid rgba(0,148,255,0.25);border-radius:4px;box-shadow:0 4px 16px rgba(0,0,0,0.4);
+           padding:6px 8px;align-items:center;gap:6px;font-family:'JetBrains Mono',monospace;">
+        <input id="browser-find-input" type="text" placeholder="Find in page"
+               oninput="_browserFindDebounced()"
+               onkeydown="if(event.key==='Enter'){event.preventDefault();_browserFindNext(event.shiftKey);} else if(event.key==='Escape'){browserToggleFindInPage(true);}"
+               style="width:140px;background:rgba(0,148,255,0.05);border:1px solid rgba(0,148,255,0.15);border-radius:3px;color:var(--th);font-family:inherit;font-size:10px;padding:4px 6px;outline:none;">
+        <span id="browser-find-count" style="font-size:8.5px;color:rgba(0,148,255,0.4);min-width:36px;">0/0</span>
+        <button onclick="_browserFindNext(true)" title="Previous match" style="background:transparent;border:none;color:rgba(0,148,255,0.55);font-size:11px;cursor:pointer;padding:2px 4px;">▲</button>
+        <button onclick="_browserFindNext(false)" title="Next match" style="background:transparent;border:none;color:rgba(0,148,255,0.55);font-size:11px;cursor:pointer;padding:2px 4px;">▼</button>
+        <button onclick="browserToggleFindInPage(true)" title="Close" style="background:transparent;border:none;color:rgba(255,80,80,0.5);font-size:11px;cursor:pointer;padding:2px 4px;">✕</button>
+      </div>
+    </div>
+  </div>
+  <div class="rh"></div>
+</div>
+
+<!-- RECORDING STEP EDITOR (full-screen overlay) -->
+<div id="rec-editor-page" style="position:fixed;inset:0;z-index:10004;background:rgba(1,4,18,0.98);
+     display:flex;flex-direction:column;opacity:0;pointer-events:none;transition:opacity 0.2s;
+     font-family:'JetBrains Mono',monospace;">
+  <div style="display:flex;align-items:center;padding:0 20px;height:46px;border-bottom:1px solid rgba(0,148,255,0.1);flex-shrink:0;">
+    <span style="flex:1;font-size:9px;letter-spacing:.4em;color:rgba(0,148,255,0.55);">EDIT RECORDING</span>
+    <button onclick="_seCancel()" style="background:none;border:1px solid rgba(0,148,255,0.13);color:rgba(0,148,255,0.38);font-size:8.5px;letter-spacing:.2em;padding:5px 14px;cursor:pointer;">✕ CLOSE</button>
+  </div>
+  <div style="flex:1;overflow-y:auto;padding:18px 24px;max-width:760px;margin:0 auto;width:100%;box-sizing:border-box;">
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px;">
+      <div>
+        <div style="font-size:7.5px;letter-spacing:.3em;color:rgba(0,148,255,0.4);margin-bottom:5px;">NAME</div>
+        <input id="se-name" type="text" placeholder="e.g. Instagram DM"
+               style="width:100%;box-sizing:border-box;background:rgba(0,148,255,0.05);border:1px solid rgba(0,148,255,0.15);border-radius:4px;color:var(--th);font-family:inherit;font-size:11px;padding:7px 9px;outline:none;">
+      </div>
+      <div>
+        <div style="font-size:7.5px;letter-spacing:.3em;color:rgba(0,148,255,0.4);margin-bottom:5px;">TRIGGER PHRASES <span style="color:rgba(0,148,255,0.25);">(comma-separated, optional)</span></div>
+        <input id="se-triggers" type="text" placeholder="e.g. check my messages, open instagram dm"
+               style="width:100%;box-sizing:border-box;background:rgba(0,148,255,0.05);border:1px solid rgba(0,148,255,0.15);border-radius:4px;color:var(--th);font-family:inherit;font-size:11px;padding:7px 9px;outline:none;">
+      </div>
+    </div>
+
+    <div style="margin-bottom:16px;">
+      <div style="font-size:7.5px;letter-spacing:.3em;color:rgba(0,148,255,0.4);margin-bottom:5px;">
+        RUN ON A SCHEDULE <span style="color:rgba(0,148,255,0.25);">(optional — cron: minute hour dom month dow)</span>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <input id="se-schedule" type="text" placeholder="e.g. 0 9 * * *  (every day at 9:00am)"
+               style="flex:1;box-sizing:border-box;background:rgba(0,148,255,0.05);border:1px solid rgba(0,148,255,0.15);border-radius:4px;color:var(--th);font-family:inherit;font-size:11px;padding:7px 9px;outline:none;">
+        <button onclick="document.getElementById('se-schedule').value=''" title="Clear schedule" style="background:none;border:1px solid rgba(255,80,80,0.15);color:rgba(255,80,80,0.4);font-size:9px;padding:7px 10px;cursor:pointer;border-radius:4px;">✕</button>
+      </div>
+    </div>
+
+    <div style="height:1px;background:rgba(0,148,255,0.08);margin:8px 0 14px;"></div>
+
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+      <div style="font-size:7.5px;letter-spacing:.3em;color:rgba(0,148,255,0.4);">STEPS</div>
+      <button onclick="_seTogglePreview()" id="se-preview-btn" style="background:none;border:1px solid rgba(0,148,255,0.15);color:rgba(0,148,255,0.5);font-size:8.5px;letter-spacing:.1em;padding:4px 10px;cursor:pointer;border-radius:4px;">👁 DRY-RUN PREVIEW</button>
+    </div>
+    <div id="se-preview" style="display:none;background:rgba(0,148,255,0.04);border:1px solid rgba(0,148,255,0.1);border-radius:4px;padding:10px 12px;margin-bottom:12px;font-size:10px;line-height:1.7;color:rgba(0,148,255,0.7);white-space:pre-wrap;"></div>
+    <div id="se-steps" style="display:flex;flex-direction:column;gap:6px;margin-bottom:20px;"></div>
+
+    <div style="display:flex;gap:10px;justify-content:flex-end;padding-bottom:24px;">
+      <button onclick="_seCancel()" style="background:none;border:1px solid rgba(0,148,255,0.15);color:rgba(0,148,255,0.5);font-size:9px;letter-spacing:.15em;padding:8px 18px;cursor:pointer;border-radius:4px;">CANCEL</button>
+      <button onclick="_seSave()" style="background:rgba(29,185,84,0.12);border:1px solid rgba(29,185,84,0.4);color:#1db954;font-size:9px;letter-spacing:.15em;padding:8px 18px;cursor:pointer;border-radius:4px;">SAVE RECORDING</button>
+    </div>
+  </div>
+</div>
+
+<!-- DOWNLOADS (full-screen overlay, like chrome://downloads) -->
+<div id="downloads-page" style="position:fixed;inset:0;z-index:10004;background:rgba(1,4,18,0.98);
+     display:flex;flex-direction:column;opacity:0;pointer-events:none;transition:opacity 0.2s;
+     font-family:'JetBrains Mono',monospace;">
+  <div style="display:flex;align-items:center;gap:12px;padding:0 20px;height:46px;border-bottom:1px solid rgba(0,148,255,0.1);flex-shrink:0;">
+    <span style="font-size:9px;letter-spacing:.4em;color:rgba(0,148,255,0.55);">DOWNLOADS</span>
+    <input id="dl-search" type="text" placeholder="Search downloads"
+           oninput="_dlRender()"
+           style="flex:1;max-width:320px;background:rgba(0,148,255,0.05);border:1px solid rgba(0,148,255,0.15);border-radius:4px;color:var(--th);font-family:inherit;font-size:11px;padding:6px 10px;outline:none;">
+    <div style="flex:1;"></div>
+    <button onclick="_dlClearAll()" style="background:none;border:1px solid rgba(255,80,80,0.2);color:rgba(255,80,80,0.5);font-size:8.5px;letter-spacing:.15em;padding:5px 12px;cursor:pointer;border-radius:4px;">CLEAR ALL</button>
+    <button onclick="browserCloseDownloadsPage()" style="background:none;border:1px solid rgba(0,148,255,0.13);color:rgba(0,148,255,0.38);font-size:8.5px;letter-spacing:.2em;padding:5px 14px;cursor:pointer;">✕ CLOSE</button>
+  </div>
+  <div style="flex:1;overflow-y:auto;padding:18px 24px;max-width:760px;margin:0 auto;width:100%;box-sizing:border-box;">
+    <div id="dl-empty" style="display:none;color:rgba(0,148,255,0.3);font-size:11px;text-align:center;padding:40px 0;">No downloads yet.</div>
+    <div id="dl-list" style="display:flex;flex-direction:column;gap:1px;"></div>
+  </div>
+</div>
+
+<!-- HISTORY (full-screen overlay, like chrome://history) -->
+<div id="history-page" style="position:fixed;inset:0;z-index:10004;background:rgba(1,4,18,0.98);
+     display:flex;flex-direction:column;opacity:0;pointer-events:none;transition:opacity 0.2s;
+     font-family:'JetBrains Mono',monospace;">
+  <div style="display:flex;align-items:center;gap:12px;padding:0 20px;height:46px;border-bottom:1px solid rgba(0,148,255,0.1);flex-shrink:0;">
+    <span style="font-size:9px;letter-spacing:.4em;color:rgba(0,148,255,0.55);">HISTORY</span>
+    <input id="hist-search" type="text" placeholder="Search history"
+           oninput="_histSearchDebounced()"
+           style="flex:1;max-width:320px;background:rgba(0,148,255,0.05);border:1px solid rgba(0,148,255,0.15);border-radius:4px;color:var(--th);font-family:inherit;font-size:11px;padding:6px 10px;outline:none;">
+    <div style="flex:1;"></div>
+    <button onclick="_histClearAll()" style="background:none;border:1px solid rgba(255,80,80,0.2);color:rgba(255,80,80,0.5);font-size:8.5px;letter-spacing:.15em;padding:5px 12px;cursor:pointer;border-radius:4px;">CLEAR ALL</button>
+    <button onclick="browserCloseHistoryPage()" style="background:none;border:1px solid rgba(0,148,255,0.13);color:rgba(0,148,255,0.38);font-size:8.5px;letter-spacing:.2em;padding:5px 14px;cursor:pointer;">✕ CLOSE</button>
+  </div>
+  <div style="flex:1;overflow-y:auto;padding:18px 24px;max-width:760px;margin:0 auto;width:100%;box-sizing:border-box;">
+    <div id="hist-empty" style="display:none;color:rgba(0,148,255,0.3);font-size:11px;text-align:center;padding:40px 0;">No history yet.</div>
+    <div id="hist-list" style="display:flex;flex-direction:column;gap:1px;"></div>
+  </div>
 </div>
 
 <!-- AGENTS PANEL -->
@@ -2698,7 +3101,7 @@ body.spotlight-mode .pnl:not(.spotlighted) {
                letter-spacing:.2em;cursor:pointer;transition:background .15s;"
         onmouseover="this.style.background='rgba(0,148,255,0.22)'"
         onmouseout="this.style.background='rgba(0,148,255,0.12)'">
-        ⎙ OPEN IN CHROME
+        ⎙ OPEN IN iZACH BROWSER
       </button>
       <button onclick="printClearQueue()"
         style="padding:6px 10px;background:rgba(255,50,50,0.05);border:1px solid rgba(255,50,50,0.18);
@@ -3565,7 +3968,7 @@ tick(); setInterval(tick,1000);
 // STATE MACHINE
 // ════════════════════════════════════════════════════
 let camStream=null;
-const allWgts=['p-comm','p-audio','p-sched','p-sys','p-intel','p-mem','p-msg','p-wx','p-feed','p-hist','p-clock','p-phone','p-devices','p-agents','p-ocr','p-print','p-fit','p-loc','p-sh','p-sc','p-ig','p-skills','p-apimon'];
+const allWgts=['p-comm','p-audio','p-sched','p-sys','p-intel','p-mem','p-msg','p-wx','p-feed','p-hist','p-clock','p-phone','p-devices','p-agents','p-ocr','p-print','p-fit','p-loc','p-sh','p-sc','p-ig','p-skills','p-apimon','p-browser','p-dashboard'];
 const dkMap={'p-comm':'dk-comm','p-audio':'dk-aud','p-sched':'dk-sch','p-sys':'dk-sys','p-intel':'dk-int','p-mem':'dk-mem','p-msg':'dk-msg','p-wx':'dk-wx','p-rel':'dk-rel','p-feed':'dk-feed','p-hist':'dk-hist','p-clock':'dk-clk','p-phone':'dk-phone','p-devices':'dk-devices','p-agents':'dk-agents'};
 
 function slideScreens(show){
@@ -3620,6 +4023,7 @@ function hideDock(){}
 const defaultWgts=['p-comm','p-audio','p-sched','p-sys'];
 function _syncWpBtn(w,on){
   const b=document.getElementById((wpMap||{})[w]); if(b) b.classList.toggle('on',on);
+  const tb=document.getElementById((tbMap||{})[w]); if(tb) tb.classList.toggle('on',on);
 }
 function showDefault(){
   hideAll();
@@ -3682,6 +4086,13 @@ const wpMap={
   'p-news':'wpb-news',
   'p-skills':'wpb-skills',
   'p-apimon':'wpb-apimon',
+  'p-browser':'wpb-browser',
+  'p-dashboard':'wpb-dashboard',
+};
+// Widgets that also have a direct one-click taskbar button (kept separate
+// from wpMap since most widgets only live in the widget-picker, not the taskbar).
+const tbMap={
+  'p-browser':'tb-browser',
 };
 function togWgt(id){
   const el=document.getElementById(id); if(!el)return;
@@ -3719,10 +4130,1827 @@ function togWgt(id){
   const dk=dkMap[id]; if(dk){const b=document.getElementById(dk);if(b)b.classList.toggle('on',active);}
   // Sync widget picker button highlight
   const wpb=wpMap[id]; if(wpb){const b=document.getElementById(wpb);if(b)b.classList.toggle('on',active);}
+  // Sync direct taskbar button highlight (e.g. Browser)
+  const tbb=tbMap[id]; if(tbb){const b=document.getElementById(tbb);if(b)b.classList.toggle('on',active);}
   // Auto-refresh data when widget opens
   if(active){
 
     if(id==='p-msg')  { dndLogRefresh(); }
+    if(id==='p-browser'){
+      if(browserTabs.length===0) browserRestoreOrNewTab();
+      else _browserFitActiveWebviewSoon();
+    }
+  }
+}
+
+// ════════════════════════════════════════════════════
+// BROWSER WIDGET — multi-tab
+// ════════════════════════════════════════════════════
+const BROWSER_NEW_TAB_URL='https://www.google.com';
+const BROWSER_RECORDER_PRELOAD=new URL('izach-ui/electron/browser-recorder-preload.cjs', document.baseURI).href;
+let browserTabs=[];       // [{id, webview, title, url}]
+let browserActiveId=null;
+let browserTabSeq=0;
+
+// Recording state — recording is scoped to a single tab at a time.
+let browserRecording=false;
+let browserRecordTabId=null;
+let browserRecordStartUrl=null;
+let browserRecordSteps=[];
+
+// Electron <webview> tags are known to cache a stale (often tiny) internal
+// frame size when created hidden (display:none) and shown later, or when
+// their container resizes — CSS inset:0/100% alone doesn't reliably force a
+// re-measure. Explicitly setting pixel width/height (via ResizeObserver +
+// on every tab switch) forces Electron to recompute the guest frame size.
+let _browserResizeObserver=null;
+
+function _browserFitActiveWebview(){
+  const container=document.getElementById('browser-webviews');
+  const tab=browserTabs.find(t=>t.id===browserActiveId);
+  if(!container || !tab) return;
+  const w=container.clientWidth, h=container.clientHeight;
+  if(w>0 && h>0){
+    tab.webview.style.width=w+'px';
+    tab.webview.style.height=h+'px';
+    // Resizing the HOST element doesn't fire a 'resize' event inside the GUEST
+    // page — sites that size things in JS on load (e.g. YouTube's video
+    // player) can end up stuck at whatever size the viewport was when they
+    // first laid out, rendering letterboxed even though the webview itself
+    // is now the correct size. Nudging the guest's own resize handling fixes it.
+    try{ tab.webview.executeJavaScript("window.dispatchEvent(new Event('resize'))").catch(()=>{}); }catch(e){}
+  }
+}
+
+// Fires immediately AND on the next frame — some Electron/webview timing
+// paths only report a correct clientWidth/height a frame after a display
+// or size change, so a single synchronous call isn't always enough.
+function _browserFitActiveWebviewSoon(){
+  _browserFitActiveWebview();
+  if(typeof requestAnimationFrame!=='undefined') requestAnimationFrame(_browserFitActiveWebview);
+}
+
+function _browserEnsureResizeObserver(){
+  if(_browserResizeObserver || typeof ResizeObserver==='undefined') return;
+  const container=document.getElementById('browser-webviews');
+  if(!container) return;
+  _browserResizeObserver=new ResizeObserver(()=>{ _browserFitActiveWebviewSoon(); });
+  _browserResizeObserver.observe(container);
+}
+
+// Each tab is a full separate Chromium renderer (Electron <webview>) that
+// stays alive at full memory cost until its tab is explicitly closed —
+// switching tabs only hides them, it never frees anything. Capping the tab
+// count is a simple guardrail against unbounded RAM growth from tabs piling
+// up over a long session.
+const BROWSER_MAX_TABS = 6;
+
+async function browserNewTab(url){
+  if(browserTabs.length >= BROWSER_MAX_TABS){
+    showToast(`Tab limit reached (${BROWSER_MAX_TABS}) — close a tab before opening another.`, 'warn', 'BROWSER');
+    return null;
+  }
+  _browserEnsureResizeObserver();
+  const id='bt'+(++browserTabSeq);
+  const wv=document.createElement('webview');
+  wv.id='browser-wv-'+id;
+  wv.setAttribute('partition', 'persist:izach-browser');
+  wv.setAttribute('preload', BROWSER_RECORDER_PRELOAD);
+  // autoplayPolicy lets iZACH-initiated playback (e.g. "play X on YouTube")
+  // start with sound without a manual click; backgroundThrottling stays on
+  // default so a minimized panel keeps audio flowing.
+  wv.setAttribute('webpreferences', 'autoplayPolicy=no-user-gesture-required');
+  // Inactive tabs are hidden with opacity/pointer-events, NEVER display:none —
+  // Electron's <webview> guest compositor doesn't reliably re-attach at the
+  // correct viewport size when a display:none element is shown again, which
+  // is exactly what caused pages to render letterboxed/partial after a tab
+  // switch. Keeping it laid out (just invisible) avoids that resize bug.
+  wv.style.cssText='position:absolute;top:0;left:0;width:100%;height:100%;opacity:0;pointer-events:none;z-index:0;';
+  document.getElementById('browser-webviews').appendChild(wv);
+
+  const startUrl=url || BROWSER_NEW_TAB_URL;
+  const tab={id, webview:wv, title:'New Tab', url: startUrl, _domReady:false};
+  browserTabs.push(tab);
+
+  wv.addEventListener('did-navigate', e=>{ tab.url=e.url; tab._domReady=false; if(browserActiveId===id){_browserSyncAddr();_browserSyncBookmarkBtn();_browserSyncAutofillBtn();} _browserRenderTabs(); _browserSaveSession(); });
+  wv.addEventListener('did-navigate-in-page', e=>{ tab.url=e.url; if(browserActiveId===id){_browserSyncAddr();_browserSyncBookmarkBtn();_browserSyncAutofillBtn();} _browserSaveSession(); });
+  wv.addEventListener('page-title-updated', e=>{
+    tab.title=e.title||tab.url; _browserRenderTabs();
+    _browserLogHistory(tab.url, tab.title);
+  });
+  wv.addEventListener('page-favicon-updated', e=>{
+    tab.favicon=(e.favicons&&e.favicons[0])||null; _browserRenderTabs();
+  });
+  wv.addEventListener('ipc-message', async e=>{
+    if(e.channel==='browser-record-event' && browserRecording && browserRecordTabId===id){
+      const step=e.args[0];
+      // Encrypt password-field values the instant they're captured — the
+      // plaintext never sits in browserRecordSteps (or gets written to
+      // browser_recordings/*.json) for longer than this one microtask.
+      if(step.sensitive && window.izachRecordings){
+        try{ step.value=await window.izachRecordings.encrypt(step.value); }
+        catch(e2){ step.value=''; }
+      }
+      browserRecordSteps.push(step);
+    }
+  });
+  // The recorder's "am I armed?" flag lives inside the guest page's JS, so it
+  // resets to false every time the page navigates (the preload re-runs fresh).
+  // Re-arm it here, on the ONE event that reliably means "this page's JS
+  // context is ready to receive an IPC message" — sending before dom-ready
+  // throws, and without this the recorder silently stops capturing after the
+  // first navigation (e.g. instagram.com → clicking into DMs).
+  wv.addEventListener('dom-ready', ()=>{
+    tab._domReady=true;
+    if(browserRecording && browserRecordTabId===id){
+      try{ wv.send('browser-record-toggle', true); }catch(e){}
+    }
+  });
+
+  // Keyboard shortcuts while focus is INSIDE the guest page — a host-level
+  // 'keydown' listener never sees these, since the guest runs in its own
+  // renderer process. before-input-event fires on the host before the guest
+  // consumes the key, so we can still intercept Ctrl+T/W/F/etc. here.
+  wv.addEventListener('before-input-event', (e)=>{
+    const input=e.input;
+    if(!input || input.type!=='keyDown') return;
+    const handled=_browserHandleShortcut({key: input.key, ctrl: input.control||input.meta, shift: input.shift, alt: input.alt});
+    if(handled) e.preventDefault();
+  });
+  _browserWireFindInPage(wv);
+
+  // A new tab with no explicit URL opens the Home page (bookmarks + search),
+  // same convention most browsers use.
+  wv.setAttribute('src', url ? url : await _browserHomeDataUrl());
+
+  browserSwitchTab(id);
+  _browserSaveSession();
+  return tab;
+}
+
+function browserCloseTab(id, evt){
+  if(evt) evt.stopPropagation();
+  const idx=browserTabs.findIndex(t=>t.id===id);
+  if(idx===-1) return;
+
+  // Closing the tab that's actively being recorded left recording "on" with
+  // browserRecordTabId pointing at a tab that no longer exists — captured
+  // steps stopped updating, but nothing told the user recording was still
+  // (uselessly) armed until they eventually hit stop.
+  if(browserRecording && browserRecordTabId===id){
+    browserRecording=false;
+    browserRecordTabId=null;
+    const recBtn=document.getElementById('browser-rec-btn');
+    if(recBtn){ recBtn.textContent='● REC'; recBtn.style.color='rgba(255,80,80,0.55)'; }
+    showToast('Recording stopped — its tab was closed.', 'warn');
+  }
+
+  browserTabs[idx].webview.remove();
+  browserTabs.splice(idx, 1);
+
+  if(browserTabs.length===0){ browserNewTab(); return; }
+  if(browserActiveId===id){
+    const next=browserTabs[Math.max(0, idx-1)];
+    browserSwitchTab(next.id);
+  } else {
+    _browserRenderTabs();
+  }
+  _browserSaveSession();
+}
+
+function browserSwitchTab(id){
+  browserTabs.forEach(t=>{
+    const on=(t.id===id);
+    t.webview.style.opacity=on?'1':'0';
+    t.webview.style.pointerEvents=on?'auto':'none';
+    t.webview.style.zIndex=on?'1':'0';
+  });
+  browserActiveId=id;
+  _browserSyncAddr();
+  _browserSyncBookmarkBtn();
+  _browserSyncAutofillBtn();
+  _browserRenderTabs();
+  _browserFitActiveWebviewSoon();
+  browserToggleFindInPage(true); // find state is per-tab; close it like Chrome does on tab switch
+  const wv=_browserActiveWebview();
+  if(wv && wv.getZoomLevel){ try{ _browserUpdateZoomLabel(wv.getZoomLevel()); }catch(e){} }
+}
+
+// ── Session restore ──────────────────────────────────────────────────────────
+const BROWSER_SESSION_KEY='izach_browser_session';
+let _browserSessionSaveTimer=null;
+
+function _browserSaveSession(){
+  clearTimeout(_browserSessionSaveTimer);
+  _browserSessionSaveTimer=setTimeout(()=>{
+    try{
+      const urls=browserTabs.map(t=>t.url).filter(u=>u && !u.startsWith('data:'));
+      localStorage.setItem(BROWSER_SESSION_KEY, JSON.stringify(urls));
+    }catch(e){}
+    _browserPushTabsSnapshot();
+  }, 500);
+}
+
+// Pushes the FULL current tab list (not an append) so the phone's "Tabs from
+// PC" picker always reflects what's actually open — closing/reordering tabs
+// on the PC needs to be reflected too, not just new ones appearing.
+function _browserPushTabsSnapshot(){
+  const tabs=browserTabs
+    .map(t=>({url:t.url, title:t.title||t.url}))
+    .filter(t=>t.url && !t.url.startsWith('data:'));
+  fetch(`${API}/browser/tabs`, {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({device:'pc', tabs}),
+  }).catch(()=>{});
+}
+
+function _browserLoadSession(){
+  try{ return JSON.parse(localStorage.getItem(BROWSER_SESSION_KEY)||'[]'); }
+  catch(e){ return []; }
+}
+
+// Called instead of a single browserNewTab() the first time the panel opens —
+// reopens every tab from the last session, or one home tab if there wasn't one.
+async function browserRestoreOrNewTab(){
+  const urls=_browserLoadSession();
+  if(!urls.length){ await browserNewTab(); return; }
+  for(const u of urls){ await browserNewTab(u); }
+}
+
+// A guest page's window.open()/target="_blank" request (denied at the guest
+// level by main.cjs's setWindowOpenHandler, forwarded here by preload.cjs) —
+// opens as a new tab, same as every other browser. `disposition` reflects the
+// actual click (foreground for a plain click, background-tab for ctrl/cmd/
+// middle-click), so we honor it instead of always stealing focus.
+window.addEventListener('izach-new-window', async e=>{
+  const {url, disposition}=e.detail||{};
+  if(!url) return;
+  if(!document.getElementById('p-browser').classList.contains('show')) togWgt('p-browser');
+  const prevActive=browserActiveId;
+  const tab=await browserNewTab(url);
+  if(!tab) return; // tab limit reached — browserNewTab already showed the toast
+  if(disposition==='background-tab' && prevActive) browserSwitchTab(prevActive);
+  showToast(`Opened new tab: ${tab.title||url}`, 'info', 'BROWSER');
+});
+
+// ── Keyboard shortcuts (Ctrl+T/W/Tab/L/D, Alt+Left/Right, Ctrl+Plus/Minus/0) ──
+// Common-browser muscle memory. Takes {key, ctrl, shift, alt} rather than a
+// raw KeyboardEvent so the exact same logic can run from two different event
+// sources: the host document's keydown (fires when focus is on the address
+// bar, tab strip, etc.) AND each <webview>'s before-input-event (fires while
+// focus is INSIDE a guest page — host keydown listeners never see those, since
+// the guest is a separate renderer process with its own input pipeline).
+// Returns true if it handled the key, so callers know to preventDefault().
+function _browserHandleShortcut({key, ctrl, shift, alt}){
+  if(!document.getElementById('p-browser').classList.contains('show')) return false;
+  const k=(key||'').toLowerCase();
+
+  if(ctrl && !shift && k==='t'){ browserNewTab(); return true; }
+  if(ctrl && !shift && k==='w'){ if(browserActiveId) browserCloseTab(browserActiveId); return true; }
+  if(ctrl && k==='tab'){
+    if(browserTabs.length>1){
+      const idx=browserTabs.findIndex(t=>t.id===browserActiveId);
+      const next=shift ? (idx-1+browserTabs.length)%browserTabs.length : (idx+1)%browserTabs.length;
+      browserSwitchTab(browserTabs[next].id);
+    }
+    return true;
+  }
+  if(ctrl && !shift && k==='l'){
+    const addr=document.getElementById('browser-addr');
+    if(addr){ addr.focus(); addr.select(); }
+    return true;
+  }
+  if(ctrl && !shift && k==='d'){ browserToggleBookmark(); return true; }
+  if(ctrl && !shift && k==='f'){ browserToggleFindInPage(); return true; }
+  if((ctrl && !shift && k==='r') || k==='f5'){ browserNav('reload'); return true; }
+  if(alt && k==='arrowleft'){ browserNav('back'); return true; }
+  if(alt && k==='arrowright'){ browserNav('fwd'); return true; }
+  if(ctrl && (k==='+' || k==='=' )){ browserZoom(0.5); return true; }
+  if(ctrl && k==='-'){ browserZoom(-0.5); return true; }
+  if(ctrl && k==='0'){ browserZoomReset(); return true; }
+  if(k==='f12' || (ctrl && shift && k==='i')){ browserToggleDevTools(); return true; }
+  return false;
+}
+
+document.addEventListener('keydown', e=>{
+  const handled=_browserHandleShortcut({key: e.key, ctrl: e.ctrlKey||e.metaKey, shift: e.shiftKey, alt: e.altKey});
+  if(handled) e.preventDefault();
+});
+
+// ── Find in page ─────────────────────────────────────────────────────────────
+// <webview> exposes findInPage()/stopFindInPage() directly — no main-process
+// plumbing needed, unlike new-window/context-menu which need the guest's
+// webContents from the main process.
+let _browserFindTimer=null;
+
+function browserToggleFindInPage(forceClose){
+  const bar=document.getElementById('browser-findbar');
+  const open=bar.style.display==='flex';
+  if(forceClose===true || open){
+    bar.style.display='none';
+    const tab=browserTabs.find(t=>t.id===browserActiveId);
+    if(tab && tab.webview.stopFindInPage) tab.webview.stopFindInPage('clearSelection');
+    return;
+  }
+  bar.style.display='flex';
+  const input=document.getElementById('browser-find-input');
+  input.value='';
+  document.getElementById('browser-find-count').textContent='0/0';
+  input.focus();
+}
+
+function _browserFindDebounced(){
+  clearTimeout(_browserFindTimer);
+  _browserFindTimer=setTimeout(()=>_browserFindNext(false, true), 200);
+}
+
+function _browserFindNext(back, isNewSearch){
+  const tab=browserTabs.find(t=>t.id===browserActiveId);
+  const text=document.getElementById('browser-find-input').value;
+  if(!tab || !tab.webview.findInPage || !text) return;
+  tab.webview.findInPage(text, { forward: !back, findNext: !isNewSearch });
+}
+
+// Attaches once per webview (called from browserNewTab) — updates the match
+// count label whenever Chromium reports find results for that tab.
+function _browserWireFindInPage(wv){
+  wv.addEventListener('found-in-page', e=>{
+    const r=e.result;
+    const count=document.getElementById('browser-find-count');
+    if(count) count.textContent=`${r.matches===0?0:r.activeMatchOrdinal}/${r.matches}`;
+  });
+}
+
+function _browserSyncAddr(){
+  const tab=browserTabs.find(t=>t.id===browserActiveId);
+  const addr=document.getElementById('browser-addr');
+  if(addr && tab) addr.value=tab.url;
+}
+
+// ── Tab groups ────────────────────────────────────────────────────────────────
+// Lightweight grouping, separate from bookmark folders: right-click a tab to
+// assign/rename/clear its group. Same group name always maps to the same color.
+const BROWSER_GROUP_COLORS=['#1db954','#e0a800','#e05a5a','#a05ae0','#5a9ae0','#e05aa0'];
+function _browserGroupColor(name){
+  if(!name) return null;
+  let hash=0;
+  for(let i=0;i<name.length;i++) hash=(hash*31+name.charCodeAt(i))>>>0;
+  return BROWSER_GROUP_COLORS[hash%BROWSER_GROUP_COLORS.length];
+}
+function browserSetTabGroup(id, evt){
+  if(evt) evt.preventDefault();
+  const tab=browserTabs.find(t=>t.id===id);
+  if(!tab) return;
+  const name=prompt('Group name (leave blank to remove from group):', tab.group||'');
+  if(name===null) return;
+  tab.group=name.trim()||null;
+  _browserRenderTabs();
+}
+
+function _browserRenderTabs(){
+  const strip=document.getElementById('browser-tabstrip');
+  if(!strip) return;
+  strip.innerHTML='';
+  browserTabs.forEach(t=>{
+    const active=t.id===browserActiveId;
+    const groupColor=_browserGroupColor(t.group);
+    const el=document.createElement('div');
+    el.onclick=()=>browserSwitchTab(t.id);
+    el.oncontextmenu=(e)=>browserSetTabGroup(t.id, e);
+    el.title=t.group ? `Group: ${t.group} (right-click to change)` : 'Right-click to add to a group';
+    el.style.cssText=`display:flex;align-items:center;gap:6px;max-width:140px;padding:5px 8px;border-radius:4px 4px 0 0;`+
+      `background:${active?'rgba(0,148,255,0.12)':'transparent'};color:${active?'var(--th)':'rgba(0,148,255,0.4)'};`+
+      `font-family:'JetBrains Mono',monospace;font-size:9px;cursor:pointer;white-space:nowrap;flex-shrink:0;`+
+      (groupColor ? `border-bottom:2px solid ${groupColor};` : '');
+    if(t.favicon){
+      const fav=document.createElement('img');
+      fav.src=t.favicon;
+      fav.style.cssText='width:12px;height:12px;flex-shrink:0;border-radius:2px;';
+      fav.onerror=()=>{ fav.style.display='none'; };
+      el.appendChild(fav);
+    }
+    const label=document.createElement('span');
+    label.textContent=t.title||'New Tab';
+    label.style.cssText='overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100px;';
+    const closeBtn=document.createElement('span');
+    closeBtn.textContent='×';
+    closeBtn.style.cssText='flex-shrink:0;opacity:0.6;';
+    closeBtn.onclick=(e)=>browserCloseTab(t.id, e);
+    el.appendChild(label);
+    el.appendChild(closeBtn);
+    strip.appendChild(el);
+  });
+}
+
+function browserGo(value){
+  const v=(value||'').trim();
+  const tab=browserTabs.find(t=>t.id===browserActiveId);
+  if(!v || !tab) return;
+  const looksLikeUrl=/^https?:\/\//i.test(v) || (/^[\w.-]+\.[a-z]{2,}([/?#].*)?$/i.test(v) && !v.includes(' '));
+  const url=looksLikeUrl ? (/^https?:\/\//i.test(v) ? v : `https://${v}`)
+                          : `https://www.google.com/search?q=${encodeURIComponent(v)}`;
+  tab.webview.src=url;
+  if(browserRecording && browserRecordTabId===tab.id){
+    browserRecordSteps.push({type:'navigate', url});
+  }
+}
+
+function browserNav(action){
+  const tab=browserTabs.find(t=>t.id===browserActiveId);
+  if(!tab) return;
+  const wv=tab.webview;
+  if(action==='back' && wv.canGoBack()) wv.goBack();
+  else if(action==='fwd' && wv.canGoForward()) wv.goForward();
+  else if(action==='reload') wv.reload();
+}
+
+// ── Reader mode ───────────────────────────────────────────────────────────────
+// Heuristic extraction (not a full Readability port): picks the element with
+// the most cumulative <p> text as "the article", strips nav/ads/scripts, and
+// renders it in a clean themed template loaded as a data: URL. Exit restores
+// the original URL.
+async function browserToggleReaderMode(){
+  const tab=browserTabs.find(t=>t.id===browserActiveId);
+  const btn=document.getElementById('browser-reader-btn');
+  if(!tab) return;
+
+  if(tab._readerOriginalUrl){
+    tab.webview.src=tab._readerOriginalUrl;
+    tab._readerOriginalUrl=null;
+    if(btn) btn.style.color='rgba(0,148,255,0.55)';
+    return;
+  }
+
+  const extracted=await _browserWebviewExec(tab.webview, `(function(){
+    try{
+      var candidates=Array.from(document.querySelectorAll('article, main, div, section'));
+      var best=null, bestScore=0;
+      candidates.forEach(function(el){
+        var ps=el.querySelectorAll('p');
+        var score=0;
+        ps.forEach(function(p){ score+=(p.innerText||'').length; });
+        if(score>bestScore){ bestScore=score; best=el; }
+      });
+      if(!best || bestScore<200) best=document.body;
+      var clone=best.cloneNode(true);
+      clone.querySelectorAll('script,style,iframe,noscript,button,input,form,nav,footer,.ad,.ads,[class*="ad-"],[id*="ad-"]').forEach(function(n){ n.remove(); });
+      return { title: document.title, html: clone.innerHTML };
+    }catch(e){ return null; }
+  })()`, {waitLoad:false});
+
+  if(!extracted || !extracted.html){
+    showToast('Could not extract readable content from this page.', 'warn', 'BROWSER');
+    return;
+  }
+
+  const readerHtml=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${(extracted.title||'').replace(/</g,'&lt;')}</title><style>
+    body{background:#010814;color:#c8e0f0;font-family:Georgia,'JetBrains Mono',serif;line-height:1.7;
+         max-width:680px;margin:0 auto;padding:48px 24px;font-size:17px;}
+    h1,h2,h3{color:#0094ff;font-family:'JetBrains Mono',monospace;}
+    img{max-width:100%;height:auto;}
+    a{color:#6ab0e0;}
+  </style></head><body><h1>${(extracted.title||'').replace(/</g,'&lt;')}</h1>${extracted.html}</body></html>`;
+
+  tab._readerOriginalUrl=tab.url;
+  tab.webview.src='data:text/html;charset=utf-8,'+encodeURIComponent(readerHtml);
+  if(btn) btn.style.color='#1db954';
+}
+
+// ── Picture-in-picture ─────────────────────────────────────────────────────────
+async function browserRequestPiP(){
+  const tab=browserTabs.find(t=>t.id===browserActiveId);
+  if(!tab) return;
+  const ok=await _browserWebviewExec(tab.webview, `(function(){
+    try{
+      var vids=Array.from(document.querySelectorAll('video'));
+      var v=vids.find(function(x){ return !x.paused; }) || vids[0];
+      if(!v) return false;
+      if(document.pictureInPictureElement) document.exitPictureInPicture();
+      v.requestPictureInPicture();
+      return true;
+    }catch(e){ return false; }
+  })()`, {waitLoad:false});
+  if(!ok) showToast('No playing video found on this page.', 'warn', 'BROWSER');
+}
+
+// ── Screenshot/clip → OCR (reuses the existing OCR widget's endpoint) ─────────
+async function browserClipToOcr(){
+  const tab=browserTabs.find(t=>t.id===browserActiveId);
+  if(!tab) return;
+  try{
+    const image=await tab.webview.capturePage();
+    const dataUrl=image.toDataURL();
+    const b64=dataUrl.split(',')[1];
+    const r=await fetch(`${API}/ocr/scan-image`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ image: b64, mime: 'image/png' }),
+    }).then(r=>r.json());
+    if(r.ok){
+      showToast('Page clipped to OCR.', 'success', 'BROWSER');
+      if(!document.getElementById('p-ocr').classList.contains('show')) togWgt('p-ocr');
+    } else {
+      showToast('OCR failed: '+(r.error||'unknown error'), 'error', 'BROWSER');
+    }
+  }catch(e){
+    showToast('Clip failed: '+e.message, 'error', 'BROWSER');
+  }
+}
+
+// ── Per-site permissions ───────────────────────────────────────────────────────
+function browserTogglePermissionsPanel(){
+  const panel=document.getElementById('browser-permissions-panel');
+  const open=panel.style.display==='flex';
+  panel.style.display=open?'none':'flex';
+  if(!open) browserLoadPermissions();
+}
+
+async function browserLoadPermissions(){
+  const panel=document.getElementById('browser-permissions-panel');
+  panel.innerHTML='<div style="color:rgba(0,148,255,0.35);">Loading…</div>';
+  if(!window.izachPermissions){
+    panel.innerHTML='<div style="color:rgba(0,148,255,0.35);">Only available in the desktop app.</div>';
+    return;
+  }
+  try{
+    const entries=await window.izachPermissions.list();
+    if(!entries.length){ panel.innerHTML='<div style="color:rgba(0,148,255,0.35);">No permission decisions recorded yet.</div>'; return; }
+    panel.innerHTML='';
+    entries.forEach(e=>{
+      const row=document.createElement('div');
+      row.style.cssText='display:flex;align-items:center;justify-content:space-between;gap:8px;padding:4px 0;border-bottom:1px solid rgba(0,148,255,0.06);';
+      const granted=e.status==='granted';
+      row.innerHTML=`
+        <span style="color:var(--th);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${e.origin} <span style="color:rgba(0,148,255,0.4);">— ${e.permission}</span></span>
+        <span style="color:${granted?'#1db954':'#ff6b6b'};font-size:8px;letter-spacing:.1em;">${granted?'ALLOWED':'BLOCKED'}</span>`;
+      const revokeBtn=document.createElement('button');
+      revokeBtn.textContent='✕';
+      revokeBtn.title='Forget this decision (will ask again next time)';
+      revokeBtn.style.cssText='background:transparent;border:none;color:rgba(255,80,80,0.5);cursor:pointer;font-size:9px;margin-left:6px;';
+      revokeBtn.onclick=async()=>{ await window.izachPermissions.revoke(e.origin, e.permission); browserLoadPermissions(); };
+      row.appendChild(revokeBtn);
+      panel.appendChild(row);
+    });
+  }catch(e){
+    panel.innerHTML='<div style="color:rgba(255,80,80,0.5);">Error loading permissions.</div>';
+  }
+}
+
+async function browserOpenInExternalWindow(){
+  const tab=browserTabs.find(t=>t.id===browserActiveId);
+  if(!tab) return;
+  if(!window.electronAPI?.openBrowserWindow){
+    showToast('Standalone browser window is only available in the desktop app.', 'warn');
+    return;
+  }
+  // Capture current playback position so the new window can resume the same
+  // video instead of starting over — reading a raw <video> element works for
+  // YouTube and most other sites since their custom players still sit on top
+  // of one.
+  let playback=null;
+  try{
+    const state=await _browserWebviewExec(tab.webview, `(function(){
+      try{
+        var v=document.querySelector('video');
+        if(!v) return null;
+        return {t:v.currentTime||0, paused:v.paused};
+      }catch(e){ return null; }
+    })()`, {waitLoad:false});
+    if(state && state.t>1) playback=state;   // skip if effectively at the start anyway
+  }catch(e){}
+  window.electronAPI.openBrowserWindow(tab.url, playback);
+}
+
+// ── Settings dropdown (zoom, downloads, quick links) ──────────────────────────
+document.addEventListener('click', (e)=>{
+  const menu=document.getElementById('browser-settings-menu');
+  const btn=document.getElementById('browser-settings-btn');
+  if(!menu || menu.style.display!=='block') return;
+  if(!menu.contains(e.target) && e.target!==btn) menu.style.display='none';
+});
+
+function browserToggleSettingsMenu(forceClose){
+  const menu=document.getElementById('browser-settings-menu');
+  if(!menu) return;
+  const open=menu.style.display==='block';
+  menu.style.display=(forceClose===true || open) ? 'none' : 'block';
+}
+
+function _browserActiveWebview(){
+  const tab=browserTabs.find(t=>t.id===browserActiveId);
+  return tab ? tab.webview : null;
+}
+
+function browserToggleDevTools(){
+  const wv=_browserActiveWebview();
+  if(!wv || !wv.isDevToolsOpened) return;
+  try{ wv.isDevToolsOpened() ? wv.closeDevTools() : wv.openDevTools(); }catch(e){}
+}
+
+async function browserZoom(delta){
+  const wv=_browserActiveWebview();
+  if(!wv || !wv.getZoomLevel) return;
+  try{
+    const lvl=Math.max(-4, Math.min(6, wv.getZoomLevel()+delta));
+    wv.setZoomLevel(lvl);
+    _browserUpdateZoomLabel(lvl);
+  }catch(e){}
+}
+
+function browserZoomReset(){
+  const wv=_browserActiveWebview();
+  if(!wv || !wv.setZoomLevel) return;
+  try{ wv.setZoomLevel(0); _browserUpdateZoomLabel(0); }catch(e){}
+}
+
+function _browserUpdateZoomLabel(lvl){
+  const label=document.getElementById('browser-zoom-label');
+  if(!label) return;
+  const pct=Math.round(Math.pow(1.2, lvl)*100);
+  label.textContent=pct+'%';
+}
+
+// ── Downloads page (chrome://downloads-style full page, not a cramped popup) ──
+let _dlEntries=[];
+
+function _browserFmtBytes(n){
+  if(!n && n!==0) return '';
+  if(n<1024) return n+' B';
+  if(n<1024*1024) return (n/1024).toFixed(1)+' KB';
+  return (n/(1024*1024)).toFixed(1)+' MB';
+}
+
+function _dlDateGroup(iso){
+  if(!iso) return 'Earlier';
+  const d=new Date(iso);
+  const now=new Date();
+  const isSameDay=(a,b)=>a.getFullYear()===b.getFullYear() && a.getMonth()===b.getMonth() && a.getDate()===b.getDate();
+  if(isSameDay(d, now)) return 'Today';
+  const yesterday=new Date(now); yesterday.setDate(now.getDate()-1);
+  if(isSameDay(d, yesterday)) return 'Yesterday';
+  return d.toLocaleDateString(undefined, {month:'long', day:'numeric', year:'numeric'});
+}
+
+async function browserOpenDownloadsPage(){
+  browserToggleSettingsMenu(true);
+  const page=document.getElementById('downloads-page');
+  page.style.opacity='1'; page.style.pointerEvents='all';
+  document.getElementById('dl-search').value='';
+  await _dlLoad();
+}
+
+function browserCloseDownloadsPage(){
+  const page=document.getElementById('downloads-page');
+  page.style.opacity='0'; page.style.pointerEvents='none';
+}
+
+async function _dlLoad(){
+  const list=document.getElementById('dl-list');
+  if(!window.izachDownloads){
+    list.innerHTML='<div style="color:rgba(0,148,255,0.35);padding:20px 0;text-align:center;">Only available in the desktop app.</div>';
+    return;
+  }
+  try{
+    _dlEntries=(await window.izachDownloads.list()).slice().reverse();
+    _dlRender();
+  }catch(e){
+    list.innerHTML=`<div style="color:rgba(255,80,80,0.5);padding:20px 0;text-align:center;">Error loading downloads: ${e.message}</div>`;
+  }
+}
+
+function _dlRender(){
+  const list=document.getElementById('dl-list');
+  const empty=document.getElementById('dl-empty');
+  const q=(document.getElementById('dl-search').value||'').toLowerCase().trim();
+  const filtered=_dlEntries.filter(e=>!q || (e.filename||'').toLowerCase().includes(q) || (e.url||'').toLowerCase().includes(q));
+
+  list.innerHTML='';
+  if(!filtered.length){
+    empty.style.display='block';
+    empty.textContent=q ? `No downloads matching "${q}".` : 'No downloads yet.';
+    return;
+  }
+  empty.style.display='none';
+
+  let lastGroup=null;
+  filtered.forEach(e=>{
+    const group=_dlDateGroup(e.startedAt);
+    if(group!==lastGroup){
+      lastGroup=group;
+      const hdr=document.createElement('div');
+      hdr.style.cssText='font-size:8px;letter-spacing:.3em;color:rgba(0,148,255,0.35);padding:16px 4px 8px;';
+      hdr.textContent=group.toUpperCase();
+      list.appendChild(hdr);
+    }
+    const row=document.createElement('div');
+    row.style.cssText='display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 10px;border-bottom:1px solid rgba(0,148,255,0.06);';
+    const state=e.state==='completed'?'#1db954':(e.state==='progressing'?'#f5a623':'#ff6b6b');
+    const pct=e.totalBytes>0 ? Math.round((e.receivedBytes/e.totalBytes)*100) : null;
+    row.innerHTML=`
+      <span style="flex:1;overflow:hidden;">
+        <span style="display:block;color:var(--th);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${e.path}">${e.filename}</span>
+        <span style="display:block;color:rgba(0,148,255,0.35);font-size:9px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px;">${e.url||''}</span>
+        <span style="display:block;color:${state};font-size:8.5px;letter-spacing:.08em;margin-top:2px;">${e.state.toUpperCase()}${pct!==null?' · '+pct+'%':''} · ${_browserFmtBytes(e.receivedBytes)}</span>
+      </span>`;
+    const btns=document.createElement('div');
+    btns.style.cssText='display:flex;gap:6px;flex-shrink:0;';
+    if(e.state==='completed'){
+      const openBtn=document.createElement('button');
+      openBtn.textContent='Open';
+      openBtn.style.cssText='background:none;border:1px solid rgba(0,148,255,0.15);color:rgba(0,148,255,0.55);font-size:9px;padding:4px 10px;cursor:pointer;border-radius:3px;';
+      openBtn.onclick=()=>window.izachDownloads.open(e.path);
+      const folderBtn=document.createElement('button');
+      folderBtn.textContent='Show in Folder';
+      folderBtn.style.cssText='background:none;border:1px solid rgba(0,148,255,0.15);color:rgba(0,148,255,0.55);font-size:9px;padding:4px 10px;cursor:pointer;border-radius:3px;';
+      folderBtn.onclick=()=>window.izachDownloads.showInFolder(e.path);
+      btns.appendChild(openBtn); btns.appendChild(folderBtn);
+    }
+    row.appendChild(btns);
+    list.appendChild(row);
+  });
+}
+
+async function _dlClearAll(){
+  if(!window.izachDownloads) return;
+  await window.izachDownloads.clear();
+  await _dlLoad();
+}
+
+// ── History page (chrome://history-style full page) ───────────────────────
+let _histSearchTimer=null;
+
+function _histDateGroup(iso){
+  if(!iso) return 'Earlier';
+  const d=new Date(iso);
+  const now=new Date();
+  const isSameDay=(a,b)=>a.getFullYear()===b.getFullYear() && a.getMonth()===b.getMonth() && a.getDate()===b.getDate();
+  if(isSameDay(d, now)) return 'Today';
+  const yesterday=new Date(now); yesterday.setDate(now.getDate()-1);
+  if(isSameDay(d, yesterday)) return 'Yesterday';
+  return d.toLocaleDateString(undefined, {month:'long', day:'numeric', year:'numeric'});
+}
+
+async function browserOpenHistoryPage(){
+  browserToggleSettingsMenu(true);
+  const page=document.getElementById('history-page');
+  page.style.opacity='1'; page.style.pointerEvents='all';
+  document.getElementById('hist-search').value='';
+  await _histLoad();
+}
+
+function browserCloseHistoryPage(){
+  const page=document.getElementById('history-page');
+  page.style.opacity='0'; page.style.pointerEvents='none';
+}
+
+function _histSearchDebounced(){
+  clearTimeout(_histSearchTimer);
+  _histSearchTimer=setTimeout(()=>_histLoad(document.getElementById('hist-search').value), 200);
+}
+
+async function _histLoad(q){
+  const list=document.getElementById('hist-list');
+  const empty=document.getElementById('hist-empty');
+  try{
+    const url=q ? `${API}/browser/history?q=${encodeURIComponent(q)}` : `${API}/browser/history`;
+    const r=await fetch(url).then(r=>r.json());
+    if(!r.ok) throw new Error(r.error||'unknown error');
+    const entries=r.entries||[];
+    list.innerHTML='';
+    if(!entries.length){
+      empty.style.display='block';
+      empty.textContent=q ? `No history matching "${q}".` : 'No history yet.';
+      return;
+    }
+    empty.style.display='none';
+
+    let lastGroup=null;
+    entries.forEach(e=>{
+      const group=_histDateGroup(e.ts);
+      if(group!==lastGroup){
+        lastGroup=group;
+        const hdr=document.createElement('div');
+        hdr.style.cssText='font-size:8px;letter-spacing:.3em;color:rgba(0,148,255,0.35);padding:16px 4px 8px;';
+        hdr.textContent=group.toUpperCase();
+        list.appendChild(hdr);
+      }
+      const row=document.createElement('div');
+      row.style.cssText='display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 10px;border-bottom:1px solid rgba(0,148,255,0.06);cursor:pointer;';
+      row.innerHTML=`
+        <span style="flex:1;overflow:hidden;">
+          <span style="display:block;color:var(--th);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${e.title}</span>
+          <span style="display:block;color:rgba(0,148,255,0.35);font-size:9px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px;">${e.url}</span>
+        </span>
+        <span style="font-size:8.5px;color:rgba(0,148,255,0.3);flex-shrink:0;">${(e.ts||'').replace('T',' ').slice(0,16)}</span>`;
+      row.onclick=(evt)=>{ if(evt.target.tagName!=='BUTTON'){ browserCloseHistoryPage(); browserGo(e.url); } };
+      const delBtn=document.createElement('button');
+      delBtn.textContent='✕';
+      delBtn.title='Remove from history';
+      delBtn.style.cssText='background:none;border:1px solid rgba(255,80,80,0.14);color:rgba(255,80,80,0.4);font-size:9px;padding:4px 8px;cursor:pointer;border-radius:3px;flex-shrink:0;';
+      delBtn.onclick=async(evt)=>{ evt.stopPropagation(); await fetch(`${API}/browser/history/${e.id}`, {method:'DELETE'}); _histLoad(q); };
+      row.appendChild(delBtn);
+      list.appendChild(row);
+    });
+  }catch(e){
+    list.innerHTML='';
+    empty.style.display='block';
+    empty.textContent=`Error loading history: ${e.message}`;
+  }
+}
+
+async function _histClearAll(){
+  await fetch(`${API}/browser/history`, {method:'DELETE'});
+  await _histLoad();
+}
+
+function _browserLogHistory(url, title){
+  if(!url || url.startsWith('data:')) return;
+  fetch(`${API}/browser/history`, {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({url, title, device:'pc'}),
+  }).catch(()=>{});
+}
+
+async function browserSendToPhone(){
+  const tab=browserTabs.find(t=>t.id===browserActiveId);
+  if(!tab || !tab.url){ showToast('No page to send', 'error'); return; }
+  try{
+    const r=await fetch(`${API}/browser/handoff`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({url: tab.url, title: tab.title||tab.url}),
+    });
+    const data=await r.json();
+    if(!r.ok || !data.ok) throw new Error(data.error||`HTTP ${r.status}`);
+    showToast('📱 Sent to phone', 'success');
+  }catch(e){
+    showToast(`Couldn't send to phone: ${e.message}`, 'error');
+  }
+}
+
+// ── Browser Settings: history ────────────────────────────────────────────────
+let _bhSearchTimer=null;
+function bhSearch(q){
+  clearTimeout(_bhSearchTimer);
+  _bhSearchTimer=setTimeout(()=>bhLoad(q), 200);
+}
+
+async function bhLoad(q){
+  const list=document.getElementById('bh-list');
+  const empty=document.getElementById('bh-empty');
+  try{
+    const url=q ? `${API}/browser/history?q=${encodeURIComponent(q)}` : `${API}/browser/history`;
+    const r=await fetch(url).then(r=>r.json());
+    const entries=(r.ok && r.entries) || [];
+    list.querySelectorAll('.bh-row').forEach(el=>el.remove());
+    if(!entries.length){ empty.style.display=''; return; }
+    empty.style.display='none';
+    entries.forEach(e=>{
+      const row=document.createElement('div');
+      row.className='bh-row';
+      row.style.cssText='display:grid;grid-template-columns:1fr 2fr 90px 24px;gap:8px;padding:6px 0;border-bottom:1px solid rgba(0,148,255,0.05);align-items:center;';
+      row.innerHTML=`
+        <span style="font-size:9px;color:var(--th);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${e.title}">${e.title}</span>
+        <span style="font-size:8px;color:rgba(0,148,255,0.4);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${e.url}">${e.url}</span>
+        <span style="font-size:7px;color:rgba(0,148,255,0.3);">${(e.ts||'').replace('T',' ').slice(0,16)}</span>
+        <button onclick="bhDeleteOne('${e.id}')" style="background:none;border:1px solid rgba(255,80,80,0.14);color:rgba(255,80,80,0.32);font-size:7.5px;padding:2px 5px;cursor:pointer;">✕</button>`;
+      list.appendChild(row);
+    });
+  }catch(e){ /* backend not reachable — leave list as-is */ }
+}
+
+async function bhDeleteOne(id){
+  try{ await fetch(`${API}/browser/history/${id}`, {method:'DELETE'}); bhLoad(document.getElementById('bh-search').value); }
+  catch(e){}
+}
+
+async function bhClearAll(){
+  try{ await fetch(`${API}/browser/history`, {method:'DELETE'}); bhLoad(); }
+  catch(e){}
+}
+
+// ── Browser Settings: cache ───────────────────────────────────────────────────
+async function bClearCache(){
+  const msg=document.getElementById('bh-cache-msg');
+  if(!window.electronAPI?.clearBrowserCache){
+    if(msg) msg.textContent='Only available in the desktop app.';
+    return;
+  }
+  try{
+    await window.electronAPI.clearBrowserCache();
+    if(msg){ msg.textContent='Cache cleared.'; setTimeout(()=>msg.textContent='',3000); }
+  }catch(e){
+    if(msg) msg.textContent='Failed: '+e.message;
+  }
+}
+
+// ── Browser Settings: password manager ────────────────────────────────────────
+async function bpLoad(){
+  const list=document.getElementById('bp-list');
+  const empty=document.getElementById('bp-empty');
+  if(!window.izachPasswords){
+    empty.textContent='Only available in the desktop app.';
+    empty.style.display='';
+    return;
+  }
+  try{
+    const entries=await window.izachPasswords.list();
+    list.querySelectorAll('.bp-row').forEach(el=>el.remove());
+    if(!entries.length){ empty.style.display=''; return; }
+    empty.style.display='none';
+    entries.forEach(e=>{
+      const row=document.createElement('div');
+      row.className='bp-row';
+      row.style.cssText='display:grid;grid-template-columns:1.2fr 1.2fr 1fr 50px;gap:0;padding:8px 0;border-bottom:1px solid rgba(0,148,255,0.05);align-items:center;';
+      const passSpan=document.createElement('span');
+      passSpan.style.cssText='font-size:9px;color:rgba(0,148,255,0.45);cursor:pointer;';
+      passSpan.textContent='••••••••';
+      passSpan.title='Click to reveal';
+      passSpan.dataset.revealed='0';
+      passSpan.onclick=async()=>{
+        if(passSpan.dataset.revealed==='1'){ passSpan.textContent='••••••••'; passSpan.dataset.revealed='0'; return; }
+        try{ passSpan.textContent=await window.izachPasswords.reveal(e.id); passSpan.dataset.revealed='1'; }
+        catch(err){ passSpan.textContent='(error)'; }
+      };
+      row.innerHTML=`
+        <span style="font-size:9px;color:var(--th);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${e.site}</span>
+        <span style="font-size:9px;color:rgba(0,148,255,0.5);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${e.username}</span>`;
+      const passCell=document.createElement('div');
+      passCell.appendChild(passSpan);
+      const delBtn=document.createElement('button');
+      delBtn.textContent='✕';
+      delBtn.style.cssText='background:none;border:1px solid rgba(255,80,80,0.14);color:rgba(255,80,80,0.32);font-size:7.5px;padding:2px 5px;cursor:pointer;';
+      delBtn.onclick=async()=>{ await window.izachPasswords.remove(e.id); bpLoad(); };
+      row.appendChild(passCell);
+      row.appendChild(delBtn);
+      list.appendChild(row);
+    });
+  }catch(e){
+    empty.textContent='Error loading passwords: '+e.message;
+    empty.style.display='';
+  }
+}
+
+async function bpAdd(){
+  const site=document.getElementById('bp-inp-site').value.trim();
+  const username=document.getElementById('bp-inp-user').value.trim();
+  const password=document.getElementById('bp-inp-pass').value;
+  const msg=document.getElementById('bp-msg');
+  if(!site||!username||!password){ if(msg) msg.textContent='Site, username, and password are all required.'; return; }
+  if(!window.izachPasswords){ if(msg) msg.textContent='Only available in the desktop app.'; return; }
+  try{
+    await window.izachPasswords.add({site, username, password});
+    document.getElementById('bp-inp-site').value='';
+    document.getElementById('bp-inp-user').value='';
+    document.getElementById('bp-inp-pass').value='';
+    if(msg){ msg.textContent='Saved.'; setTimeout(()=>msg.textContent='',2500); }
+    bpLoad();
+  }catch(e){ if(msg) msg.textContent='Failed: '+e.message; }
+}
+
+function bpImportFile(input){
+  const file=input.files[0];
+  const msg=document.getElementById('bp-msg');
+  if(!file) return;
+  const reader=new FileReader();
+  reader.onload=async()=>{
+    try{
+      const result=await window.izachPasswords.importCsv(reader.result);
+      if(msg) msg.textContent=`Imported ${result.imported}, skipped ${result.skipped}.`;
+      bpLoad();
+    }catch(e){
+      if(msg) msg.textContent='Import failed: '+e.message;
+    }
+    input.value='';
+  };
+  reader.readAsText(file);
+}
+
+// ── Windows Hello enrollment (Browser Settings) ───────────────────────────────
+async function whLoadStatus(){
+  const dot=document.getElementById('wh-status-dot');
+  const txt=document.getElementById('wh-status-txt');
+  const btn=document.getElementById('wh-enroll-btn');
+  if(!dot||!txt||!btn) return;
+  if(!window.izachWebAuthn){
+    dot.style.background='rgba(255,80,80,0.5)';
+    txt.textContent='Only available in the desktop app.';
+    btn.style.display='none';
+    return;
+  }
+  const enrolled=await window.izachWebAuthn.isEnrolled();
+  dot.style.background=enrolled ? '#1db954' : 'rgba(255,80,80,0.5)';
+  txt.textContent=enrolled ? 'Windows Hello is set up.' : 'Not set up yet.';
+  btn.textContent=enrolled ? 'RE-ENROLL' : 'SET UP WINDOWS HELLO';
+  btn.style.display='';
+}
+
+async function whEnroll(){
+  const msg=document.getElementById('wh-msg');
+  if(!window.izachWebAuthn){ if(msg) msg.textContent='Only available in the desktop app.'; return; }
+  if(msg){ msg.textContent='Follow the Windows Hello prompt…'; }
+  try{
+    const result=await window.izachWebAuthn.enroll();
+    if(result.ok){ if(msg) msg.textContent='Enrolled.'; }
+    else { if(msg) msg.textContent='Enrollment failed: '+(result.error||'unknown error'); }
+  }catch(e){
+    if(msg) msg.textContent='Enrollment failed: '+e.message;
+  }
+  whLoadStatus();
+  setTimeout(()=>{ if(msg) msg.textContent=''; }, 4000);
+}
+
+// ── iZACH-driven playback / navigation (backend sends browser_command over WS) ──
+
+// Run JS inside a <webview> once its current navigation has finished loading.
+// Resolves with the script's return value, or null on timeout/failure.
+function _browserWebviewExec(wv, code, {waitLoad=true, timeout=9000}={}){
+  return new Promise(resolve=>{
+    let done=false;
+    const finish=(val)=>{ if(!done){ done=true; resolve(val); } };
+    const run=()=>{
+      try{
+        wv.executeJavaScript(code, false).then(finish).catch(()=>finish(null));
+      }catch(e){ finish(null); }
+    };
+    if(waitLoad){
+      const onLoad=()=>{ wv.removeEventListener('did-finish-load', onLoad); run(); };
+      wv.addEventListener('did-finish-load', onLoad);
+      setTimeout(()=>{ wv.removeEventListener('did-finish-load', onLoad); if(!done) run(); }, timeout);
+    } else {
+      run();
+    }
+  });
+}
+
+function _browserSetMinimized(minimize){
+  const el=document.getElementById('p-browser');
+  if(!el) return;
+  const minBtn=el.querySelector('.ph-min');
+  const isMin=el.classList.contains('minimized');
+  if(minimize && !isMin && minBtn){ minBtn.click(); }
+  else if(!minimize && isMin && minBtn){ minBtn.click(); }
+}
+
+// Play a YouTube result in the internal browser.
+//   mode 'audio' → panel opens then minimizes (song keeps playing in background)
+//   mode 'video' → panel opens visible (music videos, clips)
+// Skips ads by reading the first ORGANIC result's href (ytd-video-renderer),
+// never a promoted/ad slot, then navigating straight to that watch URL.
+async function browserPlayYouTube(query, mode){
+  if(!document.getElementById('p-browser').classList.contains('show')) togWgt('p-browser');
+  _browserSetMinimized(false); // show while it loads/navigates
+  // Always a fresh tab — reusing the active tab meant a voice-triggered
+  // "play X on YouTube" could silently resume whatever video was already
+  // loaded (e.g. something played manually earlier) instead of the new one.
+  // Navigate straight to the search URL on creation instead of loading
+  // about:blank first — setting .src again immediately after (before the
+  // guest webview finishes attaching) raced with dom-ready and Electron
+  // silently dropped the second navigation, leaving the tab stuck blank.
+  const searchUrl='https://www.youtube.com/results?search_query='+encodeURIComponent(query);
+  const tab=await browserNewTab(searchUrl);
+  if(!tab) return; // tab limit reached — browserNewTab already showed the toast
+
+  // Read the first organic video's watch URL (ads live in ytd-ad-slot-renderer /
+  // ytd-promoted-video-renderer, which this selector never matches).
+  const href=await _browserWebviewExec(tab.webview, `(function(){
+    try{
+      var a=document.querySelector('ytd-video-renderer a#video-title, ytd-video-renderer a#thumbnail');
+      return a ? a.href : null;
+    }catch(e){ return null; }
+  })()`);
+
+  if(!href){
+    showToast('Could not find a YouTube result for "'+query+'".', 'warn', 'BROWSER');
+    return;
+  }
+
+  tab.webview.src=href;
+  // Nudge playback once the watch page is up (autoplayPolicy webpref allows sound).
+  _browserWebviewExec(tab.webview, `(function(){
+    try{ var v=document.querySelector('video'); if(v){ v.muted=false; v.play(); } }catch(e){}
+    return true;
+  })()`);
+
+  if(mode==='audio'){
+    _browserSetMinimized(true);
+    showToast('Playing "'+query+'" in the background.', 'success', 'BROWSER');
+  } else {
+    showToast('Playing "'+query+'".', 'success', 'BROWSER');
+  }
+}
+
+// ── Voice-driven browsing ("browser scroll down", "browser back", "click the
+// second link in the browser") — only acts if the panel has an active tab. ────
+function browserVoiceScroll(direction){
+  const tab=browserTabs.find(t=>t.id===browserActiveId);
+  if(!tab) return;
+  const amount=direction==='up' ? -600 : 600;
+  _browserWebviewExec(tab.webview, `(function(){ window.scrollBy(0, ${amount}); return true; })()`, {waitLoad:false});
+}
+
+async function browserVoiceClickLink(index){
+  const tab=browserTabs.find(t=>t.id===browserActiveId);
+  if(!tab) return;
+  const clicked=await _browserWebviewExec(tab.webview, `(function(){
+    try{
+      var links=Array.from(document.querySelectorAll('a[href]')).filter(function(a){
+        var r=a.getBoundingClientRect();
+        return r.width>0 && r.height>0 && a.innerText.trim().length>0;
+      });
+      var el=links[${index}-1];
+      if(!el) return false;
+      el.click();
+      return true;
+    }catch(e){ return false; }
+  })()`, {waitLoad:false});
+  if(!clicked) showToast(`No visible link at position ${index}.`, 'warn', 'BROWSER');
+}
+
+// ── Home page + bookmarks (backed by the same store as Settings → Custom
+// Links — /api/custom_links — so iZACH's voice commands ("open <title>")
+// are aware of every bookmark immediately, with no separate sync needed) ────
+
+function _browserHomePageHtml(bookmarks){
+  const groups={};
+  (bookmarks||[]).forEach(b=>{
+    const f=b.folder||'General';
+    (groups[f]=groups[f]||[]).push(b);
+  });
+  const esc=(s)=>String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const sections=Object.keys(groups).sort().map(folder=>{
+    const items=groups[folder].map(b=>`<a href="${esc(b.url)}" class="bm-item">${esc(b.title)}</a>`).join('');
+    return `<div class="bm-folder"><div class="bm-folder-title">${esc(folder)}</div><div class="bm-folder-items">${items}</div></div>`;
+  }).join('');
+
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>iZACH Browser — Home</title><style>
+    *{box-sizing:border-box;}
+    body{margin:0;min-height:100vh;background:#010814;color:#6ab0e0;font-family:'JetBrains Mono',monospace;
+         display:flex;flex-direction:column;align-items:center;padding:60px 20px;}
+    h1{color:#0094ff;font-weight:400;letter-spacing:.3em;font-size:20px;margin:0 0 28px;}
+    form{display:flex;width:100%;max-width:520px;margin-bottom:36px;}
+    input{flex:1;padding:10px 14px;background:rgba(0,148,255,0.06);border:1px solid rgba(0,148,255,0.25);
+          border-radius:4px 0 0 4px;color:#a8d8ff;font-family:inherit;font-size:13px;outline:none;}
+    button{padding:10px 18px;background:rgba(0,148,255,0.15);border:1px solid rgba(0,148,255,0.25);border-left:none;
+           border-radius:0 4px 4px 0;color:#0094ff;cursor:pointer;font-family:inherit;}
+    .bm-wrap{width:100%;max-width:640px;}
+    .bm-folder{margin-bottom:18px;}
+    .bm-folder-title{font-size:10px;letter-spacing:.2em;color:rgba(0,148,255,0.4);margin-bottom:8px;}
+    .bm-folder-items{display:flex;flex-wrap:wrap;gap:8px;}
+    .bm-item{padding:7px 12px;background:rgba(0,148,255,0.06);border:1px solid rgba(0,148,255,0.15);border-radius:4px;
+             color:#6ab0e0;text-decoration:none;font-size:11px;}
+    .bm-item:hover{border-color:rgba(0,148,255,0.5);color:#a8d8ff;}
+    .bm-empty{color:rgba(0,148,255,0.3);font-size:10px;}
+  </style></head><body>
+    <h1>iZACH BROWSER</h1>
+    <form action="https://www.google.com/search" method="get">
+      <input name="q" placeholder="Search Google" autofocus>
+      <button type="submit">GO</button>
+    </form>
+    <div class="bm-wrap">${sections || '<div class="bm-empty">No bookmarks yet — click the ☆ in the address bar to add one.</div>'}</div>
+  </body></html>`;
+}
+
+async function _browserFetchBookmarks(){
+  try{
+    const r=await fetch(`${API}/api/custom_links`).then(r=>r.json());
+    return Array.isArray(r) ? r : [];
+  }catch(e){ return []; }
+}
+
+async function _browserHomeDataUrl(){
+  const bookmarks=await _browserFetchBookmarks();
+  return 'data:text/html;charset=utf-8,'+encodeURIComponent(_browserHomePageHtml(bookmarks));
+}
+
+async function browserGoHome(){
+  const tab=browserTabs.find(t=>t.id===browserActiveId);
+  if(!tab) return;
+  tab.webview.src=await _browserHomeDataUrl();
+}
+
+async function _browserSyncBookmarkBtn(){
+  const tab=browserTabs.find(t=>t.id===browserActiveId);
+  const btn=document.getElementById('browser-bookmark-btn');
+  if(!tab || !btn) return;
+  const bookmarks=await _browserFetchBookmarks();
+  btn.textContent=bookmarks.some(b=>b.url===tab.url) ? '★' : '☆';
+}
+
+// ── Autofill (Windows Hello gated) ───────────────────────────────────────────
+// Vault entries are free-text "site" strings (typed by hand or imported from
+// a CSV export), not guaranteed to be bare hostnames — so matching against
+// the current tab's origin is a loose substring check in both directions
+// rather than an exact-hostname comparison.
+function _browserHostnameOf(url){
+  try{ return new URL(url).hostname.replace(/^www\./,'').toLowerCase(); }catch(e){ return ''; }
+}
+
+async function _browserFindMatchingCredential(tab){
+  if(!window.izachPasswords || !tab) return null;
+  const host=_browserHostnameOf(tab.url);
+  if(!host) return null;
+  try{
+    const entries=await window.izachPasswords.list();
+    return entries.find(e=>{
+      const site=(e.site||'').toLowerCase().replace(/^www\./,'').replace(/^https?:\/\//,'');
+      return site && (host.includes(site) || site.includes(host));
+    }) || null;
+  }catch(e){ return null; }
+}
+
+async function _browserSyncAutofillBtn(){
+  const tab=browserTabs.find(t=>t.id===browserActiveId);
+  const btn=document.getElementById('browser-autofill-btn');
+  if(!tab || !btn) return;
+  const match=await _browserFindMatchingCredential(tab);
+  btn.disabled=!match;
+  btn.dataset.credId=match ? match.id : '';
+  btn.style.color=match ? 'rgba(0,148,255,0.6)' : 'rgba(0,148,255,0.2)';
+  btn.style.cursor=match ? 'pointer' : 'default';
+  btn.title=match ? `Autofill saved login for ${match.site}` : 'No saved login for this site';
+}
+
+// Sets the field's value via the platform's native setter (not the element's
+// own, which frameworks like React override) and fires input/change so
+// framework-controlled forms actually pick up the change — the same trick
+// real password-manager extensions rely on.
+function _browserAutofillScript(username, password){
+  return `(function(){
+    var pass=document.querySelector('input[type="password"]');
+    if(!pass) return false;
+    var form=pass.closest('form') || document;
+    var user=form.querySelector('input[type="email"], input[type="text"], input[autocomplete="username"], input[name*="user" i], input[name*="email" i]');
+    function setVal(el, val){
+      if(!el) return;
+      var proto=Object.getPrototypeOf(el);
+      var setter=Object.getOwnPropertyDescriptor(proto, 'value').set;
+      setter.call(el, val);
+      el.dispatchEvent(new Event('input', {bubbles:true}));
+      el.dispatchEvent(new Event('change', {bubbles:true}));
+    }
+    setVal(user, ${JSON.stringify(username||'')});
+    setVal(pass, ${JSON.stringify(password||'')});
+    return true;
+  })()`;
+}
+
+async function browserAutofill(){
+  const btn=document.getElementById('browser-autofill-btn');
+  const id=btn && btn.dataset.credId;
+  if(!id) return;
+  if(!window.izachWebAuthn || !window.izachPasswords){
+    showToast('Autofill is only available in the desktop app.', 'warn', 'BROWSER');
+    return;
+  }
+  const enrolled=await window.izachWebAuthn.isEnrolled();
+  if(!enrolled){
+    showToast('Set up Windows Hello for autofill in Settings → Browser Settings first.', 'warn', 'BROWSER');
+    return;
+  }
+  showToast('Waiting for Windows Hello…', 'info', 'BROWSER');
+  const result=await window.izachPasswords.autofillReveal(id);
+  if(!result.ok){
+    const msg=result.error==='cancelled' ? 'Autofill cancelled.' : `Autofill failed: ${result.error||'verification failed'}`;
+    showToast(msg, 'warn', 'BROWSER');
+    return;
+  }
+  const tab=browserTabs.find(t=>t.id===browserActiveId);
+  if(!tab) return;
+  try{
+    const filled=await tab.webview.executeJavaScript(_browserAutofillScript(result.username, result.password));
+    showToast(filled ? 'Autofilled saved login.' : 'No login form found on this page.', filled?'success':'warn', 'BROWSER');
+  }catch(e){
+    showToast('Autofill failed: could not fill the page.', 'error', 'BROWSER');
+  }
+}
+
+// Remote autofill trigger from the phone browser (see /browser/autofill-request).
+// The phone only ever sends a URL — the credential lookup, Windows Hello
+// re-verification, and field injection all happen right here on the PC, so
+// the decrypted password never crosses the network or reaches the phone.
+async function _browserAutofillForIncomingRequest(url){
+  if(!url) return;
+  if(!document.getElementById('p-browser').classList.contains('show')) togWgt('p-browser');
+  browserGo(url);
+  setTimeout(async ()=>{
+    const tab=browserTabs.find(t=>t.id===browserActiveId);
+    if(!tab) return;
+    const match=await _browserFindMatchingCredential(tab);
+    if(!match){
+      showToast(`No saved login for ${_browserHostnameOf(tab.url)||'this site'}.`, 'warn', 'BROWSER');
+      return;
+    }
+    if(!window.izachWebAuthn || !window.izachPasswords){
+      showToast('Autofill is only available in the desktop app.', 'warn', 'BROWSER');
+      return;
+    }
+    const enrolled=await window.izachWebAuthn.isEnrolled();
+    if(!enrolled){
+      showToast('Set up Windows Hello for autofill in Settings → Browser Settings first.', 'warn', 'BROWSER');
+      return;
+    }
+    showToast(`📱 Phone requested autofill for ${match.site} — confirm with Windows Hello…`, 'info', 'BROWSER');
+    const result=await window.izachPasswords.autofillReveal(match.id);
+    if(!result.ok){
+      const msg=result.error==='cancelled' ? 'Autofill cancelled.' : `Autofill failed: ${result.error||'verification failed'}`;
+      showToast(msg, 'warn', 'BROWSER');
+      return;
+    }
+    try{
+      const filled=await tab.webview.executeJavaScript(_browserAutofillScript(result.username, result.password));
+      showToast(filled ? 'Autofilled saved login (requested from phone).' : 'No login form found on this page.', filled?'success':'warn', 'BROWSER');
+    }catch(e){
+      showToast('Autofill failed: could not fill the page.', 'error', 'BROWSER');
+    }
+  }, 1800);
+}
+
+async function browserToggleBookmark(){
+  const tab=browserTabs.find(t=>t.id===browserActiveId);
+  const btn=document.getElementById('browser-bookmark-btn');
+  if(!tab) return;
+
+  // Deliberately NOT using _browserFetchBookmarks() here — it silently
+  // returns [] on any failure (fine for read-only display), but this
+  // function WRITES the list back. Saving an empty/partial list after a
+  // failed read would silently wipe every existing bookmark, so a failed
+  // read here must abort instead of falling back to [].
+  let list;
+  try{
+    const r=await fetch(`${API}/api/custom_links`);
+    if(!r.ok) throw new Error(`HTTP ${r.status}`);
+    list=await r.json();
+    if(!Array.isArray(list)) throw new Error('Unexpected response from backend');
+  }catch(e){
+    showToast(`Couldn't load bookmarks — not saving: ${e.message}`, 'error');
+    return;
+  }
+
+  try{
+    const idx=list.findIndex(b=>b.url===tab.url);
+    if(idx>=0){
+      list.splice(idx,1);
+      await fetch(`${API}/api/custom_links`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(list)});
+      if(btn) btn.textContent='☆';
+      showToast('Bookmark removed.', 'info');
+    } else {
+      const folder=(prompt('Bookmark folder (optional):','General')||'General').trim() || 'General';
+      list.push({title: tab.title||tab.url, url: tab.url, folder});
+      await fetch(`${API}/api/custom_links`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(list)});
+      if(btn) btn.textContent='★';
+      showToast(`Bookmarked in "${folder}".`, 'success');
+    }
+    const panel=document.getElementById('browser-bookmarks-panel');
+    if(panel && panel.style.display==='flex') browserLoadBookmarks();
+  }catch(e){
+    showToast(`Bookmark save failed: ${e.message}`, 'error');
+  }
+}
+
+function browserToggleBookmarksPanel(){
+  const panel=document.getElementById('browser-bookmarks-panel');
+  const open=panel.style.display==='flex';
+  panel.style.display=open?'none':'flex';
+  if(!open) browserLoadBookmarks();
+}
+
+async function browserLoadBookmarks(){
+  const panel=document.getElementById('browser-bookmarks-panel');
+  panel.innerHTML='<div style="color:rgba(0,148,255,0.35);">Loading…</div>';
+  const list=await _browserFetchBookmarks();
+  if(!list.length){
+    panel.innerHTML='<div style="color:rgba(0,148,255,0.35);">No bookmarks yet.</div>';
+    return;
+  }
+  const groups={};
+  list.forEach(b=>{ const f=b.folder||'General'; (groups[f]=groups[f]||[]).push(b); });
+  panel.innerHTML='';
+  Object.keys(groups).sort().forEach(folder=>{
+    const heading=document.createElement('div');
+    heading.textContent=folder;
+    heading.style.cssText='color:rgba(0,148,255,0.45);letter-spacing:.15em;margin-top:6px;font-size:8px;';
+    panel.appendChild(heading);
+    groups[folder].forEach(b=>{
+      const row=document.createElement('div');
+      row.style.cssText='display:flex;align-items:center;justify-content:space-between;gap:8px;padding:3px 0 3px 8px;';
+      const label=document.createElement('span');
+      label.textContent=b.title;
+      label.title=b.url;
+      label.style.cssText='color:var(--th);cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;';
+      label.onclick=()=>{ browserGo(b.url); };
+      const del=document.createElement('button');
+      del.textContent='✕';
+      del.title='Remove bookmark';
+      del.style.cssText='background:transparent;border:none;color:rgba(255,80,80,0.5);cursor:pointer;font-size:9px;flex-shrink:0;';
+      del.onclick=async()=>{
+        const newList=list.filter(x=>x!==b);
+        await fetch(`${API}/api/custom_links`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(newList)});
+        browserLoadBookmarks();
+        _browserSyncBookmarkBtn();
+      };
+      row.appendChild(label); row.appendChild(del);
+      panel.appendChild(row);
+    });
+  });
+}
+
+function browserTogglePhoneTabsPanel(){
+  const panel=document.getElementById('browser-phone-tabs-panel');
+  const open=panel.style.display==='flex';
+  panel.style.display=open?'none':'flex';
+  if(!open) browserLoadPhoneTabs();
+}
+
+async function browserLoadPhoneTabs(){
+  const panel=document.getElementById('browser-phone-tabs-panel');
+  panel.innerHTML='<div style="color:rgba(0,148,255,0.35);">Loading…</div>';
+  try{
+    const r=await fetch(`${API}/browser/tabs?exclude=pc`).then(r=>r.json());
+    if(!r.ok) throw new Error(r.error||'unknown error');
+    const devices=r.devices||{};
+    const rows=[];
+    Object.keys(devices).forEach(device=>{
+      (devices[device].tabs||[]).forEach(t=>rows.push({device, ...t}));
+    });
+    if(!rows.length){
+      panel.innerHTML='<div style="color:rgba(0,148,255,0.35);">No open tabs on the phone right now.</div>';
+      return;
+    }
+    panel.innerHTML='';
+    rows.forEach(t=>{
+      const row=document.createElement('div');
+      row.style.cssText='display:flex;align-items:center;gap:8px;padding:3px 0;cursor:pointer;';
+      row.title=t.url;
+      row.innerHTML=`<span style="flex:1;color:var(--th);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${t.title||t.url}</span>
+        <span style="color:rgba(0,148,255,0.3);font-size:8px;flex-shrink:0;">${(t.device||'').toUpperCase()}</span>`;
+      row.onclick=()=>{ browserNewTab(t.url); browserTogglePhoneTabsPanel(); };
+      panel.appendChild(row);
+    });
+  }catch(e){
+    panel.innerHTML=`<div style="color:rgba(255,80,80,0.5);">Couldn't load: ${e.message}</div>`;
+  }
+}
+
+// ── Recorded tasks: record, save, list, replay ──────────────────────────────
+function browserToggleRecording(){
+  const btn=document.getElementById('browser-rec-btn');
+  if(!browserRecording){
+    const tab=browserTabs.find(t=>t.id===browserActiveId);
+    if(!tab) return;
+    browserRecording=true;
+    browserRecordTabId=tab.id;
+    browserRecordStartUrl=tab.url;
+    browserRecordSteps=[];
+    // Guard against the dom-ready race: if the page hasn't finished loading
+    // yet, the dom-ready listener in browserNewTab() will arm it as soon as
+    // it does — sending now would just throw and silently do nothing.
+    if(tab._domReady){
+      try{ tab.webview.send('browser-record-toggle', true); }catch(e){}
+    }
+    btn.textContent='■ Stop Recording';
+    btn.style.color='#ff3333';
+  } else {
+    const tab=browserTabs.find(t=>t.id===browserRecordTabId);
+    if(tab && tab._domReady){
+      try{ tab.webview.send('browser-record-toggle', false); }catch(e){}
+    }
+    browserRecording=false;
+    btn.textContent='● Start Recording';
+    btn.style.color='rgba(255,80,80,0.55)';
+
+    if(browserRecordSteps.length===0){
+      showToast('No actions were recorded.', 'warn');
+      return;
+    }
+    browserOpenStepEditor();
+  }
+}
+
+function browserToggleRecordingsPanel(){
+  const panel=document.getElementById('browser-recordings-panel');
+  const open=panel.style.display==='flex';
+  panel.style.display=open?'none':'flex';
+  if(!open) browserLoadRecordings();
+}
+
+async function browserLoadRecordings(){
+  const panel=document.getElementById('browser-recordings-panel');
+  panel.innerHTML='<div style="color:rgba(0,148,255,0.35);">Loading…</div>';
+  try{
+    const r=await fetch(`${API}/browser/recordings`).then(r=>r.json());
+    if(!r.ok || !r.recordings.length){
+      panel.innerHTML='<div style="color:rgba(0,148,255,0.35);">No saved recordings yet.</div>';
+      return;
+    }
+    panel.innerHTML='';
+    r.recordings.forEach(rec=>{
+      const row=document.createElement('div');
+      row.style.cssText='display:flex;align-items:center;justify-content:space-between;gap:8px;padding:4px 0;border-bottom:1px solid rgba(0,148,255,0.06);';
+      const label=document.createElement('span');
+      const triggers=(rec.trigger_phrases||[]).join(', ');
+      label.innerHTML=`${rec.name} <span style="color:rgba(0,148,255,0.35);">(${rec.steps} steps)</span>`+
+        (triggers?`<br><span style="color:rgba(0,148,255,0.3);font-size:8px;">"${triggers}"</span>`:'');
+      label.style.cssText='color:var(--th);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+      const btns=document.createElement('div');
+      btns.style.cssText='display:flex;gap:6px;flex-shrink:0;';
+      const playBtn=document.createElement('button');
+      playBtn.textContent='▶';
+      playBtn.title='Replay';
+      playBtn.style.cssText='background:transparent;border:none;color:#1db954;cursor:pointer;font-size:11px;';
+      playBtn.onclick=()=>browserReplayRecording(rec.name);
+      const editBtn=document.createElement('button');
+      editBtn.textContent='✎';
+      editBtn.title='Edit steps';
+      editBtn.style.cssText='background:transparent;border:none;color:rgba(0,148,255,0.55);cursor:pointer;font-size:10px;';
+      editBtn.onclick=()=>browserOpenStepEditor(rec.name);
+      const delBtn=document.createElement('button');
+      delBtn.textContent='✕';
+      delBtn.title='Delete';
+      delBtn.style.cssText='background:transparent;border:none;color:rgba(255,80,80,0.6);cursor:pointer;font-size:10px;';
+      delBtn.onclick=()=>browserDeleteRecording(rec.name);
+      btns.appendChild(playBtn); btns.appendChild(editBtn); btns.appendChild(delBtn);
+      row.appendChild(label); row.appendChild(btns);
+      panel.appendChild(row);
+    });
+  }catch(e){
+    panel.innerHTML=`<div style="color:rgba(255,80,80,0.5);">Couldn't load recordings: ${e.message}</div>`;
+  }
+}
+
+// Placeholders of the form {paramName} inside non-sensitive fill values —
+// sensitive (credential) values are never parameterized.
+function _seExtractParams(steps){
+  const params=[];
+  const re=/\{(\w+)\}/g;
+  (steps||[]).forEach(s=>{
+    if(s.type==='fill' && !s.sensitive && typeof s.value==='string'){
+      let m; while((m=re.exec(s.value))){ if(!params.includes(m[1])) params.push(m[1]); }
+    }
+  });
+  return params;
+}
+
+function _seSubstituteParams(steps, params){
+  return (steps||[]).map(s=>{
+    if(s.type==='fill' && !s.sensitive && typeof s.value==='string'){
+      let v=s.value;
+      Object.keys(params||{}).forEach(k=>{ v=v.split('{'+k+'}').join(params[k]); });
+      return {...s, value:v};
+    }
+    return s;
+  });
+}
+
+// Resolves sensitive (encrypted) fill values back to plaintext right before
+// replay — decryption only ever happens here, in the renderer, and the
+// plaintext never touches localStorage or the recording file on disk.
+async function _seDecryptSteps(steps){
+  const out=[];
+  for(const s of steps||[]){
+    if(s.sensitive && s.type==='fill'){
+      if(!window.izachRecordings){ out.push({...s}); continue; }
+      try{ out.push({...s, value: await window.izachRecordings.decrypt(s.value)}); }
+      catch(e){ out.push({...s, value:''}); }
+    } else {
+      out.push(s);
+    }
+  }
+  return out;
+}
+
+async function browserReplayRecording(name, params){
+  showToast(`Replaying "${name}"…`, 'info');
+  try{
+    const rec=await fetch(`${API}/browser/recordings/${encodeURIComponent(name)}`).then(r=>r.json());
+    if(!rec.ok){ showToast(`Replay failed: ${rec.error||'recording not found'}`, 'error'); return; }
+
+    const neededParams=_seExtractParams(rec.steps);
+    const resolvedParams={...(params||{})};
+    for(const p of neededParams){
+      if(resolvedParams[p]===undefined){
+        const val=prompt(`Value for "${p}":`);
+        if(val===null){ showToast('Replay cancelled.', 'warn'); return; }
+        resolvedParams[p]=val;
+      }
+    }
+
+    let steps=_seSubstituteParams(rec.steps, resolvedParams);
+    steps=await _seDecryptSteps(steps);
+
+    const r=await fetch(`${API}/browser/recordings/${encodeURIComponent(name)}/replay`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ steps, start_url: rec.start_url }),
+    }).then(r=>r.json());
+
+    if(r.ok){
+      showToast(`Replay finished — ${r.completed}/${r.total} steps.`, 'success');
+    } else {
+      const firstErr=(r.errors&&r.errors[0]) || {};
+      showToast(`Replay stopped at step ${firstErr.step!==undefined?firstErr.step+1:'?'}/${r.total}: ${firstErr.error||'unknown error'}`, 'error');
+    }
+  }catch(e){
+    showToast(`Replay failed: ${e.message}`, 'error');
+  }
+}
+
+async function browserDeleteRecording(name){
+  try{
+    await fetch(`${API}/browser/recordings/${encodeURIComponent(name)}`, { method:'DELETE' });
+    browserLoadRecordings();
+  }catch(e){}
+}
+
+// ── Recording step editor ──────────────────────────────────────────────────
+let _seState=null; // { name, editingName, triggerPhrases, startUrl, scheduleCron, steps }
+
+const _seStepLabel=(s)=>{
+  if(s.type==='navigate') return `Go to ${s.url}`;
+  if(s.type==='click') return `Click "${(s.text||s.selector||'').slice(0,40)}"`;
+  if(s.type==='fill') return `Fill "${(s.selector||'').slice(0,30)}" with ${s.sensitive?'a saved credential':('"'+(s.value||'')+'"')}`;
+  return s.type;
+};
+
+async function browserOpenStepEditor(existingName){
+  let steps, startUrl, name='', triggers='', scheduleCron='';
+  if(existingName){
+    try{
+      const rec=await fetch(`${API}/browser/recordings/${encodeURIComponent(existingName)}`).then(r=>r.json());
+      if(!rec.ok){ showToast('Could not load recording for editing.', 'error'); return; }
+      steps=rec.steps||[]; startUrl=rec.start_url||''; name=rec.name||existingName;
+      triggers=(rec.trigger_phrases||[]).join(', ');
+      scheduleCron=rec.schedule_cron||'';
+    }catch(e){ showToast(`Couldn't load recording: ${e.message}`, 'error'); return; }
+  } else {
+    steps=browserRecordSteps.map(s=>({...s}));
+    startUrl=browserRecordStartUrl;
+  }
+  // Recording that starts on a fresh tab begins on iZACH's own home page
+  // (a data: URL), not the real site — the actual target only shows up as
+  // the first recorded step, once the user types it into the address bar.
+  // Left as-is, replay would load the (large, pointless) home page first,
+  // then immediately navigate away. Promote that first navigate step to be
+  // the real start_url instead, and drop the now-redundant step. Applied to
+  // both new AND existing recordings so previously-saved ones self-heal the
+  // next time they're opened for editing.
+  if(startUrl && startUrl.startsWith('data:') && steps[0] && steps[0].type==='navigate'){
+    startUrl=steps[0].url;
+    steps=steps.slice(1);
+  }
+  _seState={ name, editingName: existingName||null, triggerPhrases: triggers, startUrl, scheduleCron, steps };
+  document.getElementById('se-name').value=name;
+  document.getElementById('se-triggers').value=triggers;
+  document.getElementById('se-schedule').value=scheduleCron;
+  document.getElementById('se-preview').style.display='none';
+  _seRenderSteps();
+  const page=document.getElementById('rec-editor-page');
+  page.style.opacity='1'; page.style.pointerEvents='all';
+}
+
+function _seCancel(){
+  const page=document.getElementById('rec-editor-page');
+  page.style.opacity='0'; page.style.pointerEvents='none';
+  _seState=null;
+}
+
+function _seRenderSteps(){
+  const list=document.getElementById('se-steps');
+  list.innerHTML='';
+  if(!_seState.steps.length){
+    list.innerHTML='<div style="color:rgba(0,148,255,0.3);font-size:10px;">No steps.</div>';
+    return;
+  }
+  _seState.steps.forEach((s,i)=>{
+    const row=document.createElement('div');
+    row.style.cssText='display:flex;align-items:center;gap:8px;background:rgba(0,148,255,0.04);border:1px solid rgba(0,148,255,0.08);border-radius:4px;padding:8px 10px;';
+
+    const icon=document.createElement('span');
+    icon.textContent=s.type==='navigate'?'🧭':(s.type==='click'?'🖱':'⌨');
+    icon.style.cssText='font-size:11px;flex-shrink:0;';
+    row.appendChild(icon);
+
+    const body=document.createElement('div');
+    body.style.cssText='flex:1;min-width:0;';
+
+    const labelRow=document.createElement('div');
+    labelRow.style.cssText='font-size:9.5px;color:var(--th);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+    labelRow.textContent=_seStepLabel(s);
+    body.appendChild(labelRow);
+
+    if(s.type==='fill'){
+      const editRow=document.createElement('div');
+      editRow.style.cssText='display:flex;gap:6px;margin-top:5px;align-items:center;';
+      if(s.sensitive){
+        const revealBtn=document.createElement('button');
+        revealBtn.textContent='Reveal';
+        revealBtn.style.cssText='background:none;border:1px solid rgba(0,148,255,0.15);color:rgba(0,148,255,0.5);font-size:8px;padding:2px 7px;cursor:pointer;border-radius:3px;';
+        revealBtn.onclick=async()=>{
+          if(revealBtn.dataset.revealed==='1'){ revealBtn.textContent='Reveal'; revealBtn.dataset.revealed='0'; revealBtn.nextSibling.textContent='••••••••'; return; }
+          if(!window.izachRecordings){ showToast('Only available in the desktop app.', 'warn'); return; }
+          try{
+            const plain=await window.izachRecordings.decrypt(s.value);
+            revealBtn.textContent='Hide'; revealBtn.dataset.revealed='1';
+            revealBtn.nextSibling.textContent=plain;
+          }catch(e){ showToast('Could not decrypt value.', 'error'); }
+        };
+        const valSpan=document.createElement('span');
+        valSpan.textContent='••••••••';
+        valSpan.style.cssText='font-size:9px;color:rgba(0,148,255,0.45);';
+        editRow.appendChild(revealBtn); editRow.appendChild(valSpan);
+      } else {
+        const valInput=document.createElement('input');
+        valInput.type='text';
+        valInput.value=s.value||'';
+        valInput.style.cssText='flex:1;min-width:0;background:rgba(0,148,255,0.05);border:1px solid rgba(0,148,255,0.12);border-radius:3px;color:var(--th);font-family:inherit;font-size:9px;padding:4px 6px;outline:none;';
+        valInput.oninput=()=>{ s.value=valInput.value; labelRow.textContent=_seStepLabel(s); };
+        const paramBtn=document.createElement('button');
+        paramBtn.textContent='{ }';
+        paramBtn.title='Turn into a parameter (replay with a different value each time)';
+        paramBtn.style.cssText='background:none;border:1px solid rgba(0,148,255,0.15);color:rgba(0,148,255,0.5);font-size:8px;padding:3px 7px;cursor:pointer;border-radius:3px;flex-shrink:0;';
+        paramBtn.onclick=()=>{
+          const pname=prompt('Parameter name (e.g. "q" for "search for {q}"):', 'value');
+          if(!pname) return;
+          s.value=`{${pname.trim()}}`;
+          valInput.value=s.value;
+          labelRow.textContent=_seStepLabel(s);
+        };
+        editRow.appendChild(valInput); editRow.appendChild(paramBtn);
+      }
+      body.appendChild(editRow);
+    }
+
+    if(s.type!=='navigate'){
+      const waitRow=document.createElement('div');
+      waitRow.style.cssText='display:flex;align-items:center;gap:5px;margin-top:5px;';
+      const waitLbl=document.createElement('span');
+      waitLbl.textContent='Wait after (ms):';
+      waitLbl.style.cssText='font-size:7.5px;color:rgba(0,148,255,0.35);';
+      const waitInput=document.createElement('input');
+      waitInput.type='number'; waitInput.min='0'; waitInput.step='100';
+      waitInput.value=s.wait!==undefined?s.wait:400;
+      waitInput.style.cssText='width:60px;background:rgba(0,148,255,0.05);border:1px solid rgba(0,148,255,0.12);border-radius:3px;color:var(--th);font-family:inherit;font-size:9px;padding:3px 5px;outline:none;';
+      waitInput.oninput=()=>{ s.wait=parseInt(waitInput.value)||0; };
+      waitRow.appendChild(waitLbl); waitRow.appendChild(waitInput);
+      body.appendChild(waitRow);
+    }
+
+    row.appendChild(body);
+
+    const ctrls=document.createElement('div');
+    ctrls.style.cssText='display:flex;flex-direction:column;gap:2px;flex-shrink:0;';
+    const upBtn=document.createElement('button');
+    upBtn.textContent='▲'; upBtn.disabled=(i===0);
+    upBtn.style.cssText=`background:none;border:none;color:rgba(0,148,255,${i===0?'0.15':'0.5'});font-size:8px;cursor:${i===0?'default':'pointer'};padding:1px;`;
+    upBtn.onclick=()=>{ if(i>0){ const t=_seState.steps[i-1]; _seState.steps[i-1]=_seState.steps[i]; _seState.steps[i]=t; _seRenderSteps(); } };
+    const dnBtn=document.createElement('button');
+    dnBtn.textContent='▼'; dnBtn.disabled=(i===_seState.steps.length-1);
+    dnBtn.style.cssText=`background:none;border:none;color:rgba(0,148,255,${i===_seState.steps.length-1?'0.15':'0.5'});font-size:8px;cursor:${i===_seState.steps.length-1?'default':'pointer'};padding:1px;`;
+    dnBtn.onclick=()=>{ if(i<_seState.steps.length-1){ const t=_seState.steps[i+1]; _seState.steps[i+1]=_seState.steps[i]; _seState.steps[i]=t; _seRenderSteps(); } };
+    ctrls.appendChild(upBtn); ctrls.appendChild(dnBtn);
+    row.appendChild(ctrls);
+
+    const delBtn=document.createElement('button');
+    delBtn.textContent='✕';
+    delBtn.title='Remove step';
+    delBtn.style.cssText='background:none;border:none;color:rgba(255,80,80,0.5);font-size:10px;cursor:pointer;flex-shrink:0;padding:0 2px;';
+    delBtn.onclick=()=>{ _seState.steps.splice(i,1); _seRenderSteps(); };
+    row.appendChild(delBtn);
+
+    list.appendChild(row);
+  });
+}
+
+function _seTogglePreview(){
+  const box=document.getElementById('se-preview');
+  const open=box.style.display==='block';
+  if(open){ box.style.display='none'; return; }
+  box.style.display='block';
+  box.textContent=_seState.steps.map((s,i)=>`${i+1}. ${_seStepLabel(s)}`).join('\n') || 'No steps recorded.';
+}
+
+async function _seSave(){
+  const name=document.getElementById('se-name').value.trim();
+  if(!name){ showToast('Name is required.', 'warn'); return; }
+  const triggerPhrases=document.getElementById('se-triggers').value.split(',').map(t=>t.trim().toLowerCase()).filter(Boolean);
+  const scheduleCron=document.getElementById('se-schedule').value.trim();
+
+  try{
+    const r=await fetch(`${API}/browser/recordings`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        name, start_url:_seState.startUrl, steps:_seState.steps,
+        trigger_phrases: triggerPhrases, schedule_cron: scheduleCron,
+      }),
+    }).then(r=>r.json());
+    if(!r.ok){ showToast(`Save failed: ${r.error||'unknown error'}`, 'error'); return; }
+
+    if(_seState.editingName && _seState.editingName!==name){
+      await fetch(`${API}/browser/recordings/${encodeURIComponent(_seState.editingName)}`, { method:'DELETE' });
+    }
+
+    showToast(`Saved "${name}" — ${r.steps} steps.`, 'success');
+    _seCancel();
+    browserLoadRecordings();
+  }catch(e){
+    showToast(`Save failed: ${e.message}`, 'error');
   }
 }
 
@@ -3874,6 +6102,75 @@ document.getElementById('p-apimon').addEventListener('transitionend',function(){
   if(this.classList.contains('show')) loadApiUsage();
 });
 setInterval(()=>{ if(document.getElementById('p-apimon').classList.contains('show')) loadApiUsage(); }, 30000);
+
+// ── STATUS DASHBOARD — at-a-glance view of recordings/automations/DND/downloads/vault ──
+function _dashRow(label, value, color){
+  return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 14px;border-bottom:1px solid rgba(0,148,255,0.08);">
+    <span style="font-size:10px;color:rgba(0,148,255,0.6);letter-spacing:.05em;">${label}</span>
+    <span style="font-size:11px;color:${color||'var(--th)'};font-weight:600;">${value}</span>
+  </div>`;
+}
+
+async function loadDashboard(){
+  const list = document.getElementById('dashboard-list');
+  if(!list) return;
+  list.innerHTML = '<div style="padding:20px 14px;color:rgba(0,148,255,0.25);font-size:9px;letter-spacing:.2em;text-align:center;">LOADING...</div>';
+
+  const rows = [];
+
+  // Recordings
+  try{
+    const d = await fetch(API+'/browser/recordings').then(r=>r.json());
+    const recs = d.recordings || [];
+    const scheduled = recs.filter(r=>r.schedule_cron).length;
+    rows.push(_dashRow('RECORDINGS', `${recs.length} saved${scheduled?` · ${scheduled} scheduled`:''}`));
+  }catch(e){ rows.push(_dashRow('RECORDINGS', 'unavailable', '#f97316')); }
+
+  // Automations
+  try{
+    const d = await fetch(API+'/smart-memory?category=automation').then(r=>r.json());
+    const items = d.data || [];
+    const active = items.filter(i=>i.enabled!==false).length;
+    rows.push(_dashRow('AUTOMATIONS', `${active}/${items.length} active`));
+  }catch(e){ rows.push(_dashRow('AUTOMATIONS', 'unavailable', '#f97316')); }
+
+  // DND
+  try{
+    const d = await fetch(API+'/dnd').then(r=>r.json());
+    rows.push(_dashRow('DO NOT DISTURB', d.active ? 'ON' : 'OFF', d.active ? '#ff8c00' : undefined));
+  }catch(e){ rows.push(_dashRow('DO NOT DISTURB', 'unavailable', '#f97316')); }
+
+  // Downloads
+  try{
+    const d = await fetch(API+'/downloads/active').then(r=>r.json());
+    const active = (d.downloads || d.active || []).length || 0;
+    rows.push(_dashRow('DOWNLOADS', active ? `${active} in progress` : 'idle', active ? '#00e5ff' : undefined));
+  }catch(e){ rows.push(_dashRow('DOWNLOADS', 'unavailable', '#f97316')); }
+
+  // WebAuthn vault (Electron-only IPC, not a REST route)
+  try{
+    if(window.izachWebAuthn && window.izachPasswords){
+      const enrolled = await window.izachWebAuthn.isEnrolled();
+      const creds = enrolled ? await window.izachPasswords.list() : [];
+      rows.push(_dashRow('CREDENTIAL VAULT', enrolled ? `${creds.length} saved logins` : 'not enrolled', enrolled ? undefined : '#f97316'));
+    } else {
+      rows.push(_dashRow('CREDENTIAL VAULT', 'desktop-app only'));
+    }
+  }catch(e){ rows.push(_dashRow('CREDENTIAL VAULT', 'unavailable', '#f97316')); }
+
+  // Phone pairing
+  try{
+    const d = await fetch(API+'/phone/status').then(r=>r.json());
+    rows.push(_dashRow('PHONE', d.connected ? `paired · ${d.device_name||'device'}` : 'not connected', d.connected ? '#1db954' : undefined));
+  }catch(e){ rows.push(_dashRow('PHONE', 'unavailable', '#f97316')); }
+
+  list.innerHTML = rows.join('');
+}
+
+document.getElementById('p-dashboard').addEventListener('transitionend',function(){
+  if(this.classList.contains('show')) loadDashboard();
+});
+setInterval(()=>{ if(document.getElementById('p-dashboard').classList.contains('show')) loadDashboard(); }, 20000);
 
 // ════════════════════════════════════════════════════
 // SKILLS PANEL — p-skills widget
@@ -4222,9 +6519,22 @@ async function loadPhoneQR(){
       if(img){img.src='data:image/png;base64,'+d.qr_base64; img.style.display='block';}
       if(ph)  ph.style.display='none';
     }
+    if(d.pairing_secret){
+      const secEl=document.getElementById('phone-pairing-secret');
+      if(secEl){ secEl.textContent=d.pairing_secret; secEl.dataset.secret=d.pairing_secret; }
+    }
   }catch(e){}
 }
 loadPhoneQR();
+
+function _copyPairingSecret(){
+  const el=document.getElementById('phone-pairing-secret');
+  const secret=el && el.dataset.secret;
+  if(!secret) return;
+  navigator.clipboard.writeText(secret).then(()=>{
+    showToast('Pairing secret copied — paste it into Settings on the phone.', 'success', 'PAIRING');
+  }).catch(()=>{});
+}
 
 // ── Sync mic toggle with backend state on page load ─────────────────────────
 (async()=>{
@@ -4323,6 +6633,8 @@ const wCfg={
   'p-hist'  :{aspect:240/260,minW:180,maxW:420,minH:180,maxH:460},
   'p-skills':{aspect:280/360,minW:220,maxW:480,minH:200,maxH:540},
   'p-apimon':{aspect:300/480,minW:240,maxW:500,minH:300,maxH:600},
+  'p-browser':{aspect:520/440,minW:360,maxW:900,minH:320,maxH:760},
+  'p-dashboard':{aspect:300/480,minW:260,maxW:520,minH:320,maxH:640},
 };
 
 const sgEl=document.getElementById('snap-grid');
@@ -4511,6 +6823,7 @@ allWgts.forEach(id=>{
     el.classList.remove('show');
     const dk=dkMap[id]; if(dk){const b=document.getElementById(dk);if(b)b.classList.remove('on');}
     const wpb=wpMap[id]; if(wpb){const b=document.getElementById(wpb);if(b)b.classList.remove('on');}
+    const tbb=tbMap[id]; if(tbb){const b=document.getElementById(tbb);if(b)b.classList.remove('on');}
     // Persist close so _restoreWidgets() doesn't reopen it next boot
     if(typeof _saveWidgetOpen==='function') _saveWidgetOpen(id,false);
   });
@@ -5005,6 +7318,31 @@ function handleWS(d){
     }
     return;
   }
+  // Browser control from backend (iZACH-driven navigation / playback)
+  else if(d.type==='browser_command'){
+    if(d.action==='youtube_play'){
+      browserPlayYouTube(d.query||'', d.mode||'audio');
+    } else if(d.action==='open_url'){
+      if(!document.getElementById('p-browser').classList.contains('show')) togWgt('p-browser');
+      browserGo(d.url||d.query||'');
+    } else if(d.action==='search'){
+      if(!document.getElementById('p-browser').classList.contains('show')) togWgt('p-browser');
+      const q=d.query||'';
+      browserGo('https://www.google.com/search?q='+encodeURIComponent(q));
+    } else if(d.action==='scroll'){
+      browserVoiceScroll(d.direction||'down');
+    } else if(d.action==='nav'){
+      browserNav(d.direction==='fwd' ? 'fwd' : 'back');
+    } else if(d.action==='click_link'){
+      browserVoiceClickLink(d.index||1);
+    } else if(d.action==='replay_recording'){
+      if(!document.getElementById('p-browser').classList.contains('show')) togWgt('p-browser');
+      browserReplayRecording(d.name||'', d.params||{});
+    } else if(d.action==='autofill_request'){
+      _browserAutofillForIncomingRequest(d.url||'');
+    }
+    return;
+  }
   // Phone connection status
   else if(d.type==='phone_status'){
     const on=!!d.connected;
@@ -5375,25 +7713,29 @@ async function printNow() {
   if (_printQueue.length === 0) { showToast('PRINT','No files in queue'); return; }
   const btn = document.querySelector('#p-print button[onclick="printNow()"]');
   if (btn) { btn.textContent = '⎙ OPENING…'; btn.disabled = true; }
+
+  if(!document.getElementById('p-browser').classList.contains('show')) togWgt('p-browser');
+
   let opened = 0;
   for (const f of _printQueue) {
+    const fileUrl = 'file:///' + f.path.replace(/\\/g, '/').replace(/^\/+/, '');
     try {
-      const r = await fetch(API + '/print/open-browser', {
-        method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ path: f.path }),
-      });
-      const d = await r.json();
-      if (d.ok) opened++;
+      // First file reuses the current tab (like clicking a link); the rest
+      // open in their own tabs so multiple files queued for print don't
+      // clobber each other.
+      if (opened === 0 && browserActiveId) browserGo(fileUrl);
+      else await browserNewTab(fileUrl);
+      opened++;
     } catch(e) {}
   }
   if (opened > 0) {
-    showToast('PRINT', `${opened} file${opened > 1 ? 's' : ''} opened in Chrome — use Ctrl+P to print`, 'success');
+    showToast('PRINT', `${opened} file${opened > 1 ? 's' : ''} opened in iZACH Browser — use Ctrl+P to print`, 'success');
     _printQueue = [];
     _renderPrintQueue();
   } else {
     showToast('PRINT', 'Could not open files in browser', 'error');
   }
-  if (btn) { btn.textContent = '⎙ OPEN IN CHROME'; btn.disabled = false; }
+  if (btn) { btn.textContent = '⎙ OPEN IN iZACH BROWSER'; btn.disabled = false; }
 }
 
 // Init printer panel when first opened
@@ -7002,8 +9344,67 @@ document.getElementById('p-mem').addEventListener('transitionend',function(){
 
 // ── Calendar panel — fetch events when opened ────────
 let _calEvents=[];
+let _calConnected=false;
+let _calPollTimer=null;
+
+function _calSetStatus(d){
+  const dot=document.getElementById('cal-status-dot');
+  const lbl=document.getElementById('cal-status-lbl');
+  const dot2=document.getElementById('cal-dot');
+  const authRow=document.getElementById('cal-auth-row');
+  const disRow=document.getElementById('cal-disconnect-row');
+  const waiting=d.status==='waiting_for_browser';
+  _calConnected=!!d.connected;
+  if(dot){ dot.style.background=d.connected?'#1db954':'rgba(0,148,255,0.2)'; dot.style.boxShadow=d.connected?'0 0 6px #1db954':'none'; }
+  if(dot2){ dot2.style.background=d.connected?'#1db954':''; }
+  if(lbl) lbl.textContent = waiting ? 'CONNECTING…' : (d.connected ? `CONNECTED${d.user?' — '+d.user:''}` : 'NOT CONNECTED');
+  if(authRow) authRow.style.display = d.connected ? 'none' : 'flex';
+  if(disRow) disRow.style.display = d.connected ? 'block' : 'none';
+}
+
+async function calCheckAuthStatus(){
+  try{
+    const r=await fetch(API+'/calendar/auth/status');
+    const d=await r.json();
+    _calSetStatus(d);
+    return d;
+  }catch(e){
+    _calSetStatus({connected:false, status:'idle', error:e.message});
+    return {connected:false, status:'idle'};
+  }
+}
+
+async function calConnectStart(){
+  try{
+    const r=await fetch(API+'/calendar/auth/connect', {method:'POST'});
+    const d=await r.json();
+    if(!d.ok){ showToast(d.error||'Could not start connect flow.', 'error', 'CAL'); return; }
+    _calSetStatus({connected:false, status:'waiting_for_browser'});
+    if(_calPollTimer) clearInterval(_calPollTimer);
+    _calPollTimer=setInterval(async ()=>{
+      const s=await calCheckAuthStatus();
+      if(s.status==='connected' || s.status==='error'){
+        clearInterval(_calPollTimer); _calPollTimer=null;
+        if(s.status==='connected'){ showToast('Google Calendar connected.', 'success', 'CAL'); fetchCalendar(); }
+        else{ showToast('Calendar connect failed: '+(s.error||'unknown error'), 'error', 'CAL'); }
+      }
+    }, 2000);
+  }catch(e){ showToast(`Cannot reach backend: ${e.message}`, 'error', 'CAL'); }
+}
+
+async function calDisconnect(){
+  try{
+    await fetch(API+'/calendar/auth/disconnect', {method:'POST'});
+    _calEvents=[];
+    await calCheckAuthStatus();
+    renderCalendar();
+    showToast('Calendar disconnected.', 'info', 'CAL');
+  }catch(e){ showToast(`Disconnect failed: ${e.message}`, 'error', 'CAL'); }
+}
 
 async function fetchCalendar(){
+  const status=await calCheckAuthStatus();
+  if(!status.connected){ renderCalendar(); return; }
   try{
     const r=await fetch(API+'/calendar/events'); const d=await r.json(); if(!d.ok||!d.events)return;
     _calEvents=d.events;
@@ -7015,6 +9416,10 @@ function renderCalendar(){
   const body=document.getElementById('p-sched-body');
   if(!body)return;
   body.innerHTML='';
+  if(!_calConnected){
+    body.innerHTML='<div class="ev"><div class="ev-info" style="padding:8px 0;color:rgba(0,148,255,0.3);font-size:9px;letter-spacing:.2em;">CONNECT ABOVE TO SEE EVENTS</div></div>';
+    return;
+  }
   if(!_calEvents.length){
     body.innerHTML='<div class="ev"><div class="ev-info" style="padding:8px 0;color:rgba(0,148,255,0.3);font-size:9px;letter-spacing:.2em;">NO EVENTS</div></div>';
     return;
@@ -7215,6 +9620,7 @@ async function loadConfig(){
     const verb=document.getElementById('cfg-verbosity'); if(verb && s.response_verbosity) verb.value=s.response_verbosity;
     // City & screensaver
     const city=document.getElementById('cfg-city'); if(city && s.weather_city) city.value=s.weather_city;
+    const nickname=document.getElementById('cfg-nickname'); if(nickname && s.nickname) nickname.value=s.nickname;
     if(s.screensaver_timeout!=null){ _ssMinutes=Number(s.screensaver_timeout); const ss=document.getElementById('cfg-ss'); if(ss) ss.value=_ssMinutes; resetActivity(); }
     // Toggles
     const togMap={
@@ -7225,10 +9631,26 @@ async function loadConfig(){
       'notif_downloads':['tog-notif-dl', s.notif_downloads!=null?!!s.notif_downloads:true],
       'command_history_enabled':['tog-cmd-hist', s.command_history_enabled!=null?!!s.command_history_enabled:true],
       'briefing_enabled':['tog-briefing', !!(s.briefing_enabled)],
+      'auto_dnd_before_meetings':['tog-auto-dnd', !!(s.auto_dnd_before_meetings)],
+      'proactive_enabled':['tog-proactive', s.proactive_enabled!=null?!!s.proactive_enabled:true],
+      'pattern_automation_suggestions_enabled':['tog-pattern-suggest', s.pattern_automation_suggestions_enabled!=null?!!s.pattern_automation_suggestions_enabled:true],
+      'screen_aware_enabled':['tog-screen-aware', !!(s.screen_aware_enabled)],
+      'email_agent_enabled':['tog-email-agent', !!(s.email_agent_enabled)],
+      'email_watch_otp':['tog-email-otp', s.email_watch_otp!=null?!!s.email_watch_otp:true],
+      'email_watch_replies':['tog-email-replies', s.email_watch_replies!=null?!!s.email_watch_replies:true],
+      'email_watch_keywords':['tog-email-keywords', s.email_watch_keywords!=null?!!s.email_watch_keywords:true],
+      'email_track_orders':['tog-email-orders', s.email_track_orders!=null?!!s.email_track_orders:true],
     };
     for(const [key,[id,val]] of Object.entries(togMap)){
       _cfgBools[key]=val;
       const el=document.getElementById(id); if(el) el.classList.toggle('on',val);
+    }
+    const autoDndLead=document.getElementById('cfg-auto-dnd-lead');
+    if(autoDndLead) autoDndLead.value = s.auto_dnd_lead_minutes!=null ? s.auto_dnd_lead_minutes : 5;
+    const screenAwareExcl=document.getElementById('cfg-screen-aware-excl');
+    if(screenAwareExcl){
+      const list = Array.isArray(s.screen_aware_excluded_apps) ? s.screen_aware_excluded_apps : ['keepass','keepassxc','1password','bitwarden','lastpass'];
+      screenAwareExcl.value = list.join(', ');
     }
     // Log retention
     const logRet=document.getElementById('cfg-log-ret'); if(logRet && s.log_retention_days) logRet.value=s.log_retention_days;
@@ -7249,7 +9671,129 @@ async function loadConfig(){
     if(s.font_size) applyFontSize(s.font_size);
     // Load mic devices into settings dropdown
     _loadMicDevicesSettings();
+    // Email agent
+    const emailWatchlist=document.getElementById('cfg-email-watchlist');
+    if(emailWatchlist) emailWatchlist.value = (s.email_watchlist||[]).join(', ');
+    emailCheckAuthStatus();
+    emailLoadOrders();
+    loadNotificationFeed();
   }catch(e){}
+}
+
+// ── Unified notification feed (Phase 5) ───────────────────────────────
+const _NOTIF_SOURCE_ICON = {whatsapp:'💬', calendar:'📅', system:'⚠', email:'✉', alerts:'✉'};
+
+async function loadNotificationFeed(){
+  const el=document.getElementById('notif-feed-list');
+  if(!el) return;
+  el.textContent='Loading…';
+  try{
+    const r=await fetch(API+'/notifications/feed?limit=10');
+    const d=await r.json();
+    const items=d.notifications||[];
+    el.innerHTML='';
+    if(!items.length){ el.textContent='No notifications yet.'; return; }
+    // Titles/bodies come from WhatsApp/email — untrusted text — built via
+    // textContent, not innerHTML, so nothing in them can execute as markup.
+    items.forEach(n=>{
+      const icon=_NOTIF_SOURCE_ICON[n.source]||'•';
+      const when=new Date(n.ts*1000).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+      const row=document.createElement('div');
+      row.style.cssText='padding:3px 0;border-bottom:1px solid rgba(0,148,255,0.06);';
+      const line1=document.createElement('div');
+      const b=document.createElement('b'); b.textContent=`${icon} ${n.title}`;
+      const t=document.createElement('span'); t.style.opacity='.5'; t.style.marginLeft='6px'; t.textContent=when;
+      line1.appendChild(b); line1.appendChild(t);
+      const line2=document.createElement('span'); line2.style.opacity='.7'; line2.textContent=(n.body||'').slice(0,80);
+      row.appendChild(line1); row.appendChild(line2);
+      el.appendChild(row);
+    });
+  }catch(e){ el.textContent='Could not load notifications.'; }
+}
+
+// ── Email agent (Gmail OAuth, watchlist, tracked orders) ─────────────
+let _emailPollTimer=null;
+
+function _emailSetStatus(d){
+  const dot=document.getElementById('email-status-dot');
+  const lbl=document.getElementById('email-status-lbl');
+  const authRow=document.getElementById('email-auth-row');
+  const disRow=document.getElementById('email-disconnect-row');
+  const waiting = d.status==='waiting_for_browser';
+  if(dot){ dot.style.background=d.connected?'#1db954':'rgba(0,148,255,0.2)'; dot.style.boxShadow=d.connected?'0 0 6px #1db954':'none'; }
+  if(lbl) lbl.textContent = waiting ? 'CONNECTING…' : (d.connected ? `CONNECTED${d.user?' — '+d.user:''}` : 'NOT CONNECTED');
+  if(authRow) authRow.style.display = d.connected ? 'none' : 'flex';
+  if(disRow) disRow.style.display = d.connected ? 'block' : 'none';
+}
+
+async function emailCheckAuthStatus(){
+  try{
+    const r=await fetch(API+'/email/auth/status');
+    const d=await r.json();
+    _emailSetStatus(d);
+    return d;
+  }catch(e){
+    _emailSetStatus({connected:false, status:'idle'});
+    return {connected:false, status:'idle'};
+  }
+}
+
+async function emailConnectStart(){
+  try{
+    const r=await fetch(API+'/email/auth/connect', {method:'POST'});
+    const d=await r.json();
+    if(!d.ok){ showToast(d.error||'Could not start connect flow.', 'error', 'EMAIL'); return; }
+    _emailSetStatus({connected:false, status:'waiting_for_browser'});
+    if(_emailPollTimer) clearInterval(_emailPollTimer);
+    _emailPollTimer=setInterval(async ()=>{
+      const s=await emailCheckAuthStatus();
+      if(s.status==='connected' || s.status==='error'){
+        clearInterval(_emailPollTimer); _emailPollTimer=null;
+        if(s.status==='connected'){ showToast('Gmail connected.', 'success', 'EMAIL'); }
+        else{ showToast('Gmail connect failed: '+(s.error||'unknown error'), 'error', 'EMAIL'); }
+      }
+    }, 2000);
+  }catch(e){ showToast(`Cannot reach backend: ${e.message}`, 'error', 'EMAIL'); }
+}
+
+async function emailDisconnect(){
+  try{
+    await fetch(API+'/email/auth/disconnect', {method:'POST'});
+    await emailCheckAuthStatus();
+    showToast('Gmail disconnected.', 'info', 'EMAIL');
+  }catch(e){ showToast(`Disconnect failed: ${e.message}`, 'error', 'EMAIL'); }
+}
+
+async function emailSaveWatchlist(){
+  const inp=document.getElementById('cfg-email-watchlist');
+  if(!inp) return;
+  const watchlist=inp.value.split(',').map(s=>s.trim()).filter(Boolean);
+  try{
+    const r=await fetch(API+'/email/watchlist', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({watchlist})});
+    const d=await r.json();
+    showToast(d.ok ? 'Watchlist saved.' : (d.error||'Save failed.'), d.ok?'success':'error', 'EMAIL');
+  }catch(e){ showToast(`Cannot reach backend: ${e.message}`, 'error', 'EMAIL'); }
+}
+
+async function emailLoadOrders(){
+  const el=document.getElementById('email-orders-list');
+  if(!el) return;
+  try{
+    const r=await fetch(API+'/email/orders');
+    const d=await r.json();
+    const orders=d.orders||[];
+    el.innerHTML='';
+    if(!orders.length){ el.textContent='No tracked orders yet.'; return; }
+    // description/carrier/status/delivery_date are LLM-extracted from real
+    // email bodies — untrusted text, so built via textContent, not innerHTML.
+    orders.slice(0,5).forEach(o=>{
+      const eta = o.delivery_date ? `, ETA ${o.delivery_date}` : '';
+      const row=document.createElement('div');
+      row.style.padding='3px 0';
+      row.textContent = `${o.description||'Package'} via ${o.carrier||'?'} — ${(o.status||'').replace('_',' ')}${eta}`;
+      el.appendChild(row);
+    });
+  }catch(e){ el.textContent='Could not load orders.'; }
 }
 
 // ── KEYS & ID tab ───────────────────────────────────────
@@ -7319,13 +9863,17 @@ async function saveConfig(){
   const style=document.getElementById('cfg-style'); if(style) payload.response_style=style.value;
   const verb=document.getElementById('cfg-verbosity'); if(verb) payload.response_verbosity=verb.value;
   const city=document.getElementById('cfg-city'); if(city && city.value.trim()) payload.weather_city=city.value.trim();
+  const nickname=document.getElementById('cfg-nickname'); payload.nickname=nickname ? nickname.value.trim() : '';
   const ssEl=document.getElementById('cfg-ss'); if(ssEl){ _ssMinutes=Number(ssEl.value); payload.screensaver_timeout=_ssMinutes; resetActivity(); }
   const logRet=document.getElementById('cfg-log-ret'); if(logRet) payload.log_retention_days=Number(logRet.value);
   const bt=document.getElementById('cfg-brief-time'); if(bt && bt.value) payload.morning_briefing_time=bt.value;
+  const autoDndLead=document.getElementById('cfg-auto-dnd-lead'); if(autoDndLead && autoDndLead.value) payload.auto_dnd_lead_minutes=Number(autoDndLead.value);
+  const screenAwareExcl=document.getElementById('cfg-screen-aware-excl');
+  if(screenAwareExcl) payload.screen_aware_excluded_apps = screenAwareExcl.value.split(',').map(s=>s.trim().toLowerCase()).filter(Boolean);
   // Boolean toggles
   const fsEl2=document.getElementById('cfg-font-size'); if(fsEl2) payload.font_size=Number(fsEl2.value);
-  ['wake_word_enabled','safe_mode_enabled','notif_performance','notif_whatsapp','notif_downloads','command_history_enabled','briefing_enabled']
-    .forEach(k=>{ payload[k]=_cfgBools[k]!=null?!!_cfgBools[k]:(k==='safe_mode_enabled'); });
+  ['wake_word_enabled','safe_mode_enabled','notif_performance','notif_whatsapp','notif_downloads','command_history_enabled','briefing_enabled','auto_dnd_before_meetings','proactive_enabled','pattern_automation_suggestions_enabled','screen_aware_enabled','email_agent_enabled','email_watch_otp','email_watch_replies','email_watch_keywords','email_track_orders']
+    .forEach(k=>{ payload[k]=_cfgBools[k]!=null?!!_cfgBools[k]:(['safe_mode_enabled','proactive_enabled','pattern_automation_suggestions_enabled','email_watch_otp','email_watch_replies','email_watch_keywords','email_track_orders'].includes(k)); });
   // Briefing items
   const briefItems={
     'brief-weather':'briefing_weather','brief-news':'briefing_news','brief-calendar':'briefing_calendar',
@@ -7371,6 +9919,7 @@ function switchSettingsTab(tab){
   else if(tab==='security') loadSecurityTab();
   else if(tab==='commands') buildCommandsAccordion();
   else if(tab==='links') clLoad();
+  else if(tab==='browser') { bhLoad(); bpLoad(); whLoadStatus(); }
   else if(tab==='bgmode') { loadBgConfig(); loadAliases(); }
 }
 
@@ -7588,25 +10137,28 @@ function clRender(){
   _clLinks.forEach((lk,i)=>{
     const row = document.createElement('div');
     row.className = 'cl-row';
-    row.style = 'display:grid;grid-template-columns:1fr 2fr 28px;gap:0;padding:8px 0;border-bottom:1px solid rgba(0,148,255,0.05);align-items:center;';
+    row.style = 'display:grid;grid-template-columns:1fr 2fr 1fr 28px;gap:0;padding:8px 0;border-bottom:1px solid rgba(0,148,255,0.05);align-items:center;';
     row.innerHTML = `
       <span style="font-size:10px;color:var(--th);padding-right:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${lk.title}">${lk.title}</span>
       <span style="font-size:8.5px;color:rgba(0,148,255,0.45);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${lk.url}">${lk.url}</span>
+      <span style="font-size:8.5px;color:rgba(0,148,255,0.35);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${lk.folder||'General'}</span>
       <button onclick="clDel(${i})" style="background:none;border:1px solid rgba(255,80,80,0.14);color:rgba(255,80,80,0.32);font-size:7.5px;padding:2px 5px;cursor:pointer;font-family:inherit;letter-spacing:.08em;transition:all .12s;" onmouseover="this.style.borderColor='rgba(255,80,80,0.5)';this.style.color='#ff5050'" onmouseout="this.style.borderColor='rgba(255,80,80,0.14)';this.style.color='rgba(255,80,80,0.32)'">✕</button>`;
     list.appendChild(row);
   });
 }
 
 function clAdd(){
-  const title = document.getElementById('cl-inp-title')?.value.trim();
-  const url   = document.getElementById('cl-inp-url')?.value.trim();
-  const msg   = document.getElementById('cl-msg');
+  const title  = document.getElementById('cl-inp-title')?.value.trim();
+  const url    = document.getElementById('cl-inp-url')?.value.trim();
+  const folder = document.getElementById('cl-inp-folder')?.value.trim() || 'General';
+  const msg    = document.getElementById('cl-msg');
   if(!title||!url){ if(msg) msg.textContent='Both title and URL required.'; return; }
   // Auto-prefix https
   const finalUrl = /^https?:\/\//i.test(url) ? url : 'https://'+url;
-  _clLinks.push({title, url: finalUrl});
-  if(document.getElementById('cl-inp-title')) document.getElementById('cl-inp-title').value='';
-  if(document.getElementById('cl-inp-url'))   document.getElementById('cl-inp-url').value='';
+  _clLinks.push({title, url: finalUrl, folder});
+  if(document.getElementById('cl-inp-title'))  document.getElementById('cl-inp-title').value='';
+  if(document.getElementById('cl-inp-url'))    document.getElementById('cl-inp-url').value='';
+  if(document.getElementById('cl-inp-folder')) document.getElementById('cl-inp-folder').value='';
   if(msg) msg.textContent='';
   clRender();
 }

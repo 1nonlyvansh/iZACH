@@ -5,7 +5,7 @@ const BASE = 'http://localhost:5050'
 // ── Registered nodes ─────────────────────────────────────────
 // Add more nodes here as the setup grows
 const NODES = [
-  { id: 'alliednode 2', label: 'AlliedNode 2', ip: '192.168.0.192' },
+  { id: 'alliednode 2', label: 'AlliedNode 2', ip: '192.168.0.137' },
 ]
 
 function vitalColor(v) {

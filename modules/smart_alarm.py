@@ -169,6 +169,11 @@ def _fire_reminder(title: str, event_dt: datetime, link: str = None):
             })
         except Exception:
             pass
+    try:
+        from modules.fcm_push import send_push
+        send_push(f"⏰ {title}", msg, category="reminder")
+    except Exception:
+        pass
 
 
 def _fire_action(calendar_event_id: str, title: str, link: str = None, link_type: str = None):

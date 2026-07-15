@@ -5,6 +5,7 @@ import android.widget.SeekBar
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.lifecycleScope
 import com.izach.android.databinding.ActivitySpotifyRemoteBinding
@@ -20,6 +21,7 @@ class SpotifyRemoteActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        WindowCompat.setDecorFitsSystemWindows(window, false)
         binding = ActivitySpotifyRemoteBinding.inflate(layoutInflater)
         setContentView(binding.root)
 

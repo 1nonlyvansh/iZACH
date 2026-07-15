@@ -14,6 +14,7 @@ Frame cache: 6s — same frame reused for rapid follow-up questions.
 import base64
 import io
 import logging
+import multiprocessing
 import os
 import re
 import threading
@@ -166,15 +167,70 @@ def _is_camera_device(name: str) -> bool:
     return not any(kw in n for kw in _NON_CAMERA_KW)
 
 
+def _resolve_cam_name(wmi_names: dict, i: int) -> str:
+    # Always coerce name to str — WMI may return dicts/None on some Windows configs
+    raw_name = wmi_names.get(i)
+    if isinstance(raw_name, str) and raw_name.strip():
+        return raw_name.strip()
+    if raw_name is not None:
+        # Extract name from dict if WMI returned a PSObject
+        if isinstance(raw_name, dict):
+            return str(raw_name.get("Name") or raw_name.get("name") or f"Camera {i}").strip()
+        return str(raw_name).strip() or f"Camera {i}"
+    return f"Camera {i}"
+
+
+def _scan_cameras_worker(wmi_names: dict, result_queue) -> None:
+    """
+    Runs in a child process — cv2.VideoCapture() probing is known to trigger
+    Windows access violations on some driver/device combos, which is a hard
+    native crash that no Python try/except can catch. Isolating it here means
+    a crash only kills this child process, not the whole iZACH backend.
+    """
+    try:
+        cv2.setLogLevel(0)
+    except AttributeError:
+        pass
+
+    def _try_open(idx: int, backend=None) -> bool:
+        try:
+            cap = cv2.VideoCapture(idx, backend) if backend is not None else cv2.VideoCapture(idx)
+            if not cap.isOpened():
+                cap.release()
+                return False
+            ret, _ = cap.read()
+            cap.release()
+            return bool(ret)
+        except Exception:
+            return False
+
+    result: list[dict] = []
+    for i in range(8):  # check up to 8 indices (handles external cameras at higher slots)
+        name = _resolve_cam_name(wmi_names, i)
+
+        # Skip printers / scanners — VideoCapture on a printer causes
+        # a Windows access violation that kills the entire process.
+        if not _is_camera_device(name):
+            continue
+
+        # CAP_DSHOW → CAP_MSMF → auto (DSHOW is the more stable backend on
+        # Windows for enumeration; MSMF has known access-violation issues
+        # probing some webcams)
+        if _try_open(i, cv2.CAP_DSHOW) or _try_open(i, cv2.CAP_MSMF) or _try_open(i):
+            result.append({"index": i, "name": name})
+
+    result_queue.put(result)
+
+
 def list_cameras(force_refresh: bool = False) -> list[dict]:
     """
     Return list of dicts {index, name} for working cameras 0–7.
     Cached for 60 s — scanning 8 indices × 3 backends takes 5-10 s and
     freezes UI if called on every dropdown click.
 
-    Checks isOpened() AND a real frame read.
-    Tries CAP_DSHOW → CAP_MSMF → auto-backend (no spec) in order.
-    Names come from WMI; always coerced to str.
+    The actual probing runs in a subprocess (see _scan_cameras_worker) since
+    cv2.VideoCapture() can trigger a Windows access violation — a native
+    crash that would otherwise take down the entire backend process.
     """
     global _cameras_cache, _cameras_cache_ts
     import time as _t
@@ -190,50 +246,29 @@ def list_cameras(force_refresh: bool = False) -> list[dict]:
         if not force_refresh and _cameras_cache is not None and (now - _cameras_cache_ts) < _CAMERAS_CACHE_TTL:
             return _cameras_cache
 
-        try:
-            cv2.setLogLevel(0)
-        except AttributeError:
-            pass
-
         wmi_names = _get_camera_names()
-        result: list[dict] = []
         logger.info(f"[CAM] Scanning cameras… name map: {wmi_names}")
 
-        def _try_open(idx: int, backend=None) -> bool:
+        ctx   = multiprocessing.get_context("spawn")
+        queue = ctx.Queue()
+        proc  = ctx.Process(target=_scan_cameras_worker, args=(wmi_names, queue), daemon=True)
+        proc.start()
+        proc.join(timeout=20)
+
+        if proc.is_alive():
+            logger.error("[CAM] Camera scan subprocess timed out — terminating.")
+            proc.terminate()
+            proc.join()
+            result = _cameras_cache or []
+        elif proc.exitcode != 0:
+            logger.error(f"[CAM] Camera scan subprocess crashed (exitcode={proc.exitcode}) — "
+                         f"likely a driver access violation. Backend kept running.")
+            result = _cameras_cache or []
+        else:
             try:
-                cap = cv2.VideoCapture(idx, backend) if backend is not None else cv2.VideoCapture(idx)
-                if not cap.isOpened():
-                    cap.release()
-                    return False
-                ret, _ = cap.read()
-                cap.release()
-                return bool(ret)
+                result = queue.get(timeout=2)
             except Exception:
-                return False
-
-        for i in range(8):  # check up to 8 indices (handles external cameras at higher slots)
-            # Always coerce name to str — WMI may return dicts/None on some Windows configs
-            raw_name = wmi_names.get(i)
-            if isinstance(raw_name, str) and raw_name.strip():
-                name = raw_name.strip()
-            elif raw_name is not None:
-                # Extract name from dict if WMI returned a PSObject
-                if isinstance(raw_name, dict):
-                    name = str(raw_name.get("Name") or raw_name.get("name") or f"Camera {i}").strip()
-                else:
-                    name = str(raw_name).strip() or f"Camera {i}"
-            else:
-                name = f"Camera {i}"
-
-            # Skip printers / scanners — VideoCapture on a printer causes
-            # a Windows access violation that kills the entire process.
-            if not _is_camera_device(name):
-                logger.info(f"[CAM] Skipping non-camera device at index {i}: {name!r}")
-                continue
-
-            # CAP_DSHOW → CAP_MSMF → auto (let OpenCV pick best backend)
-            if _try_open(i, cv2.CAP_MSMF) or _try_open(i, cv2.CAP_DSHOW) or _try_open(i):
-                result.append({"index": i, "name": name})
+                result = []
 
         _cameras_cache = result
         _cameras_cache_ts = now

@@ -6,7 +6,7 @@ version: 2.0
 author: iZACH
 tags: [coding, python, flask, fastapi, rest, api, backend]
 icon: 🔌
-model: deepseek
+model: gemini
 creates_files: true
 ---
 

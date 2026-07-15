@@ -9,6 +9,9 @@ import android.view.View
 import android.widget.ImageButton
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.lifecycleScope
 import com.izach.android.network.IZACHApi
 import kotlinx.coroutines.Dispatchers
@@ -49,11 +52,20 @@ class AudioStreamActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        WindowCompat.setDecorFitsSystemWindows(window, false)
         setContentView(R.layout.activity_audio_stream)
 
         btnToggle = findViewById(R.id.btnAudioToggle)
         tvStatus  = findViewById(R.id.tvAudioStatus)
         tvInfo    = findViewById(R.id.tvAudioInfo)
+
+        val topBar = findViewById<View>(R.id.topBar)
+        val dp8 = (8 * resources.displayMetrics.density + 0.5f).toInt()
+        ViewCompat.setOnApplyWindowInsetsListener(topBar) { view, insets ->
+            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            view.setPadding(dp8, bars.top, dp8, 0)
+            insets
+        }
 
         val api = IZACHApi(this)
         tvInfo.text = "PC: ${api.baseUrl()}\n22050 Hz · Mono · PCM"

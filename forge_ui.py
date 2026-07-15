@@ -1,13 +1,33 @@
+# Must run before anything else gets a chance to initialize COM in MTA mode —
+# WebView2 requires the STA apartment, and Windows refuses to change a
+# thread's apartment mode once set (RPC_E_CHANGED_MODE). Setting it through
+# pythonnet's own CLR interop (rather than pywin32's pythoncom.CoInitialize,
+# which corrupts unrelated background threading.Thread workers when combined
+# with pythonnet in the same process) keeps plain background threads safe.
+try:
+    import clr
+    clr.AddReference('System.Threading')
+    from System.Threading import Thread as _NetThread, ApartmentState as _ApartmentState
+    _NetThread.CurrentThread.SetApartmentState(_ApartmentState.STA)
+except Exception:
+    pass
+
 import tkinter as tk
 import threading
 import os
 import time
 import math
+import re
+import json
+import uuid
 import psutil
 import subprocess
 import requests
+from urllib.parse import quote, urlparse
 from PIL import Image, ImageTk, ImageDraw
 import cv2
+
+from modules import password_vault
 
 
 # ─────────────────────────────────────────────
@@ -38,6 +58,41 @@ def _label(parent, text, fg=CYAN, font_size=9, bold=False, **kw):
     weight = "bold" if bold else "normal"
     return tk.Label(parent, text=text, bg=BG_CARD, fg=fg,
                     font=("Consolas", font_size, weight), **kw)
+
+_API = "http://127.0.0.1:5050"
+
+_SHARED_PROFILE_PATCHED = False
+
+
+def _electron_partition_dir():
+    """Cortex UI's Electron session partition folder — WebView2 points its own
+    profile here so cookies/logins are shared between Forge and Cortex."""
+    appdata = os.environ.get("APPDATA", "")
+    dev = os.path.join(appdata, "izach-ui", "Partitions", "izach-browser")
+    packaged = os.path.join(appdata, "iZACH", "Partitions", "izach-browser")
+    if os.path.isdir(packaged) and not os.path.isdir(dev):
+        return packaged
+    return dev
+
+
+def _patch_shared_webview_profile():
+    """tkwebview2 hardcodes cache_dir=None when constructing pywebview's
+    EdgeChrome, with no public way to override it. Swap in a wrapper that
+    always points WebView2 at Cortex's Chromium profile dir instead, so both
+    browsers share the same live cookies/sessions."""
+    global _SHARED_PROFILE_PATCHED
+    if _SHARED_PROFILE_PATCHED:
+        return
+    import tkwebview2.tkwebview2 as _tkw2mod
+    from webview.platforms.edgechromium import EdgeChrome as _RealEdgeChrome
+    profile_dir = _electron_partition_dir()
+
+    def _patched_edge_chrome(form, window, cache_dir):
+        return _RealEdgeChrome(form, window, profile_dir)
+
+    _tkw2mod.EdgeChrome = _patched_edge_chrome
+    _SHARED_PROFILE_PATCHED = True
+
 
 def _section_header(parent, text):
     f = tk.Frame(parent, bg=BG_CARD)
@@ -661,7 +716,7 @@ class OCRPanel(tk.Frame):
         self._status_lbl.config(text="SCANNING…" if self._enabled else "IDLE",
                                  fg=CYAN if self._enabled else CYAN_DIM)
         try:
-            _req.post("http://localhost:5050/ocr/toggle",
+            _req.post("http://127.0.0.1:5050/ocr/toggle",
                       json={"enabled": self._enabled}, timeout=3)
         except Exception:
             pass
@@ -675,7 +730,7 @@ class OCRPanel(tk.Frame):
     def _poll_result(self):
         try:
             import requests as _req
-            r = _req.get("http://localhost:5050/ocr/status", timeout=2).json()
+            r = _req.get("http://127.0.0.1:5050/ocr/status", timeout=2).json()
             if r.get("mode") == "done":
                 self._set_text(r.get("last_text", ""))
                 self._enabled = False
@@ -703,7 +758,7 @@ class OCRPanel(tk.Frame):
                     b64 = base64.b64encode(f.read()).decode()
                 import mimetypes
                 mime = mimetypes.guess_type(path)[0] or "image/jpeg"
-                r = _req.post("http://localhost:5050/ocr/scan-image",
+                r = _req.post("http://127.0.0.1:5050/ocr/scan-image",
                               json={"image": b64, "mime": mime}, timeout=30).json()
                 self.after(0, lambda: self._set_text(r.get("text", "")))
                 self.after(0, lambda: self._status_lbl.config(text="DONE", fg=GREEN))
@@ -729,7 +784,7 @@ class OCRPanel(tk.Frame):
         if not text:
             return
         try:
-            _req.post("http://localhost:5050/ocr/save", json={"text": text}, timeout=5)
+            _req.post("http://127.0.0.1:5050/ocr/save", json={"text": text}, timeout=5)
             self._status_lbl.config(text="SAVED ✓", fg=GREEN)
             self.after(2000, lambda: self._status_lbl.config(text="DONE", fg=GREEN))
         except Exception:
@@ -880,7 +935,7 @@ class PrinterPanel(tk.Frame):
         self._prefs[key] = value
         def _run():
             try:
-                _req.post("http://localhost:5050/print/settings",
+                _req.post("http://127.0.0.1:5050/print/settings",
                           json={key: value}, timeout=3)
             except Exception:
                 pass
@@ -890,7 +945,7 @@ class PrinterPanel(tk.Frame):
         import requests as _req, threading
         def _run():
             try:
-                r = _req.get("http://localhost:5050/print/status", timeout=3).json()
+                r = _req.get("http://127.0.0.1:5050/print/status", timeout=3).json()
                 if r.get("ok"):
                     online = r.get("is_online", False)
                     name   = r.get("name", "No printer")
@@ -953,7 +1008,7 @@ class PrinterPanel(tk.Frame):
         paths = list(self._queue)
         def _run():
             try:
-                r = _req.post("http://localhost:5050/print/job",
+                r = _req.post("http://127.0.0.1:5050/print/job",
                               json={"files": paths, "overrides": self._prefs},
                               timeout=60).json()
                 if r.get("ok"):
@@ -968,6 +1023,912 @@ class PrinterPanel(tk.Frame):
                 self.after(0, lambda err=err: self._preview_lbl.config(text=f"Error: {err}", fg=RED))
             self.after(0, lambda: self._print_btn.config(text="⎙ PRINT ALL", state="normal"))
         threading.Thread(target=_run, daemon=True).start()
+
+
+# ─────────────────────────────────────────────
+# BROWSER WINDOW — standalone multi-tab Chromium (Edge WebView2) via tkwebview2
+# Shares Cortex UI's live cookies/session (same Chromium profile dir) and its
+# saved-password vault (same browser_passwords.json, same DPAPI-based
+# encryption as Electron's safeStorage).
+# ─────────────────────────────────────────────
+class BrowserWindow(tk.Toplevel):
+    def __init__(self, master, on_close=None):
+        super().__init__(master, bg=BG_DEEP)
+        self.title("iZACH Browser")
+        self.geometry("1180x800")
+        self.configure(bg=BG_DEEP)
+        self.on_close = on_close
+        self.protocol("WM_DELETE_WINDOW", self._close)
+
+        self.tabs = []
+        self.active_id = None
+        self._find_open = False
+        self._autofill_entry = None
+        self._webview_ok = True
+
+        _patch_shared_webview_profile()
+        try:
+            from tkwebview2.tkwebview2 import have_runtime
+            self._webview_ok = have_runtime()
+        except Exception:
+            self._webview_ok = False
+
+        self._build()
+        if self._webview_ok:
+            self.new_tab("https://www.google.com")
+        else:
+            self._show_runtime_missing()
+
+        self.bind("<Control-t>", lambda e: self.new_tab())
+        self.bind("<Control-w>", lambda e: self._close_active_tab())
+        self.bind("<Control-Tab>", lambda e: self._cycle_tab(1))
+        self.bind("<Control-Shift-Tab>", lambda e: self._cycle_tab(-1))
+        self.bind("<Control-l>", lambda e: self._focus_address())
+        self.bind("<Control-f>", lambda e: self._toggle_find())
+        self.bind("<Alt-Left>", lambda e: self._nav_back())
+        self.bind("<Alt-Right>", lambda e: self._nav_forward())
+        self.bind("<Control-plus>", lambda e: self._zoom(0.1))
+        self.bind("<Control-equal>", lambda e: self._zoom(0.1))
+        self.bind("<Control-minus>", lambda e: self._zoom(-0.1))
+        self.bind("<Control-0>", lambda e: self._zoom_reset())
+        self.bind("<F12>", lambda e: self._toggle_devtools())
+
+        self._poll_active_tab()
+
+    # ── Layout ──────────────────────────────────────────────
+    def _build(self):
+        tabbar_outer = tk.Frame(self, bg=BG_PANEL, height=34)
+        tabbar_outer.pack(fill="x")
+        tabbar_outer.pack_propagate(False)
+        self._tabbar = tk.Frame(tabbar_outer, bg=BG_PANEL)
+        self._tabbar.pack(side="left", fill="both", expand=True)
+        tk.Button(tabbar_outer, text="+", command=lambda: self.new_tab(),
+                  bg=BG_PANEL, fg=CYAN, font=("Consolas", 12, "bold"), relief="flat",
+                  cursor="hand2", activebackground=CYAN_DARK, activeforeground=CYAN,
+                  padx=10).pack(side="left", pady=2)
+
+        bar = tk.Frame(self, bg=BG_PANEL, height=42)
+        bar.pack(fill="x")
+        bar.pack_propagate(False)
+
+        nav_cfg = dict(bg=BG_PANEL, fg=CYAN, font=("Consolas", 11, "bold"),
+                       relief="flat", cursor="hand2", activebackground=CYAN_DARK,
+                       activeforeground=CYAN, padx=8, pady=4)
+        tk.Button(bar, text="‹", command=self._nav_back, **nav_cfg).pack(side="left", padx=(8, 2), pady=6)
+        tk.Button(bar, text="›", command=self._nav_forward, **nav_cfg).pack(side="left", padx=2, pady=6)
+        tk.Button(bar, text="↻", command=self._nav_reload, **nav_cfg).pack(side="left", padx=(2, 8), pady=6)
+
+        self._star_btn = tk.Button(bar, text="☆", command=self._toggle_bookmark,
+                                   bg=BG_PANEL, fg=TEXT_SEC, font=("Consolas", 12),
+                                   relief="flat", cursor="hand2", activebackground=CYAN_DARK, padx=6)
+        self._star_btn.pack(side="left", padx=2, pady=6)
+
+        self._addr = tk.Entry(bar, bg=BG_DEEP, fg=CYAN, insertbackground=CYAN,
+                              font=("Consolas", 10), relief="flat",
+                              highlightthickness=1, highlightbackground=BORDER_HI)
+        self._addr.pack(side="left", fill="x", expand=True, ipady=6, padx=(0, 8), pady=6)
+        self._addr.bind("<Return>", lambda _e: self._go(self._addr.get()))
+
+        self._autofill_btn = tk.Button(bar, text="🔑", command=self._autofill,
+                                       bg=BG_PANEL, fg=TEXT_SEC, font=("Consolas", 10, "bold"),
+                                       relief="flat", cursor="hand2", state="disabled",
+                                       activebackground=CYAN_DARK, padx=6)
+        self._autofill_btn.pack(side="left", padx=2, pady=6)
+
+        small_cfg = dict(bg=BG_PANEL, fg=CYAN, font=("Consolas", 9, "bold"),
+                         relief="flat", cursor="hand2", activebackground=CYAN_DARK,
+                         activeforeground=CYAN, padx=6, pady=4)
+        tk.Button(bar, text="−", command=lambda: self._zoom(-0.1), **small_cfg).pack(side="left", padx=(6, 0), pady=6)
+        self._zoom_lbl = tk.Label(bar, text="100%", bg=BG_PANEL, fg=TEXT_SEC, font=("Consolas", 9))
+        self._zoom_lbl.pack(side="left", padx=4)
+        tk.Button(bar, text="+", command=lambda: self._zoom(0.1), **small_cfg).pack(side="left", padx=(0, 6), pady=6)
+
+        tk.Button(bar, text="🔍", command=self._toggle_find, **small_cfg).pack(side="left", padx=2, pady=6)
+        tk.Button(bar, text="🛠", command=self._toggle_devtools, **small_cfg).pack(side="left", padx=2, pady=6)
+        tk.Button(bar, text="🕐 HISTORY", command=self._show_history, **small_cfg).pack(side="left", padx=2, pady=6)
+        tk.Button(bar, text="★ BOOKMARKS", command=self._show_bookmarks, **small_cfg).pack(side="left", padx=2, pady=6)
+        tk.Button(bar, text="💾 SAVE LOGIN", command=self._show_save_login, **small_cfg).pack(side="left", padx=2, pady=6)
+        tk.Button(bar, text="📱 SEND TO PHONE", command=self._send_to_phone, **small_cfg).pack(side="left", padx=2, pady=6)
+
+        tk.Button(bar, text="✕ CLOSE", command=self._close,
+                 bg=BG_PANEL, fg=RED, font=("Consolas", 9, "bold"),
+                 relief="flat", cursor="hand2", activebackground="#2a0000",
+                 activeforeground=RED, padx=10, pady=4).pack(side="right", padx=8, pady=6)
+
+        tk.Button(bar, text="📲 PHONE TABS", command=self._show_phone_tabs,
+                 bg=BG_PANEL, fg=CYAN, font=("Consolas", 9, "bold"),
+                 relief="flat", cursor="hand2", activebackground=CYAN_DARK,
+                 activeforeground=CYAN, padx=8, pady=4).pack(side="right", padx=(0, 4), pady=6)
+
+        self._findbar = tk.Frame(self, bg=BG_CARD, height=36)
+        self._find_input = tk.Entry(self._findbar, bg=BG_DEEP, fg=CYAN, insertbackground=CYAN,
+                                    font=("Consolas", 10), relief="flat",
+                                    highlightthickness=1, highlightbackground=BORDER_HI)
+        self._find_input.pack(side="left", fill="x", expand=True, ipady=4, padx=(10, 6), pady=6)
+        self._find_input.bind("<Return>", lambda e: self._find_next())
+        self._find_input.bind("<KeyRelease>", lambda e: self._find_live())
+        self._find_count = tk.Label(self._findbar, text="0/0", bg=BG_CARD, fg=TEXT_SEC, font=("Consolas", 9))
+        self._find_count.pack(side="left", padx=6)
+        tk.Button(self._findbar, text="▲", command=lambda: self._find_next(back=True), **small_cfg).pack(side="left", padx=2)
+        tk.Button(self._findbar, text="▼", command=lambda: self._find_next(back=False), **small_cfg).pack(side="left", padx=2)
+        tk.Button(self._findbar, text="✕", command=self._toggle_find, **small_cfg).pack(side="left", padx=(2, 10))
+
+        self._body = tk.Frame(self, bg=BG_DEEP)
+        self._body.pack(fill="both", expand=True)
+
+    def _show_runtime_missing(self, extra=""):
+        tk.Label(self._body, text="Microsoft Edge WebView2 Runtime not found.\n\n"
+                 "Install it from https://developer.microsoft.com/microsoft-edge/webview2/\n"
+                 "then reopen the browser.\n" + extra,
+                bg=BG_DEEP, fg=AMBER, font=("Consolas", 10), justify="center", wraplength=700).pack(expand=True)
+
+    def _close(self):
+        for tab in self.tabs:
+            try:
+                tab["webview"].destroy()
+            except Exception:
+                pass
+        self.destroy()
+        if self.on_close:
+            self.on_close()
+
+    # ── Non-modal dialogs. tkinter's built-in messagebox/simpledialog use a
+    # blocking wait_window() loop, which crashes the interpreter once
+    # pythonnet/WebView2 is active in the process (GIL corruption on nested
+    # Tcl event loops) — these plain-Toplevel + callback versions avoid that
+    # blocking loop entirely. ──
+    def _notify(self, title, text):
+        win = tk.Toplevel(self)
+        win.title(title)
+        win.configure(bg=BG_PANEL)
+        win.geometry("340x150")
+        tk.Label(win, text=text, bg=BG_PANEL, fg=TEXT_PRI, font=("Consolas", 9),
+                wraplength=300, justify="left").pack(padx=16, pady=16, expand=True)
+        tk.Button(win, text="OK", command=win.destroy,
+                 bg=GREEN_DIM, fg=GREEN, font=("Consolas", 9, "bold"), relief="flat",
+                 cursor="hand2", padx=14, pady=5).pack(pady=(0, 14))
+
+    def _prompt_text(self, title, label, default, on_result):
+        win = tk.Toplevel(self)
+        win.title(title)
+        win.configure(bg=BG_PANEL)
+        win.geometry("300x150")
+        tk.Label(win, text=label, bg=BG_PANEL, fg=TEXT_SEC, font=("Consolas", 9)).pack(
+            anchor="w", padx=14, pady=(14, 4))
+        e = tk.Entry(win, bg=BG_DEEP, fg=CYAN, insertbackground=CYAN, font=("Consolas", 10),
+                    relief="flat", highlightthickness=1, highlightbackground=BORDER_HI)
+        e.pack(fill="x", padx=14, ipady=5)
+        e.insert(0, default)
+        e.focus_set()
+        e.select_range(0, "end")
+
+        state = {"done": False}
+
+        def _finish(value):
+            if state["done"]:
+                return
+            state["done"] = True
+            win.destroy()
+            on_result(value)
+
+        btn_row = tk.Frame(win, bg=BG_PANEL)
+        btn_row.pack(pady=14)
+        tk.Button(btn_row, text="OK", command=lambda: _finish(e.get()),
+                 bg=GREEN_DIM, fg=GREEN, font=("Consolas", 9, "bold"), relief="flat",
+                 cursor="hand2", padx=12, pady=4).pack(side="left", padx=4)
+        tk.Button(btn_row, text="CANCEL", command=lambda: _finish(None),
+                 bg=BG_CARD, fg=TEXT_SEC, font=("Consolas", 9, "bold"), relief="flat",
+                 cursor="hand2", padx=12, pady=4).pack(side="left", padx=4)
+        e.bind("<Return>", lambda ev: _finish(e.get()))
+        win.protocol("WM_DELETE_WINDOW", lambda: _finish(None))
+
+    # ── Tabs ────────────────────────────────────────────────
+    # Each tab is a full separate native WebView2 process that stays alive at
+    # full memory cost until its tab is explicitly closed — switching tabs
+    # only hides them, it never frees anything. Capping the tab count is a
+    # simple guardrail against unbounded RAM growth over a long session.
+    MAX_TABS = 6
+
+    def new_tab(self, url=None):
+        if not self._webview_ok:
+            return
+        if len(self.tabs) >= self.MAX_TABS:
+            self._notify("Browser", f"Tab limit reached ({self.MAX_TABS}) — close a tab before opening another.")
+            return
+        url = url or "https://www.google.com"
+        tab_id = uuid.uuid4().hex[:10]
+        from tkwebview2.tkwebview2 import WebView2
+        try:
+            wv = WebView2(self._body, width=1100, height=700, url=url)
+        except Exception as e:
+            self._show_runtime_missing(str(e))
+            return
+        tab = {"id": tab_id, "webview": wv, "url": url, "title": url,
+               "history": [url], "hist_idx": 0}
+        self.tabs.append(tab)
+        self._switch_tab(tab_id)
+
+    def _render_tabbar(self):
+        for w in self._tabbar.winfo_children():
+            w.destroy()
+        for tab in self.tabs:
+            active = tab["id"] == self.active_id
+            bg = CYAN_DARK if active else BG_PANEL
+            f = tk.Frame(self._tabbar, bg=bg, highlightthickness=1,
+                        highlightbackground=BORDER_HI if active else bg)
+            f.pack(side="left", padx=(0, 1), pady=2, fill="y")
+            label = (tab["title"] or tab["url"])[:22]
+            lbl = tk.Label(f, text=label, bg=bg, fg=CYAN if active else TEXT_SEC,
+                          font=("Consolas", 9), padx=8, pady=4, cursor="hand2")
+            lbl.pack(side="left")
+            lbl.bind("<Button-1>", lambda e, tid=tab["id"]: self._switch_tab(tid))
+            close_btn = tk.Label(f, text="✕", bg=bg, fg=TEXT_SEC, font=("Consolas", 8), padx=6, cursor="hand2")
+            close_btn.pack(side="left")
+            close_btn.bind("<Button-1>", lambda e, tid=tab["id"]: self._close_tab(tid))
+
+    def _switch_tab(self, tab_id):
+        self.active_id = tab_id
+        for tab in self.tabs:
+            if tab["id"] == tab_id:
+                tab["webview"].place(x=0, y=0, relwidth=1, relheight=1)
+                tab["webview"].lift()
+                self._addr.delete(0, "end")
+                self._addr.insert(0, tab["url"])
+                try:
+                    self._zoom_lbl.config(text=f'{round(tab["webview"].web.ZoomFactor * 100)}%')
+                except Exception:
+                    self._zoom_lbl.config(text="100%")
+            else:
+                tab["webview"].place_forget()
+        self._render_tabbar()
+        self._sync_bookmark_btn()
+        self._sync_autofill_btn()
+        if self._find_open:
+            self._toggle_find(force_close=True)
+
+    def _close_tab(self, tab_id):
+        idx = next((i for i, t in enumerate(self.tabs) if t["id"] == tab_id), None)
+        if idx is None:
+            return
+        tab = self.tabs.pop(idx)
+        try:
+            tab["webview"].destroy()
+        except Exception:
+            pass
+        if not self.tabs:
+            self._close()
+            return
+        if self.active_id == tab_id:
+            new_idx = min(idx, len(self.tabs) - 1)
+            self._switch_tab(self.tabs[new_idx]["id"])
+        else:
+            self._render_tabbar()
+
+    def _close_active_tab(self):
+        if self.active_id:
+            self._close_tab(self.active_id)
+
+    def _cycle_tab(self, direction):
+        if len(self.tabs) < 2:
+            return
+        idx = next((i for i, t in enumerate(self.tabs) if t["id"] == self.active_id), 0)
+        nxt = (idx + direction) % len(self.tabs)
+        self._switch_tab(self.tabs[nxt]["id"])
+
+    def _active_tab(self):
+        return next((t for t in self.tabs if t["id"] == self.active_id), None)
+
+    def _go_in_active_or_new(self, url):
+        if self.active_id:
+            self._go(url)
+        else:
+            self.new_tab(url)
+
+    # ── Navigation ──────────────────────────────────────────
+    def _go(self, value):
+        tab = self._active_tab()
+        value = (value or "").strip()
+        if not value or not tab:
+            return
+        looks_like_url = bool(re.match(r'^https?://', value, re.IGNORECASE)) or (
+            bool(re.match(r'^[\w.-]+\.[a-z]{2,}(/.*)?$', value, re.IGNORECASE)) and ' ' not in value
+        )
+        if looks_like_url:
+            url = value if value.lower().startswith(("http://", "https://")) else f"https://{value}"
+        else:
+            url = f"https://www.google.com/search?q={quote(value)}"
+
+        tab["webview"].load_url(url)
+        tab["url"] = url
+        self._addr.delete(0, "end")
+        self._addr.insert(0, url)
+        tab["history"] = tab["history"][:tab["hist_idx"] + 1]
+        tab["history"].append(url)
+        tab["hist_idx"] = len(tab["history"]) - 1
+        self._sync_bookmark_btn()
+        self._sync_autofill_btn()
+
+    def _nav_back(self):
+        tab = self._active_tab()
+        if tab and tab["hist_idx"] > 0:
+            tab["hist_idx"] -= 1
+            url = tab["history"][tab["hist_idx"]]
+            tab["webview"].load_url(url)
+            tab["url"] = url
+            self._addr.delete(0, "end"); self._addr.insert(0, url)
+
+    def _nav_forward(self):
+        tab = self._active_tab()
+        if tab and tab["hist_idx"] < len(tab["history"]) - 1:
+            tab["hist_idx"] += 1
+            url = tab["history"][tab["hist_idx"]]
+            tab["webview"].load_url(url)
+            tab["url"] = url
+            self._addr.delete(0, "end"); self._addr.insert(0, url)
+
+    def _nav_reload(self):
+        tab = self._active_tab()
+        if tab:
+            tab["webview"].reload()
+
+    def _focus_address(self):
+        self._addr.focus_set()
+        self._addr.select_range(0, "end")
+
+    # ── Title/URL sync + history logging ───────────────────
+    def _poll_active_tab(self):
+        if not self.winfo_exists():
+            return
+        tab = self._active_tab()
+        if tab:
+            try:
+                url = tab["webview"].get_url()
+            except Exception:
+                url = None
+            if url and url != tab["url"]:
+                tab["url"] = url
+                if tab["id"] == self.active_id:
+                    self._addr.delete(0, "end"); self._addr.insert(0, url)
+                self._sync_bookmark_btn()
+                self._sync_autofill_btn()
+
+            def _cb(title, tab=tab):
+                if title and title != tab["title"]:
+                    tab["title"] = title
+                    self._render_tabbar()
+                    self._log_history(tab["url"], title)
+            try:
+                tab["webview"].evaluate_js("document.title", _cb)
+            except Exception:
+                pass
+        self.after(1500, self._poll_active_tab)
+
+    # ── Zoom ────────────────────────────────────────────────
+    def _zoom(self, delta):
+        tab = self._active_tab()
+        if not tab:
+            return
+        try:
+            newz = max(0.25, min(5.0, tab["webview"].web.ZoomFactor + delta))
+            tab["webview"].web.ZoomFactor = newz
+            self._zoom_lbl.config(text=f"{round(newz * 100)}%")
+        except Exception:
+            pass
+
+    def _zoom_reset(self):
+        tab = self._active_tab()
+        if not tab:
+            return
+        try:
+            tab["webview"].web.ZoomFactor = 1.0
+            self._zoom_lbl.config(text="100%")
+        except Exception:
+            pass
+
+    # ── DevTools ────────────────────────────────────────────
+    def _toggle_devtools(self):
+        tab = self._active_tab()
+        if tab and getattr(tab["webview"], "core", None):
+            try:
+                tab["webview"].core.OpenDevToolsWindow()
+            except Exception:
+                pass
+
+    # ── Find in page ────────────────────────────────────────
+    def _toggle_find(self, force_close=False):
+        if self._find_open or force_close:
+            self._findbar.pack_forget()
+            self._find_open = False
+            tab = self._active_tab()
+            if tab:
+                self._find_js(tab, "")
+        else:
+            self._findbar.pack(fill="x", before=self._body)
+            self._find_open = True
+            self._find_input.focus_set()
+
+    def _find_js(self, tab, term, direction=0):
+        script = f"""
+        (function(term, direction){{
+          document.querySelectorAll('mark[data-izach-find]').forEach(function(m){{
+            var t = document.createTextNode(m.textContent);
+            m.replaceWith(t);
+          }});
+          if(!term){{ return JSON.stringify({{count:0, idx:0}}); }}
+          var re = new RegExp(term.replace(/[.*+?^${{}}()|[\\]\\\\]/g, '\\\\$&'), 'gi');
+          var walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+          var nodes = [];
+          var n;
+          while(n = walker.nextNode()) {{
+            if(n.parentElement && ['SCRIPT','STYLE'].indexOf(n.parentElement.tagName) !== -1) continue;
+            if(re.test(n.textContent)) nodes.push(n);
+            re.lastIndex = 0;
+          }}
+          nodes.forEach(function(node){{
+            var span = document.createElement('span');
+            span.innerHTML = node.textContent.replace(re, function(m){{ return '<mark data-izach-find style="background:#ffb300;color:#000">' + m + '</mark>'; }});
+            node.replaceWith(span);
+          }});
+          var marks = document.querySelectorAll('mark[data-izach-find]');
+          if(!marks.length) return JSON.stringify({{count:0, idx:0}});
+          var idx = window.__izachFindIdx || 0;
+          idx = ((idx + direction) % marks.length + marks.length) % marks.length;
+          window.__izachFindIdx = idx;
+          marks[idx].scrollIntoView({{block:'center'}});
+          marks[idx].style.background = '#ff3d3d';
+          return JSON.stringify({{count: marks.length, idx: idx + 1}});
+        }})({json.dumps(term)}, {direction})
+        """
+        def _cb(res):
+            try:
+                data = json.loads(res) if res else {"count": 0, "idx": 0}
+                self._find_count.config(text=f'{data["idx"]}/{data["count"]}')
+            except Exception:
+                pass
+        try:
+            tab["webview"].evaluate_js(script, _cb)
+        except Exception:
+            pass
+
+    def _find_live(self):
+        tab = self._active_tab()
+        term = self._find_input.get().strip()
+        if tab:
+            self._find_js(tab, term, 0)
+
+    def _find_next(self, back=False):
+        tab = self._active_tab()
+        term = self._find_input.get().strip()
+        if not tab or not term:
+            return
+        self._find_js(tab, term, -1 if back else 1)
+
+    # ── Bookmarks ───────────────────────────────────────────
+    # NOTE: all HTTP calls below run synchronously on the Tk main thread
+    # rather than on background threading.Thread workers. Once WebView2 (via
+    # pythonnet/CLR) is active in this process, background Python threads
+    # racing against WebView2's own native callback threads reliably crash
+    # the interpreter (PyEval_RestoreThread/GIL corruption — a pythonnet
+    # + concurrent-Python-threads incompatibility, not a bug in this code).
+    # These are all localhost calls to the Flask backend, so a synchronous
+    # call is a sub-second blip in the success case; on failure it blocks for
+    # up to the given timeout rather than crashing.
+    def _sync_bookmark_btn(self):
+        tab = self._active_tab()
+        if not tab:
+            return
+        url = tab["url"]
+        try:
+            links = requests.get(f"{_API}/api/custom_links", timeout=4).json()
+            starred = any(b.get("url") == url for b in links)
+        except Exception:
+            starred = False
+        self._star_btn.config(text="★" if starred else "☆", fg=AMBER if starred else TEXT_SEC)
+
+    def _toggle_bookmark(self):
+        tab = self._active_tab()
+        if not tab:
+            return
+        url, title = tab["url"], tab["title"] or tab["url"]
+        try:
+            links = requests.get(f"{_API}/api/custom_links", timeout=4).json()
+        except Exception:
+            self._notify("Bookmarks", "Couldn't reach iZACH backend.")
+            return
+        existing = any(b.get("url") == url for b in links)
+        self._finish_bookmark_toggle(links, url, title, existing)
+
+    def _finish_bookmark_toggle(self, links, url, title, existing):
+        if existing:
+            new_links = [b for b in links if b.get("url") != url]
+            self._save_bookmarks(new_links)
+        else:
+            def _on_folder(folder):
+                if folder is None:
+                    return
+                new_links = links + [{"title": title, "url": url, "folder": (folder or "General").strip() or "General"}]
+                self._save_bookmarks(new_links)
+            self._prompt_text("Bookmark folder", "Folder (optional):", "General", _on_folder)
+
+    def _save_bookmarks(self, new_links):
+        try:
+            requests.post(f"{_API}/api/custom_links", json=new_links, timeout=5)
+        except Exception:
+            pass
+        self._sync_bookmark_btn()
+
+    def _show_bookmarks(self):
+        win = tk.Toplevel(self)
+        win.title("Bookmarks")
+        win.configure(bg=BG_PANEL)
+        win.geometry("460x420")
+        tk.Label(win, text="BOOKMARKS", bg=BG_PANEL, fg=CYAN,
+                font=("Consolas", 10, "bold")).pack(anchor="w", padx=12, pady=(12, 6))
+
+        container = tk.Frame(win, bg=BG_PANEL)
+        container.pack(fill="both", expand=True, padx=12, pady=(0, 12))
+
+        def _load():
+            try:
+                links = requests.get(f"{_API}/api/custom_links", timeout=5).json()
+            except Exception:
+                links = None
+            _render(links)
+
+        def _render(links):
+            for w in container.winfo_children():
+                w.destroy()
+            if links is None:
+                tk.Label(container, text="Couldn't reach the backend.", bg=BG_PANEL, fg=AMBER,
+                        font=("Consolas", 9)).pack(pady=20)
+                return
+            if not links:
+                tk.Label(container, text="No bookmarks yet.", bg=BG_PANEL, fg=TEXT_SEC,
+                        font=("Consolas", 9)).pack(pady=20)
+                return
+            groups = {}
+            for b in links:
+                groups.setdefault(b.get("folder") or "General", []).append(b)
+            for folder in sorted(groups.keys()):
+                tk.Label(container, text=folder.upper(), bg=BG_PANEL, fg=CYAN,
+                        font=("Consolas", 9, "bold")).pack(anchor="w", pady=(8, 2))
+                for b in groups[folder]:
+                    row = tk.Frame(container, bg=BG_CARD)
+                    row.pack(fill="x", pady=1)
+                    lbl = tk.Label(row, text=b.get("title") or b.get("url"), bg=BG_CARD, fg=TEXT_PRI,
+                                  font=("Consolas", 9), anchor="w", cursor="hand2")
+                    lbl.pack(side="left", fill="x", expand=True, padx=6, pady=3)
+                    lbl.bind("<Button-1>", lambda e, u=b.get("url"): (win.destroy(), self._go_in_active_or_new(u)))
+                    rm = tk.Label(row, text="✕", bg=BG_CARD, fg=RED, font=("Consolas", 8), cursor="hand2", padx=6)
+                    rm.pack(side="right")
+                    rm.bind("<Button-1>", lambda e, u=b.get("url"): _remove(u))
+
+        def _remove(url):
+            try:
+                links = requests.get(f"{_API}/api/custom_links", timeout=5).json()
+                links = [b for b in links if b.get("url") != url]
+                requests.post(f"{_API}/api/custom_links", json=links, timeout=5)
+            except Exception:
+                pass
+            _load()
+
+        _load()
+
+    # ── History ─────────────────────────────────────────────
+    def _log_history(self, url, title):
+        if not url or url.startswith("data:"):
+            return
+        try:
+            requests.post(f"{_API}/browser/history", json={"url": url, "title": title, "device": "pc"}, timeout=4)
+        except Exception:
+            pass
+
+    def _show_history(self):
+        win = tk.Toplevel(self)
+        win.title("Browser History")
+        win.configure(bg=BG_PANEL)
+        win.geometry("520x420")
+
+        top = tk.Frame(win, bg=BG_PANEL)
+        top.pack(fill="x", padx=12, pady=(12, 6))
+        tk.Label(top, text="HISTORY", bg=BG_PANEL, fg=CYAN, font=("Consolas", 10, "bold")).pack(side="left")
+        tk.Button(top, text="CLEAR ALL", command=lambda: self._history_clear_all(win),
+                 bg=BG_PANEL, fg=RED, font=("Consolas", 8, "bold"), relief="flat",
+                 cursor="hand2", padx=6).pack(side="right")
+
+        search = tk.Entry(win, bg=BG_DEEP, fg=CYAN, insertbackground=CYAN, font=("Consolas", 9),
+                          relief="flat", highlightthickness=1, highlightbackground=BORDER_HI)
+        search.pack(fill="x", padx=12, pady=(0, 8), ipady=4)
+
+        lb = tk.Listbox(win, bg="#010814", fg="#60b8d0", font=("Consolas", 9),
+                        relief="flat", highlightthickness=1, highlightbackground=BORDER_HI,
+                        selectbackground=CYAN_DARK, selectforeground=CYAN)
+        lb.pack(fill="both", expand=True, padx=12, pady=(0, 8))
+
+        rows_ref = {"rows": []}
+
+        def _apply(entries):
+            lb.delete(0, "end")
+            rows_ref["rows"] = entries or []
+            if entries is None:
+                lb.insert("end", "  Couldn't reach the backend.")
+                return
+            if not entries:
+                lb.insert("end", "  No history yet.")
+                return
+            for e in entries:
+                lb.insert("end", f'{e.get("title") or e.get("url")}  —  {e.get("url")}')
+
+        def _load(q=""):
+            try:
+                r = requests.get(f"{_API}/browser/history", params={"q": q, "limit": 300}, timeout=5).json()
+                entries = r.get("entries", [])
+            except Exception:
+                entries = None
+            _apply(entries)
+
+        def _delete_selected():
+            sel = lb.curselection()
+            if not sel or sel[0] >= len(rows_ref["rows"]):
+                return
+            entry_id = rows_ref["rows"][sel[0]].get("id")
+            try:
+                requests.delete(f"{_API}/browser/history/{entry_id}", timeout=5)
+            except Exception:
+                pass
+            _load(search.get().strip())
+
+        def _open_selected(_e=None):
+            sel = lb.curselection()
+            if not sel or sel[0] >= len(rows_ref["rows"]):
+                return
+            url = rows_ref["rows"][sel[0]].get("url")
+            win.destroy()
+            if url:
+                self._go_in_active_or_new(url)
+
+        lb.bind("<Double-Button-1>", _open_selected)
+        search.bind("<KeyRelease>", lambda e: _load(search.get().strip()))
+
+        btn_row = tk.Frame(win, bg=BG_PANEL)
+        btn_row.pack(fill="x", padx=12, pady=(0, 12))
+        tk.Button(btn_row, text="OPEN", command=_open_selected,
+                 bg=GREEN_DIM, fg=GREEN, font=("Consolas", 9, "bold"),
+                 relief="flat", cursor="hand2", padx=10, pady=4).pack(side="left")
+        tk.Button(btn_row, text="DELETE", command=_delete_selected,
+                 bg="#2a0000", fg=RED, font=("Consolas", 9, "bold"),
+                 relief="flat", cursor="hand2", padx=10, pady=4).pack(side="left", padx=(6, 0))
+
+        _load()
+
+    def _history_clear_all(self, win):
+        try:
+            requests.delete(f"{_API}/browser/history", timeout=5)
+        except Exception:
+            pass
+        win.destroy()
+
+    # ── Send to Phone ───────────────────────────────────────
+    def _send_to_phone(self):
+        tab = self._active_tab()
+        if not tab:
+            return
+        url, title = tab["url"], tab["title"] or tab["url"]
+        try:
+            requests.post(f"{_API}/browser/handoff", json={"url": url, "title": title}, timeout=5)
+            ok = True
+        except Exception:
+            ok = False
+        self._notify("Send to Phone", "Sent." if ok else "Couldn't reach the backend.")
+
+    # ── Continue a tab from the phone (mirrors Cortex UI's "Tabs from Phone") ──
+    def _show_phone_tabs(self):
+        rows = None
+        try:
+            r = requests.get(f"{_API}/browser/tabs?exclude=pc", timeout=5).json()
+            rows = []
+            for device, info in (r.get("devices") or {}).items():
+                for t in info.get("tabs", []):
+                    rows.append((device, t.get("title") or t.get("url", ""), t.get("url", "")))
+        except Exception as e:
+            print(f"[BROWSER] Phone tabs fetch error: {e}")
+        self._render_phone_tabs_popup(rows)
+
+    def _render_phone_tabs_popup(self, rows):
+        win = tk.Toplevel(self)
+        win.title("Tabs from Phone")
+        win.configure(bg=BG_PANEL)
+        win.geometry("420x320")
+
+        tk.Label(win, text="CONTINUE A TAB FROM PHONE", bg=BG_PANEL, fg=CYAN,
+                 font=("Consolas", 10, "bold")).pack(anchor="w", padx=12, pady=(12, 8))
+
+        if rows is None:
+            tk.Label(win, text="Couldn't reach the phone tabs list.",
+                     bg=BG_PANEL, fg=AMBER, font=("Consolas", 9)).pack(padx=12, pady=20)
+            return
+        if not rows:
+            tk.Label(win, text="No open tabs on the phone right now.",
+                     bg=BG_PANEL, fg=TEXT_SEC, font=("Consolas", 9)).pack(padx=12, pady=20)
+            return
+
+        lb = tk.Listbox(win, bg="#010814", fg="#60b8d0", font=("Consolas", 9),
+                        relief="flat", highlightthickness=1, highlightbackground=BORDER_HI,
+                        selectbackground=CYAN_DARK, selectforeground=CYAN)
+        lb.pack(fill="both", expand=True, padx=12, pady=(0, 12))
+        for device, title, _url in rows:
+            lb.insert("end", f"[{device.upper()}] {title}")
+
+        def _open_selected():
+            sel = lb.curselection()
+            if not sel:
+                return
+            url = rows[sel[0]][2]
+            win.destroy()
+            if url:
+                self._go_in_active_or_new(url)
+
+        lb.bind("<Double-Button-1>", lambda _e: _open_selected())
+        tk.Button(win, text="OPEN", command=_open_selected,
+                 bg=GREEN_DIM, fg=GREEN, font=("Consolas", 9, "bold"),
+                 relief="flat", cursor="hand2", padx=10, pady=4).pack(pady=(0, 12))
+
+    # ── Save a new login ────────────────────────────────────
+    def _show_save_login(self):
+        tab = self._active_tab()
+        default_site = ""
+        if tab:
+            try:
+                default_site = urlparse(tab["url"]).hostname or ""
+            except Exception:
+                default_site = ""
+
+        win = tk.Toplevel(self)
+        win.title("Save Login")
+        win.configure(bg=BG_PANEL)
+        win.geometry("340x260")
+
+        def _field(label, show=None, default=""):
+            tk.Label(win, text=label, bg=BG_PANEL, fg=TEXT_SEC, font=("Consolas", 9)).pack(
+                anchor="w", padx=16, pady=(10, 2))
+            e = tk.Entry(win, bg=BG_DEEP, fg=CYAN, insertbackground=CYAN, font=("Consolas", 10),
+                        relief="flat", highlightthickness=1, highlightbackground=BORDER_HI, show=show)
+            e.pack(fill="x", padx=16, ipady=5)
+            if default:
+                e.insert(0, default)
+            return e
+
+        site_e = _field("Site", default=default_site)
+        user_e = _field("Username")
+        pass_e = _field("Password", show="•")
+
+        status = tk.Label(win, text="", bg=BG_PANEL, fg=AMBER, font=("Consolas", 8), wraplength=300)
+        status.pack(pady=(4, 0))
+
+        def _save():
+            site, user, pw = site_e.get().strip(), user_e.get().strip(), pass_e.get()
+            if not site or not user or not pw:
+                status.config(text="All fields are required.")
+                return
+            try:
+                password_vault.add(site, user, pw)
+                win.destroy()
+                self._sync_autofill_btn()
+            except Exception as e:
+                status.config(text=str(e)[:120])
+
+        tk.Button(win, text="SAVE", command=_save,
+                 bg=GREEN_DIM, fg=GREEN, font=("Consolas", 9, "bold"),
+                 relief="flat", cursor="hand2", padx=12, pady=6).pack(pady=14)
+
+    # ── Autofill (gated behind the same Windows Hello enrollment Cortex uses) ──
+    def _sync_autofill_btn(self):
+        tab = self._active_tab()
+        if not tab:
+            return
+        try:
+            hostname = urlparse(tab["url"]).hostname or ""
+        except Exception:
+            hostname = ""
+        entry = password_vault.find_for_site(hostname)
+        self._autofill_entry = entry
+        self._autofill_btn.config(state=("normal" if entry else "disabled"),
+                                  fg=(CYAN if entry else TEXT_SEC))
+
+    def _autofill(self):
+        entry = self._autofill_entry
+        tab = self._active_tab()
+        if not entry or not tab:
+            return
+        credential_id = password_vault.is_webauthn_enrolled()
+        if not credential_id:
+            self._notify("Autofill",
+                "Set up Windows Hello for autofill in Cortex UI's Browser Settings first.")
+            return
+        self._run_webauthn_verify(credential_id, lambda ok: self._finish_autofill(ok, entry, tab))
+
+    def _finish_autofill(self, ok, entry, tab):
+        if not ok:
+            return
+        try:
+            username, password = password_vault.reveal(entry["id"])
+        except Exception as e:
+            self._notify("Autofill", f"Couldn't read saved password: {e}")
+            return
+        script = f"""
+        (function(u, p){{
+          function setNativeValue(el, value){{
+            var proto = Object.getPrototypeOf(el);
+            var setter = Object.getOwnPropertyDescriptor(proto, 'value').set;
+            setter.call(el, value);
+            el.dispatchEvent(new Event('input', {{bubbles:true}}));
+            el.dispatchEvent(new Event('change', {{bubbles:true}}));
+          }}
+          var pwd = document.querySelector('input[type=password]');
+          if(pwd) setNativeValue(pwd, p);
+          var userEl = document.querySelector('input[type=email]') ||
+                       document.querySelector('input[autocomplete=username]') ||
+                       document.querySelector('input[type=text]');
+          if(userEl) setNativeValue(userEl, u);
+        }})({json.dumps(username)}, {json.dumps(password)})
+        """
+        try:
+            tab["webview"].evaluate_js(script)
+        except Exception as e:
+            self._notify("Autofill", f"Injection failed: {e}")
+
+    def _run_webauthn_verify(self, credential_id, on_done):
+        gate = tk.Toplevel(self)
+        gate.title("Windows Hello")
+        gate.geometry("360x220")
+        gate.configure(bg=BG_DEEP)
+        from tkwebview2.tkwebview2 import WebView2
+        url = f"{_API}/browser/webauthn-gate?mode=verify&credential_id={quote(credential_id)}"
+        wv = WebView2(gate, width=360, height=220, url=url)
+        wv.pack(fill="both", expand=True)
+
+        state = {"done": False, "ticks": 0}
+
+        def _poll():
+            if state["done"] or not gate.winfo_exists():
+                return
+            state["ticks"] += 1
+
+            def _cb(res):
+                if state["done"]:
+                    return
+                text = (res or "").strip().strip('"')
+                if text in ("Verified", "Not supported") or text.startswith("Cancelled"):
+                    state["done"] = True
+                    ok = (text == "Verified")
+                    try:
+                        gate.destroy()
+                    except Exception:
+                        pass
+                    on_done(ok)
+            try:
+                wv.evaluate_js(
+                    "document.getElementById('status') ? document.getElementById('status').textContent : ''",
+                    _cb)
+            except Exception:
+                pass
+            if state["ticks"] > 160:  # ~64s timeout
+                state["done"] = True
+                try:
+                    gate.destroy()
+                except Exception:
+                    pass
+                on_done(False)
+                return
+            gate.after(400, _poll)
+
+        def _on_gate_close():
+            state["done"] = True
+            gate.destroy()
+            on_done(False)
+
+        gate.protocol("WM_DELETE_WINDOW", _on_gate_close)
+        gate.after(600, _poll)
 
 
 # ─────────────────────────────────────────────
@@ -1018,9 +1979,15 @@ class SettingsPage(tk.Frame):
         canvas.bind("<Configure>", lambda e: canvas.itemconfig(
             self._body_win, width=e.width))
 
+        self._build_phone_pairing_section()
+        self._build_dashboard_section()
         self._build_memory_section()
         self._build_api_section()
         self._build_voice_section()
+        self._build_meetings_section()
+        self._build_proactive_section()
+        self._build_email_agent_section()
+        self._build_notifications_section()
         self._build_custom_websites_section()
         self._build_about_section()
 
@@ -1029,6 +1996,129 @@ class SettingsPage(tk.Frame):
         card.pack(fill="x", pady=(0, 12))
         _section_header(card, title)
         return card
+
+    # ── Phone Pairing Section (mirrors Cortex UI's phone-connection QR panel) ──
+    def _build_phone_pairing_section(self):
+        card = self._section("PHONE PAIRING")
+
+        tk.Label(card,
+                 text="Scan this QR with the iZACH Android app (Settings → Scan QR Code) to pair.",
+                 bg=BG_CARD, fg=TEXT_SEC, font=("Consolas", 8),
+                 wraplength=520, justify="left").pack(anchor="w", padx=12, pady=(0, 8))
+
+        body = tk.Frame(card, bg=BG_CARD)
+        body.pack(fill="x", padx=12, pady=(0, 10))
+
+        self._qr_label = tk.Label(body, bg=BG_CARD, text="loading…", fg=TEXT_SEC,
+                                   font=("Consolas", 8), width=18, height=9)
+        self._qr_label.pack(side="left", padx=(0, 16))
+
+        right = tk.Frame(body, bg=BG_CARD)
+        right.pack(side="left", fill="both", expand=True)
+
+        tk.Label(right, text="PAIRING SECRET (manual entry)", bg=BG_CARD, fg=TEXT_SEC,
+                 font=("Consolas", 8)).pack(anchor="w")
+        self._pairing_secret_label = tk.Label(right, text="—", bg=BG_CARD, fg=CYAN,
+                                               font=("Consolas", 9), wraplength=320, justify="left")
+        self._pairing_secret_label.pack(anchor="w", pady=(2, 8))
+
+        btn_row = tk.Frame(right, bg=BG_CARD)
+        btn_row.pack(anchor="w")
+        tk.Button(btn_row, text="COPY SECRET", bg=CYAN_DARK, fg=CYAN,
+                  font=("Consolas", 8, "bold"), relief="flat", cursor="hand2",
+                  command=self._copy_pairing_secret, padx=8, pady=3).pack(side="left", padx=(0, 8))
+        tk.Button(btn_row, text="↻ REFRESH", bg=BG_PANEL, fg=TEXT_SEC,
+                  font=("Consolas", 8, "bold"), relief="flat", cursor="hand2",
+                  command=self._load_phone_pairing_ui, padx=8, pady=3).pack(side="left")
+
+    def _load_phone_pairing_ui(self):
+        def _work():
+            try:
+                r = requests.get("http://127.0.0.1:5050/connect/qr", timeout=8).json()
+                qr_b64 = r.get("qr_base64", "")
+                secret = r.get("pairing_secret", "")
+                photo = None
+                if qr_b64:
+                    import base64, io
+                    img = Image.open(io.BytesIO(base64.b64decode(qr_b64))).resize((140, 140))
+                    photo = ImageTk.PhotoImage(img)
+
+                def _apply():
+                    if photo is not None:
+                        self._qr_label.config(image=photo, text="")
+                        self._qr_label.image = photo  # keep a reference, Tk drops it otherwise
+                    self._pairing_secret_label.config(text=secret or "—")
+                self.after(0, _apply)
+            except Exception as e:
+                print(f"[SETTINGS] Phone pairing load error: {e}")
+                self.after(0, lambda: self._qr_label.config(text="unavailable", fg=AMBER))
+        threading.Thread(target=_work, daemon=True).start()
+
+    def _copy_pairing_secret(self):
+        secret = self._pairing_secret_label.cget("text")
+        if secret and secret != "—":
+            self.clipboard_clear()
+            self.clipboard_append(secret)
+
+    # ── "What's Running" dashboard (mirrors Cortex UI's STATUS DASHBOARD panel) ──
+    def _build_dashboard_section(self):
+        card = self._section("WHAT'S RUNNING")
+        self._dash_rows = {}
+        for label in ["RECORDINGS", "AUTOMATIONS", "DO NOT DISTURB", "DOWNLOADS", "PHONE"]:
+            row = tk.Frame(card, bg=BG_CARD)
+            row.pack(fill="x", padx=12, pady=2)
+            tk.Label(row, text=f"{label:<16}", bg=BG_CARD, fg=TEXT_SEC,
+                     font=("Consolas", 8), width=18, anchor="w").pack(side="left")
+            val = tk.Label(row, text="loading…", bg=BG_CARD, fg=TEXT_PRI, font=("Consolas", 8, "bold"))
+            val.pack(side="left", padx=8)
+            self._dash_rows[label] = val
+        tk.Button(card, text="↻ REFRESH", bg=BG_PANEL, fg=TEXT_SEC,
+                  font=("Consolas", 8, "bold"), relief="flat", cursor="hand2",
+                  command=self._load_dashboard_ui, padx=8, pady=3).pack(anchor="w", padx=12, pady=(6, 10))
+
+    def _load_dashboard_ui(self):
+        def _work():
+            results = {}
+            try:
+                d = requests.get("http://127.0.0.1:5050/browser/recordings", timeout=5).json()
+                recs = d.get("recordings", [])
+                scheduled = sum(1 for r in recs if r.get("schedule_cron"))
+                results["RECORDINGS"] = (f"{len(recs)} saved" + (f" · {scheduled} scheduled" if scheduled else ""), TEXT_PRI)
+            except Exception:
+                results["RECORDINGS"] = ("unavailable", AMBER)
+            try:
+                d = requests.get("http://127.0.0.1:5050/smart-memory?category=automation", timeout=5).json()
+                items = d.get("data", [])
+                active = sum(1 for i in items if i.get("enabled", True) is not False)
+                results["AUTOMATIONS"] = (f"{active}/{len(items)} active", TEXT_PRI)
+            except Exception:
+                results["AUTOMATIONS"] = ("unavailable", AMBER)
+            try:
+                d = requests.get("http://127.0.0.1:5050/dnd", timeout=5).json()
+                active = bool(d.get("active"))
+                results["DO NOT DISTURB"] = ("ON" if active else "OFF", AMBER if active else TEXT_PRI)
+            except Exception:
+                results["DO NOT DISTURB"] = ("unavailable", AMBER)
+            try:
+                d = requests.get("http://127.0.0.1:5050/downloads/active", timeout=5).json()
+                active = len(d.get("downloads") or d.get("active") or [])
+                results["DOWNLOADS"] = (f"{active} in progress" if active else "idle", CYAN if active else TEXT_PRI)
+            except Exception:
+                results["DOWNLOADS"] = ("unavailable", AMBER)
+            try:
+                d = requests.get("http://127.0.0.1:5050/phone/status", timeout=5).json()
+                connected = bool(d.get("connected"))
+                label = f"paired · {d.get('device_name') or 'device'}" if connected else "not connected"
+                results["PHONE"] = (label, GREEN if connected else TEXT_PRI)
+            except Exception:
+                results["PHONE"] = ("unavailable", AMBER)
+
+            def _apply():
+                for label, (text, color) in results.items():
+                    if label in self._dash_rows:
+                        self._dash_rows[label].config(text=text, fg=color)
+            self.after(0, _apply)
+        threading.Thread(target=_work, daemon=True).start()
 
     # ── Memory Section ──
     def _build_memory_section(self):
@@ -1216,6 +2306,23 @@ class SettingsPage(tk.Frame):
             command=self._save_ww_setting
         ).pack(side="left", padx=8)
 
+        # Nickname
+        nick_row = tk.Frame(card, bg=BG_CARD)
+        nick_row.pack(fill="x", padx=12, pady=6)
+        tk.Label(nick_row, text="Nickname", bg=BG_CARD, fg=TEXT_PRI,
+                 font=("Consolas", 9), width=20, anchor="w").pack(side="left")
+        self._nickname_entry = tk.Entry(
+            nick_row, bg=BG_DEEP, fg=CYAN, insertbackground=CYAN,
+            font=("Consolas", 9), relief="flat",
+            highlightthickness=1, highlightbackground=BORDER_HI, width=20)
+        self._nickname_entry.pack(side="left", padx=8, ipady=3)
+        self._nickname_entry.insert(0, self._load_nickname_setting())
+        tk.Button(nick_row, text="SAVE", command=self._save_nickname_setting,
+                 bg=CYAN_DARK, fg=CYAN, font=("Consolas", 8, "bold"),
+                 relief="flat", cursor="hand2", padx=8, pady=2).pack(side="left", padx=(4, 0))
+        tk.Label(card, text='e.g. "Neo" — also works as a wake word alongside "iZACH" (restart required)',
+                bg=BG_CARD, fg=TEXT_SEC, font=("Consolas", 8)).pack(anchor="w", padx=12, pady=(0, 4))
+
         # TTS info
         for label, note in [
             ("Response style", "Short, natural, JARVIS-style"),
@@ -1231,6 +2338,486 @@ class SettingsPage(tk.Frame):
                      font=("Consolas", 8)).pack(side="left", padx=8)
 
         tk.Frame(card, bg=BG_CARD, height=8).pack()
+
+    # ── Meetings Section (calendar-driven auto-DND) ──
+    def _build_meetings_section(self):
+        card = self._section("MEETINGS")
+
+        row = tk.Frame(card, bg=BG_CARD)
+        row.pack(fill="x", padx=12, pady=6)
+        tk.Label(row, text="Auto-DND Before Meetings", bg=BG_CARD, fg=TEXT_PRI,
+                 font=("Consolas", 9), width=20, anchor="w").pack(side="left")
+        self._auto_dnd_var = tk.BooleanVar(value=self._load_auto_dnd_setting())
+        tk.Checkbutton(
+            row,
+            text="Auto-enable DND before calendar meetings",
+            variable=self._auto_dnd_var,
+            bg=BG_CARD, fg=TEXT_SEC,
+            selectcolor=BG_DEEP,
+            activebackground=BG_CARD,
+            font=("Consolas", 8),
+            command=self._save_auto_dnd_setting
+        ).pack(side="left", padx=8)
+
+        lead_row = tk.Frame(card, bg=BG_CARD)
+        lead_row.pack(fill="x", padx=12, pady=6)
+        tk.Label(lead_row, text="Lead Time (minutes)", bg=BG_CARD, fg=TEXT_PRI,
+                 font=("Consolas", 9), width=20, anchor="w").pack(side="left")
+        self._auto_dnd_lead_entry = tk.Entry(
+            lead_row, bg=BG_DEEP, fg=CYAN, insertbackground=CYAN,
+            font=("Consolas", 9), relief="flat",
+            highlightthickness=1, highlightbackground=BORDER_HI, width=6)
+        self._auto_dnd_lead_entry.pack(side="left", padx=8, ipady=3)
+        self._auto_dnd_lead_entry.insert(0, str(self._load_auto_dnd_lead_setting()))
+        tk.Button(lead_row, text="SAVE", command=self._save_auto_dnd_lead_setting,
+                 bg=CYAN_DARK, fg=CYAN, font=("Consolas", 8, "bold"),
+                 relief="flat", cursor="hand2", padx=8, pady=2).pack(side="left", padx=(4, 0))
+
+        tk.Label(card, text="Automatically enables Do Not Disturb a few minutes before a calendar\n"
+                            "meeting starts, and disables it when the meeting ends.",
+                bg=BG_CARD, fg=TEXT_SEC, font=("Consolas", 8), justify="left").pack(
+            anchor="w", padx=12, pady=(0, 8))
+
+    def _load_auto_dnd_setting(self) -> bool:
+        try:
+            path = os.path.join(os.path.dirname(__file__), "api_keys.json")
+            if os.path.exists(path):
+                with open(path) as f:
+                    return json.load(f).get("auto_dnd_before_meetings", False)
+        except Exception:
+            pass
+        return False
+
+    def _save_auto_dnd_setting(self):
+        try:
+            path = os.path.join(os.path.dirname(__file__), "api_keys.json")
+            data = {}
+            if os.path.exists(path):
+                with open(path) as f:
+                    data = json.load(f)
+            data["auto_dnd_before_meetings"] = self._auto_dnd_var.get()
+            with open(path, "w") as f:
+                json.dump(data, f, indent=2)
+        except Exception as e:
+            print(f"[SETTINGS] Auto-DND save error: {e}")
+
+    def _load_auto_dnd_lead_setting(self) -> int:
+        try:
+            path = os.path.join(os.path.dirname(__file__), "api_keys.json")
+            if os.path.exists(path):
+                with open(path) as f:
+                    return int(json.load(f).get("auto_dnd_lead_minutes", 5) or 5)
+        except Exception:
+            pass
+        return 5
+
+    def _save_auto_dnd_lead_setting(self):
+        try:
+            path = os.path.join(os.path.dirname(__file__), "api_keys.json")
+            data = {}
+            if os.path.exists(path):
+                with open(path) as f:
+                    data = json.load(f)
+            val = self._auto_dnd_lead_entry.get().strip()
+            data["auto_dnd_lead_minutes"] = int(val) if val.isdigit() else 5
+            with open(path, "w") as f:
+                json.dump(data, f, indent=2)
+        except Exception as e:
+            print(f"[SETTINGS] Auto-DND lead save error: {e}")
+
+    # ── Proactive Agent Section ──
+    def _build_proactive_section(self):
+        card = self._section("PROACTIVE AGENT")
+
+        row = tk.Frame(card, bg=BG_CARD)
+        row.pack(fill="x", padx=12, pady=6)
+        tk.Label(row, text="Proactive Agent", bg=BG_CARD, fg=TEXT_PRI,
+                 font=("Consolas", 9), width=20, anchor="w").pack(side="left")
+        self._proactive_var = tk.BooleanVar(value=self._load_proactive_setting())
+        tk.Checkbutton(
+            row, text="Morning briefing, event alerts, idle nudges",
+            variable=self._proactive_var,
+            bg=BG_CARD, fg=TEXT_SEC, selectcolor=BG_DEEP, activebackground=BG_CARD,
+            font=("Consolas", 8), command=self._save_proactive_setting
+        ).pack(side="left", padx=8)
+
+        row2 = tk.Frame(card, bg=BG_CARD)
+        row2.pack(fill="x", padx=12, pady=6)
+        tk.Label(row2, text="Pattern Suggestions", bg=BG_CARD, fg=TEXT_PRI,
+                 font=("Consolas", 9), width=20, anchor="w").pack(side="left")
+        self._pattern_suggest_var = tk.BooleanVar(value=self._load_pattern_suggest_setting())
+        tk.Checkbutton(
+            row2, text="Offer to automate things you do on a schedule",
+            variable=self._pattern_suggest_var,
+            bg=BG_CARD, fg=TEXT_SEC, selectcolor=BG_DEEP, activebackground=BG_CARD,
+            font=("Consolas", 8), command=self._save_pattern_suggest_setting
+        ).pack(side="left", padx=8)
+
+        row3 = tk.Frame(card, bg=BG_CARD)
+        row3.pack(fill="x", padx=12, pady=6)
+        tk.Label(row3, text="Screen-Aware Assist", bg=BG_CARD, fg=TEXT_PRI,
+                 font=("Consolas", 9), width=20, anchor="w").pack(side="left")
+        self._screen_aware_var = tk.BooleanVar(value=self._load_screen_aware_setting())
+        tk.Checkbutton(
+            row3, text="Reads active window text — off by default",
+            variable=self._screen_aware_var,
+            bg=BG_CARD, fg=TEXT_SEC, selectcolor=BG_DEEP, activebackground=BG_CARD,
+            font=("Consolas", 8), command=self._save_screen_aware_setting
+        ).pack(side="left", padx=8)
+
+        excl_row = tk.Frame(card, bg=BG_CARD)
+        excl_row.pack(fill="x", padx=12, pady=6)
+        tk.Label(excl_row, text="Excluded Apps", bg=BG_CARD, fg=TEXT_PRI,
+                 font=("Consolas", 9), width=20, anchor="w").pack(side="left")
+        self._screen_aware_excl_entry = tk.Entry(
+            excl_row, bg=BG_DEEP, fg=CYAN, insertbackground=CYAN,
+            font=("Consolas", 9), relief="flat",
+            highlightthickness=1, highlightbackground=BORDER_HI, width=36)
+        self._screen_aware_excl_entry.pack(side="left", padx=8, ipady=3)
+        self._screen_aware_excl_entry.insert(0, self._load_screen_aware_excl_setting())
+        tk.Button(excl_row, text="SAVE", command=self._save_screen_aware_excl_setting,
+                 bg=CYAN_DARK, fg=CYAN, font=("Consolas", 8, "bold"),
+                 relief="flat", cursor="hand2", padx=8, pady=2).pack(side="left", padx=(4, 0))
+        tk.Label(card, text="Comma-separated process names, checked before any OCR happens.",
+                bg=BG_CARD, fg=TEXT_SEC, font=("Consolas", 8)).pack(anchor="w", padx=12, pady=(0, 4))
+
+        tk.Frame(card, bg=BG_CARD, height=8).pack()
+
+    def _load_proactive_setting(self) -> bool:
+        try:
+            path = os.path.join(os.path.dirname(__file__), "api_keys.json")
+            if os.path.exists(path):
+                with open(path) as f:
+                    return json.load(f).get("proactive_enabled", True)
+        except Exception:
+            pass
+        return True
+
+    def _save_proactive_setting(self):
+        try:
+            path = os.path.join(os.path.dirname(__file__), "api_keys.json")
+            data = {}
+            if os.path.exists(path):
+                with open(path) as f:
+                    data = json.load(f)
+            data["proactive_enabled"] = self._proactive_var.get()
+            with open(path, "w") as f:
+                json.dump(data, f, indent=2)
+        except Exception as e:
+            print(f"[SETTINGS] Proactive agent save error: {e}")
+
+    def _load_pattern_suggest_setting(self) -> bool:
+        try:
+            path = os.path.join(os.path.dirname(__file__), "api_keys.json")
+            if os.path.exists(path):
+                with open(path) as f:
+                    return json.load(f).get("pattern_automation_suggestions_enabled", True)
+        except Exception:
+            pass
+        return True
+
+    def _save_pattern_suggest_setting(self):
+        try:
+            path = os.path.join(os.path.dirname(__file__), "api_keys.json")
+            data = {}
+            if os.path.exists(path):
+                with open(path) as f:
+                    data = json.load(f)
+            data["pattern_automation_suggestions_enabled"] = self._pattern_suggest_var.get()
+            with open(path, "w") as f:
+                json.dump(data, f, indent=2)
+        except Exception as e:
+            print(f"[SETTINGS] Pattern suggestions save error: {e}")
+
+    _SCREEN_AWARE_DEFAULT_EXCL = "keepass, keepassxc, 1password, bitwarden, lastpass"
+
+    def _load_screen_aware_setting(self) -> bool:
+        try:
+            path = os.path.join(os.path.dirname(__file__), "api_keys.json")
+            if os.path.exists(path):
+                with open(path) as f:
+                    return json.load(f).get("screen_aware_enabled", False)
+        except Exception:
+            pass
+        return False
+
+    def _save_screen_aware_setting(self):
+        try:
+            path = os.path.join(os.path.dirname(__file__), "api_keys.json")
+            data = {}
+            if os.path.exists(path):
+                with open(path) as f:
+                    data = json.load(f)
+            data["screen_aware_enabled"] = self._screen_aware_var.get()
+            with open(path, "w") as f:
+                json.dump(data, f, indent=2)
+        except Exception as e:
+            print(f"[SETTINGS] Screen-aware save error: {e}")
+
+    def _load_screen_aware_excl_setting(self) -> str:
+        try:
+            path = os.path.join(os.path.dirname(__file__), "api_keys.json")
+            if os.path.exists(path):
+                with open(path) as f:
+                    apps = json.load(f).get("screen_aware_excluded_apps")
+                    if apps is not None:
+                        return ", ".join(apps)
+        except Exception:
+            pass
+        return self._SCREEN_AWARE_DEFAULT_EXCL
+
+    def _save_screen_aware_excl_setting(self):
+        try:
+            path = os.path.join(os.path.dirname(__file__), "api_keys.json")
+            data = {}
+            if os.path.exists(path):
+                with open(path) as f:
+                    data = json.load(f)
+            raw = self._screen_aware_excl_entry.get()
+            data["screen_aware_excluded_apps"] = [a.strip().lower() for a in raw.split(",") if a.strip()]
+            with open(path, "w") as f:
+                json.dump(data, f, indent=2)
+        except Exception as e:
+            print(f"[SETTINGS] Screen-aware exclusions save error: {e}")
+
+    # ── Email Agent Section ──
+    def _build_email_agent_section(self):
+        card = self._section("EMAIL AGENT")
+
+        status_row = tk.Frame(card, bg=BG_CARD)
+        status_row.pack(fill="x", padx=12, pady=(0, 6))
+        self._email_status_lbl = tk.Label(status_row, text="● NOT CONNECTED", bg=BG_CARD, fg=TEXT_SEC,
+                                          font=("Consolas", 9, "bold"))
+        self._email_status_lbl.pack(side="left")
+
+        btn_row = tk.Frame(card, bg=BG_CARD)
+        btn_row.pack(fill="x", padx=12, pady=(0, 8))
+        self._email_connect_btn = tk.Button(btn_row, text="⊕ CONNECT GMAIL (read-only)", command=self._email_connect_start,
+                 bg=CYAN_DARK, fg=CYAN, font=("Consolas", 8, "bold"),
+                 relief="flat", cursor="hand2", padx=8, pady=4)
+        self._email_connect_btn.pack(side="left")
+        self._email_disconnect_btn = tk.Button(btn_row, text="DISCONNECT", command=self._email_disconnect,
+                 bg="#2a0000", fg=RED, font=("Consolas", 8, "bold"),
+                 relief="flat", cursor="hand2", padx=8, pady=4)
+
+        row = tk.Frame(card, bg=BG_CARD)
+        row.pack(fill="x", padx=12, pady=4)
+        tk.Label(row, text="Email Agent", bg=BG_CARD, fg=TEXT_PRI,
+                 font=("Consolas", 9), width=20, anchor="w").pack(side="left")
+        self._email_agent_var = tk.BooleanVar(value=self._load_email_setting("email_agent_enabled", False))
+        tk.Checkbutton(row, text="Master switch — off by default", variable=self._email_agent_var,
+                      bg=BG_CARD, fg=TEXT_SEC, selectcolor=BG_DEEP, activebackground=BG_CARD,
+                      font=("Consolas", 8), command=lambda: self._save_email_setting("email_agent_enabled", self._email_agent_var.get())
+                      ).pack(side="left", padx=8)
+
+        for key, label, default in [
+            ("email_watch_otp", "Watch for OTPs", True),
+            ("email_watch_replies", "Watch for Replies", True),
+            ("email_watch_keywords", "Watch Keywords/Senders", True),
+            ("email_track_orders", "Track Orders/Shipments", True),
+        ]:
+            r = tk.Frame(card, bg=BG_CARD)
+            r.pack(fill="x", padx=12, pady=2)
+            tk.Label(r, text="", bg=BG_CARD, width=20).pack(side="left")
+            var = tk.BooleanVar(value=self._load_email_setting(key, default))
+            setattr(self, f"_{key}_var", var)
+            tk.Checkbutton(r, text=label, variable=var,
+                          bg=BG_CARD, fg=TEXT_SEC, selectcolor=BG_DEEP, activebackground=BG_CARD,
+                          font=("Consolas", 8), command=lambda k=key, v=var: self._save_email_setting(k, v.get())
+                          ).pack(side="left", padx=8)
+
+        wl_row = tk.Frame(card, bg=BG_CARD)
+        wl_row.pack(fill="x", padx=12, pady=(8, 2))
+        tk.Label(wl_row, text="Watchlist", bg=BG_CARD, fg=TEXT_PRI,
+                 font=("Consolas", 9), width=20, anchor="w").pack(side="left")
+        self._email_watchlist_entry = tk.Entry(
+            wl_row, bg=BG_DEEP, fg=CYAN, insertbackground=CYAN,
+            font=("Consolas", 9), relief="flat",
+            highlightthickness=1, highlightbackground=BORDER_HI, width=36)
+        self._email_watchlist_entry.pack(side="left", padx=8, ipady=3)
+        tk.Button(wl_row, text="SAVE", command=self._save_email_watchlist,
+                 bg=CYAN_DARK, fg=CYAN, font=("Consolas", 8, "bold"),
+                 relief="flat", cursor="hand2", padx=8, pady=2).pack(side="left", padx=(4, 0))
+        tk.Label(card, text='Comma-separated senders/subjects, e.g. "Dell Support Assist, Amazon Delivery"',
+                bg=BG_CARD, fg=TEXT_SEC, font=("Consolas", 8)).pack(anchor="w", padx=12, pady=(0, 8))
+
+        tk.Label(card, text="TRACKED ORDERS", bg=BG_CARD, fg=CYAN, font=("Consolas", 8, "bold")).pack(
+            anchor="w", padx=12, pady=(0, 2))
+        self._email_orders_lbl = tk.Label(card, text="No tracked orders yet.", bg=BG_CARD, fg=TEXT_SEC,
+                                          font=("Consolas", 8), justify="left", wraplength=520, anchor="w")
+        self._email_orders_lbl.pack(anchor="w", padx=12, pady=(0, 8))
+
+        tk.Frame(card, bg=BG_CARD, height=8).pack()
+
+        self._email_refresh_status()
+        self._load_email_watchlist_ui()
+        self._load_email_orders_ui()
+
+    def _load_email_setting(self, key, default):
+        try:
+            path = os.path.join(os.path.dirname(__file__), "api_keys.json")
+            if os.path.exists(path):
+                with open(path) as f:
+                    return json.load(f).get(key, default)
+        except Exception:
+            pass
+        return default
+
+    def _save_email_setting(self, key, value):
+        try:
+            path = os.path.join(os.path.dirname(__file__), "api_keys.json")
+            data = {}
+            if os.path.exists(path):
+                with open(path) as f:
+                    data = json.load(f)
+            data[key] = value
+            with open(path, "w") as f:
+                json.dump(data, f, indent=2)
+        except Exception as e:
+            print(f"[SETTINGS] Email agent save error ({key}): {e}")
+
+    def _load_email_watchlist_ui(self):
+        def _work():
+            try:
+                r = requests.get("http://127.0.0.1:5050/email/watchlist", timeout=5).json()
+                items = r.get("watchlist", [])
+            except Exception:
+                items = []
+            self.after(0, lambda: (self._email_watchlist_entry.delete(0, "end"),
+                                    self._email_watchlist_entry.insert(0, ", ".join(items))))
+        threading.Thread(target=_work, daemon=True).start()
+
+    def _save_email_watchlist(self):
+        raw = self._email_watchlist_entry.get()
+        watchlist = [w.strip() for w in raw.split(",") if w.strip()]
+        def _work():
+            try:
+                requests.post("http://127.0.0.1:5050/email/watchlist", json={"watchlist": watchlist}, timeout=5)
+            except Exception as e:
+                print(f"[SETTINGS] Watchlist save error: {e}")
+        threading.Thread(target=_work, daemon=True).start()
+
+    def _load_email_orders_ui(self):
+        def _work():
+            try:
+                r = requests.get("http://127.0.0.1:5050/email/orders", timeout=5).json()
+                orders = r.get("orders", [])
+            except Exception:
+                orders = []
+            def _apply():
+                if not orders:
+                    self._email_orders_lbl.config(text="No tracked orders yet.")
+                    return
+                lines = []
+                for o in orders[:5]:
+                    eta = f", ETA {o['delivery_date']}" if o.get("delivery_date") else ""
+                    lines.append(f"{o.get('description') or 'Package'} via {o.get('carrier') or '?'} — "
+                                 f"{(o.get('status') or '').replace('_', ' ')}{eta}")
+                self._email_orders_lbl.config(text="\n".join(lines))
+            self.after(0, _apply)
+        threading.Thread(target=_work, daemon=True).start()
+
+    def _email_refresh_status(self):
+        def _work():
+            try:
+                r = requests.get("http://127.0.0.1:5050/email/auth/status", timeout=5).json()
+            except Exception:
+                r = {"connected": False, "status": "idle"}
+            self.after(0, lambda: self._email_apply_status(r))
+        threading.Thread(target=_work, daemon=True).start()
+
+    def _email_apply_status(self, status):
+        connected = status.get("connected", False)
+        if status.get("status") == "waiting_for_browser":
+            self._email_status_lbl.config(text="● CONNECTING…", fg=AMBER)
+        elif connected:
+            user = status.get("user") or ""
+            self._email_status_lbl.config(text=f"● CONNECTED — {user}", fg=GREEN)
+        else:
+            self._email_status_lbl.config(text="● NOT CONNECTED", fg=TEXT_SEC)
+        if connected:
+            self._email_connect_btn.pack_forget()
+            self._email_disconnect_btn.pack(side="left")
+        else:
+            self._email_disconnect_btn.pack_forget()
+            self._email_connect_btn.pack(side="left")
+
+    def _email_connect_start(self):
+        def _work():
+            try:
+                requests.post("http://127.0.0.1:5050/email/auth/connect", timeout=5).json()
+            except Exception as e:
+                print(f"[SETTINGS] Email connect error: {e}")
+                return
+            self.after(0, self._email_poll_connect)
+        threading.Thread(target=_work, daemon=True).start()
+
+    def _email_poll_connect(self, attempt=0):
+        self._email_apply_status({"connected": False, "status": "waiting_for_browser"})
+        def _work():
+            try:
+                r = requests.get("http://127.0.0.1:5050/email/auth/status", timeout=5).json()
+            except Exception:
+                r = {"connected": False, "status": "idle"}
+            def _apply():
+                if r.get("status") in ("connected", "error") or attempt > 60:
+                    self._email_apply_status(r)
+                else:
+                    self.after(2000, lambda: self._email_poll_connect(attempt + 1))
+            self.after(0, _apply)
+        threading.Thread(target=_work, daemon=True).start()
+
+    def _email_disconnect(self):
+        def _work():
+            try:
+                requests.post("http://127.0.0.1:5050/email/auth/disconnect", timeout=5)
+            except Exception as e:
+                print(f"[SETTINGS] Email disconnect error: {e}")
+            self.after(0, self._email_refresh_status)
+        threading.Thread(target=_work, daemon=True).start()
+
+    # ── Unified Notifications Section (Phase 5) ──
+    _NOTIF_SOURCE_ICON = {"whatsapp": "💬", "calendar": "📅", "system": "⚠", "email": "✉", "alerts": "✉"}
+
+    def _build_notifications_section(self):
+        card = self._section("NOTIFICATIONS")
+        tk.Label(card, text="WhatsApp + Calendar + System + Email, ranked by priority",
+                bg=BG_CARD, fg=TEXT_SEC, font=("Consolas", 8)).pack(anchor="w", padx=12, pady=(0, 6))
+
+        self._notif_feed_lbl = tk.Label(card, text="Loading…", bg=BG_CARD, fg=TEXT_SEC,
+                                        font=("Consolas", 8), justify="left", wraplength=520, anchor="w")
+        self._notif_feed_lbl.pack(anchor="w", padx=12, pady=(0, 6))
+
+        tk.Button(card, text="↻ REFRESH", command=self._load_notification_feed,
+                 bg=CYAN_DARK, fg=CYAN, font=("Consolas", 8, "bold"),
+                 relief="flat", cursor="hand2", padx=8, pady=3).pack(anchor="w", padx=12, pady=(0, 8))
+
+        self._load_notification_feed()
+
+    def _load_notification_feed(self):
+        def _work():
+            try:
+                r = requests.get("http://127.0.0.1:5050/notifications/feed", params={"limit": 8}, timeout=5).json()
+                items = r.get("notifications", [])
+            except Exception:
+                items = None
+            def _apply():
+                if items is None:
+                    self._notif_feed_lbl.config(text="Could not load notifications.")
+                    return
+                if not items:
+                    self._notif_feed_lbl.config(text="No notifications yet.")
+                    return
+                lines = []
+                for n in items:
+                    icon = self._NOTIF_SOURCE_ICON.get(n.get("source"), "•")
+                    import time as _time
+                    when = _time.strftime("%H:%M", _time.localtime(n.get("ts", 0)))
+                    body = (n.get("body") or "")[:70]
+                    lines.append(f"{icon} {n.get('title', '')}  [{when}]\n    {body}")
+                self._notif_feed_lbl.config(text="\n".join(lines))
+            self.after(0, _apply)
+        threading.Thread(target=_work, daemon=True).start()
 
     # ── Custom Websites Section ──
     def _build_custom_websites_section(self):
@@ -1322,7 +2909,7 @@ class SettingsPage(tk.Frame):
             return
         try:
             import requests as _req
-            r = _req.post("http://localhost:5050/websites",
+            r = _req.post("http://127.0.0.1:5050/websites",
                           json={"name": name, "url": url}, timeout=5)
             data = r.json()
             if data.get("ok"):
@@ -1339,7 +2926,7 @@ class SettingsPage(tk.Frame):
     def _delete_custom_website(self, key):
         try:
             import requests as _req
-            _req.delete(f"http://localhost:5050/websites/{key}", timeout=5)
+            _req.delete(f"http://127.0.0.1:5050/websites/{key}", timeout=5)
             self._load_custom_websites_ui()
         except Exception:
             pass
@@ -1388,7 +2975,32 @@ class SettingsPage(tk.Frame):
         except Exception as e:
             print(f"[SETTINGS] Wake word save error: {e}")
 
+    def _load_nickname_setting(self) -> str:
+        try:
+            path = os.path.join(os.path.dirname(__file__), "api_keys.json")
+            if os.path.exists(path):
+                with open(path) as f:
+                    return json.load(f).get("nickname", "") or ""
+        except Exception:
+            pass
+        return ""
+
+    def _save_nickname_setting(self):
+        try:
+            path = os.path.join(os.path.dirname(__file__), "api_keys.json")
+            data = {}
+            if os.path.exists(path):
+                with open(path) as f:
+                    data = json.load(f)
+            data["nickname"] = self._nickname_entry.get().strip()
+            with open(path, "w") as f:
+                json.dump(data, f, indent=2)
+        except Exception as e:
+            print(f"[SETTINGS] Nickname save error: {e}")
+
     def _load_all(self):
+        self._load_phone_pairing_ui()
+        self._load_dashboard_ui()
         self._load_memory_ui()
         self._load_api_keys()
         self._load_custom_websites_ui()
@@ -1437,6 +3049,14 @@ class JarvisUI:
                   activebackground=BG_PANEL,
                   command=self._open_settings,
                   padx=10, pady=2).place(relx=1.0, x=-120, y=12)
+
+        tk.Button(title_bar, text="🌐 BROWSER",
+                  bg=BG_DEEP, fg=TEXT_SEC,
+                  font=("Consolas", 8), relief="flat",
+                  cursor="hand2",
+                  activebackground=BG_PANEL,
+                  command=self._open_browser,
+                  padx=10, pady=2).place(relx=1.0, x=-230, y=12)
 
         # ── Bottom ticker ──
         ticker_bar = tk.Frame(self.root, bg=BG_PANEL, height=24)
@@ -1730,7 +3350,7 @@ class JarvisUI:
         def _check():
             try:
                 import requests as req
-                r = req.get("http://localhost:3000/health", timeout=2)
+                r = req.get("http://127.0.0.1:3000/health", timeout=2)
                 if r.status_code == 200:
                     status = r.json().get("status", "")
                     if status == "connected":
@@ -1859,6 +3479,17 @@ class JarvisUI:
     def _close_settings(self):
         if hasattr(self, '_settings_page'):
             self._settings_page.place_forget()
+
+    def _open_browser(self):
+        if hasattr(self, '_browser_window') and self._browser_window.winfo_exists():
+            self._browser_window.deiconify()
+            self._browser_window.lift()
+            self._browser_window.focus_force()
+            return
+        self._browser_window = BrowserWindow(self.root, on_close=self._close_browser)
+
+    def _close_browser(self):
+        pass
 
     def _interrupt(self):
         """Stop current speech immediately."""

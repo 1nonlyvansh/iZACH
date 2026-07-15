@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="20dp">
+
+    <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:text="Title" android:textColor="#FF3a6070"
+        android:textSize="11sp" android:fontFamily="monospace"
+        android:layout_marginBottom="6dp" />
+
+    <EditText android:id="@+id/etTitle"
+        android:layout_width="match_parent" android:layout_height="48dp"
+        android:background="@drawable/bg_input"
+        android:hint="e.g. Instagram"
+        android:textSize="14sp" android:fontFamily="monospace"
+        android:paddingHorizontal="12dp"
+        android:inputType="text"
+        android:layout_marginBottom="16dp" />
+
+    <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:text="URL" android:textColor="#FF3a6070"
+        android:textSize="11sp" android:fontFamily="monospace"
+        android:layout_marginBottom="6dp" />
+
+    <EditText android:id="@+id/etUrl"
+        android:layout_width="match_parent" android:layout_height="48dp"
+        android:background="@drawable/bg_input"
+        android:hint="https://instagram.com"
+        android:textSize="14sp" android:fontFamily="monospace"
+        android:paddingHorizontal="12dp"
+        android:inputType="textUri"
+        android:layout_marginBottom="16dp" />
+
+    <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:text="Folder" android:textColor="#FF3a6070"
+        android:textSize="11sp" android:fontFamily="monospace"
+        android:layout_marginBottom="6dp" />
+
+    <EditText android:id="@+id/etFolder"
+        android:layout_width="match_parent" android:layout_height="48dp"
+        android:background="@drawable/bg_input"
+        android:hint="General"
+        android:textSize="14sp" android:fontFamily="monospace"
+        android:paddingHorizontal="12dp"
+        android:inputType="text" />
+
+</LinearLayout>

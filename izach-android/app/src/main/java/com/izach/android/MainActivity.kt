@@ -32,6 +32,7 @@ import androidx.core.graphics.drawable.IconCompat
 import androidx.core.net.toUri
 import androidx.core.view.GravityCompat
 import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -91,12 +92,15 @@ class MainActivity : AppCompatActivity() {
         private const val NOTIF_ID_BASE          = 1000
         private const val NOTIF_ID_DND_BASE      = 3000
         private const val NOTIF_ID_REMINDER_BASE = 5000
+        private const val NOTIF_ID_HANDOFF_BASE  = 6000
         private var notifCounter      = 0
         private var reminderCounter   = 0
+        private var handoffCounter    = 0
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        WindowCompat.setDecorFitsSystemWindows(window, false)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
@@ -128,6 +132,19 @@ class MainActivity : AppCompatActivity() {
         checkStatus()
         pollDndBusyStatus()
 
+        // Play Services drops registered geofences on reboot and can lose
+        // them on rare process-death edge cases — cheap to just re-assert
+        // the saved list every time the app is opened.
+        val savedGeofences = api.getGeofences()
+        if (savedGeofences.isNotEmpty()) GeofenceManager.registerAll(this, savedGeofences)
+
+        // Ongoing notification (connection/DND/Busy/PC Background Mode) — on by
+        // default, toggleable in Settings. Re-asserted on every launch the same
+        // way geofences are above, since a user can swipe the service away.
+        if (prefs.getBoolean(StatusNotificationService.PREF_ENABLED, true)) {
+            ContextCompat.startForegroundService(this, Intent(this, StatusNotificationService::class.java))
+        }
+
         binding.btnBannerSetup.setOnClickListener {
             startActivity(Intent(this, SettingsActivity::class.java))
         }
@@ -143,6 +160,30 @@ class MainActivity : AppCompatActivity() {
     private fun handleIncomingIntent(intent: Intent?) {
         intent?.getStringExtra("shortcut_command")?.let { sendCommand(it) }
         if (intent?.getBooleanExtra("start_voice", false) == true) startVoice()
+
+        // App Actions deep link: izach://feature/<name> (see res/xml/actions.xml)
+        if (intent?.action == Intent.ACTION_VIEW && intent.data?.scheme == "izach") {
+            openFeature(intent.data?.lastPathSegment ?: intent.data?.host)
+        }
+    }
+
+    private fun openFeature(feature: String?) {
+        val target = when (feature) {
+            "calendar" -> CalendarActivity::class.java
+            "bookmarks" -> BookmarksActivity::class.java
+            "memory" -> MemoryActivity::class.java
+            "automations" -> AutomationsActivity::class.java
+            "recordings" -> RecordingsActivity::class.java
+            "whatsapp" -> WhatsAppActivity::class.java
+            "news" -> NewsActivity::class.java
+            "dashboard" -> SystemDashboardActivity::class.java
+            "search" -> SearchActivity::class.java
+            "settings" -> SettingsActivity::class.java
+            "browser" -> BrowserActivity::class.java
+            "geofences" -> GeofencesActivity::class.java
+            else -> null
+        } ?: return
+        startActivity(Intent(this, target))
     }
 
     private fun showBiometricPrompt() {
@@ -211,7 +252,12 @@ class MainActivity : AppCompatActivity() {
                 scrollBottom()
             }
         }
-        ws.onConnected    = { runOnUiThread { setStatus(true); syncDownloadState() } }
+        ws.onConnected    = {
+            runOnUiThread { syncDownloadState(); flushOfflineQueue() }
+            // The WS accept path has no pairing check — any device on the LAN
+            // gets onConnected — so it can't be used to prove pairing either.
+            checkStatus()
+        }
         ws.onDisconnected = { runOnUiThread { setStatus(false) } }
 
         ws.onScreenshot = { filename ->
@@ -329,6 +375,10 @@ class MainActivity : AppCompatActivity() {
                     if (isCategoryEnabled("downloads")) showSystemNotification("Download complete", filename)
                 }
             }
+        }
+
+        ws.onBrowserHandoff = { url, title ->
+            runOnUiThread { showBrowserHandoffNotification(url, title) }
         }
 
         ws.connect()
@@ -460,6 +510,46 @@ class MainActivity : AppCompatActivity() {
 
         binding.sidebarMyShortcuts.setOnClickListener {
             closeThen { startActivity(Intent(this, QuickShortcutsActivity::class.java)) }
+        }
+
+        binding.sidebarCalendar.setOnClickListener {
+            closeThen { startActivity(Intent(this, CalendarActivity::class.java)) }
+        }
+
+        binding.sidebarRecordings.setOnClickListener {
+            closeThen { startActivity(Intent(this, RecordingsActivity::class.java)) }
+        }
+
+        binding.sidebarMemory.setOnClickListener {
+            closeThen { startActivity(Intent(this, MemoryActivity::class.java)) }
+        }
+
+        binding.sidebarAutomations.setOnClickListener {
+            closeThen { startActivity(Intent(this, AutomationsActivity::class.java)) }
+        }
+
+        binding.sidebarBookmarks.setOnClickListener {
+            closeThen { startActivity(Intent(this, BookmarksActivity::class.java)) }
+        }
+
+        binding.sidebarWhatsApp.setOnClickListener {
+            closeThen { startActivity(Intent(this, WhatsAppActivity::class.java)) }
+        }
+
+        binding.sidebarNews.setOnClickListener {
+            closeThen { startActivity(Intent(this, NewsActivity::class.java)) }
+        }
+
+        binding.sidebarBrowser.setOnClickListener {
+            closeThen { startActivity(Intent(this, BrowserActivity::class.java)) }
+        }
+
+        binding.sidebarSearch.setOnClickListener {
+            closeThen { startActivity(Intent(this, SearchActivity::class.java)) }
+        }
+
+        binding.sidebarGeofences.setOnClickListener {
+            closeThen { startActivity(Intent(this, GeofencesActivity::class.java)) }
         }
 
         binding.sidebarSettings.setOnClickListener {
@@ -745,6 +835,30 @@ class MainActivity : AppCompatActivity() {
             .notify(NOTIF_ID_REMINDER_BASE + reminderCounter++, notif)
     }
 
+    private fun showBrowserHandoffNotification(url: String, title: String) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
+            != PackageManager.PERMISSION_GRANTED) return
+
+        val tapIntent = Intent(this, BrowserActivity::class.java).apply {
+            putExtra(BrowserActivity.EXTRA_URL, url)
+        }
+        val tapPi = PendingIntent.getActivity(
+            this, handoffCounter, tapIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val notif = NotificationCompat.Builder(this, NOTIF_CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_browser)
+            .setContentTitle("📱 Sent from PC")
+            .setContentText(title)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setAutoCancel(true)
+            .setContentIntent(tapPi)
+            .build()
+        (getSystemService(NOTIFICATION_SERVICE) as NotificationManager)
+            .notify(NOTIF_ID_HANDOFF_BASE + handoffCounter++, notif)
+    }
+
     private fun setupAppShortcuts() {
         if (!ShortcutManagerCompat.isRequestPinShortcutSupported(this)) return
 
@@ -756,25 +870,12 @@ class MainActivity : AppCompatActivity() {
                 if (startVoice)      putExtra("start_voice", true)
             }
 
+        // lock_pc, screenshot and voice_command are already declared as static
+        // shortcuts in res/xml/shortcuts.xml. Manifest (static) shortcuts are
+        // immutable — pushing dynamic shortcuts with the same IDs throws
+        // IllegalArgumentException("...may not be manipulated via APIs") and
+        // crashes onCreate() on every launch. Only push IDs not covered statically.
         val shortcuts = listOf(
-            ShortcutInfoCompat.Builder(this, "lock_pc")
-                .setShortLabel("Lock PC")
-                .setLongLabel("Lock the PC")
-                .setIcon(IconCompat.createWithResource(this, R.drawable.ic_settings))
-                .setIntent(makeIntent("lock the pc"))
-                .build(),
-            ShortcutInfoCompat.Builder(this, "screenshot")
-                .setShortLabel("Screenshot")
-                .setLongLabel("Take a Screenshot")
-                .setIcon(IconCompat.createWithResource(this, R.drawable.ic_screenshot))
-                .setIntent(makeIntent("take a screenshot"))
-                .build(),
-            ShortcutInfoCompat.Builder(this, "voice_command")
-                .setShortLabel("Voice")
-                .setLongLabel("Quick Voice Command")
-                .setIcon(IconCompat.createWithResource(this, R.drawable.ic_mic))
-                .setIntent(makeIntent(startVoice = true))
-                .build(),
             ShortcutInfoCompat.Builder(this, "toggle_dnd")
                 .setShortLabel("Toggle DND")
                 .setLongLabel("Toggle Do Not Disturb")
@@ -821,9 +922,48 @@ class MainActivity : AppCompatActivity() {
                     if (cmd.action == "open_file_picker") openFilePicker()
                 }
             }.onFailure { err ->
-                adapter.add(Message("Error: ${err.message}", "system"))
+                if (err is com.izach.android.network.PairingRejectedException) {
+                    adapter.add(Message("🔒 Not paired with this PC — scan the QR code in Settings to pair again.", "system"))
+                } else {
+                    api.enqueueOfflineCommand(text)
+                    adapter.add(Message("📥 PC unreachable — queued, will send once reconnected (${err.message})", "system"))
+                }
                 scrollBottom()
             }
+        }
+    }
+
+    private var flushingOfflineQueue = false
+
+    private fun flushOfflineQueue() {
+        if (flushingOfflineQueue) return
+        val queued = api.getQueuedCommands()
+        if (queued.isEmpty()) return
+        flushingOfflineQueue = true
+        lifecycleScope.launch {
+            var sentCount = 0
+            var pairingRejected = false
+            for (text in queued) {
+                val result = api.sendCommand(text)
+                if (result.isSuccess) {
+                    api.removeQueuedCommand(text)
+                    sentCount++
+                } else {
+                    // A rejected pairing secret will reject every remaining
+                    // queued command too — no point retrying them right now.
+                    if (result.exceptionOrNull() is com.izach.android.network.PairingRejectedException) pairingRejected = true
+                    break // stop at the first failure — still offline (or unpaired), retry next reconnect
+                }
+            }
+            if (sentCount > 0) {
+                adapter.add(Message("📤 Sent $sentCount queued command${if (sentCount != 1) "s" else ""}", "system"))
+                scrollBottom()
+            }
+            if (pairingRejected) {
+                adapter.add(Message("🔒 Queued commands couldn't be sent — this device isn't paired with the PC. Scan the QR code in Settings.", "system"))
+                scrollBottom()
+            }
+            flushingOfflineQueue = false
         }
     }
 
@@ -884,7 +1024,12 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun checkStatus() {
-        lifecycleScope.launch { setStatus(api.checkStatus()) }
+        // /status alone only proves the PC is reachable, not that this device
+        // is actually paired (it's HMAC-exempt so any device on the LAN gets
+        // a 200) — that mismatch is exactly what let the banner show ONLINE
+        // while every real command still 401'd as unpaired. verifyPairing()
+        // hits a signed, non-exempt route so it reflects what commands see.
+        lifecycleScope.launch { setStatus(api.verifyPairing().getOrDefault(false)) }
     }
 
     private fun startVoice() {

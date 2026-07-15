@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:paddingHorizontal="16dp"
+    android:paddingVertical="12dp"
+    android:background="@color/bg_panel">
+
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:orientation="vertical">
+
+        <TextView android:id="@+id/tvContent"
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:text="Automation content" android:textColor="@color/text_pri"
+            android:textSize="13sp" android:fontFamily="monospace" />
+
+        <TextView android:id="@+id/tvSchedule"
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:text="cron: 0 9 * * *" android:textColor="@color/cyan"
+            android:textSize="10sp" android:fontFamily="monospace"
+            android:visibility="gone" />
+    </LinearLayout>
+
+    <Switch android:id="@+id/switchEnabled"
+        android:layout_width="wrap_content" android:layout_height="wrap_content"
+        android:layout_marginEnd="4dp" />
+
+    <ImageButton android:id="@+id/btnDelete"
+        android:layout_width="40dp" android:layout_height="40dp"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:src="@android:drawable/ic_menu_delete" android:contentDescription="Delete" />
+
+</LinearLayout>

@@ -28,6 +28,44 @@ def _normalize_numbers(cmd: str) -> str:
 _vision_last_call = 0
 _VISION_COOLDOWN = 5
 
+_RECORDING_TRIGGER_SENTINEL = "__replay_recording__::"
+
+
+def _match_recording_trigger(query: str):
+    """Checks `query` against every saved Browser-widget recording's custom
+    trigger phrases (set in the step editor's TRIGGER PHRASES field). A phrase
+    may contain one {param} placeholder — e.g. "search for {q}" matches
+    "search for cats" and captures q="cats" — mirroring the recording's own
+    {param} fill-value placeholders (see cortex-ui.html's _seExtractParams).
+    Returns (recording_name, params_dict) on match, else None.
+    """
+    import os
+    recordings_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "browser_recordings")
+    if not os.path.isdir(recordings_dir):
+        return None
+    for fname in os.listdir(recordings_dir):
+        if not fname.endswith(".json"):
+            continue
+        try:
+            with open(os.path.join(recordings_dir, fname), encoding="utf-8") as f:
+                rec = json.load(f)
+        except Exception:
+            continue
+        for phrase in rec.get("trigger_phrases") or []:
+            phrase = phrase.strip().lower()
+            if not phrase:
+                continue
+            m = re.search(r'\{(\w+)\}', phrase)
+            if m:
+                param_name = m.group(1)
+                pattern = "^" + re.escape(phrase).replace(re.escape("{" + param_name + "}"), r'(.+)') + "$"
+                pm = re.match(pattern, query)
+                if pm:
+                    return rec.get("name"), {param_name: pm.group(1).strip()}
+            elif phrase == query:
+                return rec.get("name"), {}
+    return None
+
 logger = logging.getLogger(__name__)
 
 from modules.task_engine import TaskEngine, Task
@@ -239,9 +277,24 @@ Output format:
 
     def process(self, query, _sc_bypass: bool = False):
         query = query.lower().strip()
-        # Strip filler words at the start
+        # Strip filler words + the wake word at the start. STT mishears "iZACH"
+        # constantly ("Isaac", "hijack", "i jack"...) since it's not a real
+        # English word — modules.wake_word already maintains the list of
+        # known mishearings for the wake-word-enabled path, so reuse it here
+        # instead of only matching the literal string "izach".
         import re as _re
-        query = _re.sub(r'^(hey|please|hi|okay|ok|yo|uh|um|can you|could you|would you|izach|will you|now)[,\s]+', '', query).strip()
+        try:
+            from modules.wake_word import _NAME_VARIANTS as _WW_VARIANTS
+        except Exception:
+            _WW_VARIANTS = {"izach"}
+        _fillers = ["hey", "please", "hi", "okay", "ok", "yo", "uh", "um",
+                    "can you", "could you", "would you", "will you", "now"]
+        _all_leading = sorted(_fillers + list(_WW_VARIANTS), key=len, reverse=True)
+        _leading_re = "|".join(_re.escape(w) for w in _all_leading)
+        # `+` repeats the whole group so multiple leading tokens strip in one
+        # pass — "hey izach, play x" previously only stripped "hey ", leaving
+        # "izach," glued onto every command that said both words.
+        query = _re.sub(rf'^(?:(?:{_leading_re})[,\s]+)+', '', query).strip()
         # "dot txt" / "dot pdf" etc → ".txt" / ".pdf"
         query = _re.sub(r'\s*\bdot\s+([a-z0-9]{1,5})\b', r'.\1', query)
         query = _re.sub(r'\s+\.([a-z0-9]{1,5})\b', r'.\1', query)
@@ -273,6 +326,16 @@ Output format:
                 return
         except Exception as _dnd_err:
             logger.debug(f"[DND command] {_dnd_err}")
+
+        # ── Email agent commands (order status, connection status) ──
+        try:
+            from Agents.email_agent import handle as _email_handle
+            _email_reply = _email_handle(query)
+            if _email_reply:
+                self.speak(_email_reply)
+                return
+        except Exception as _email_err:
+            logger.debug(f"[Email agent command] {_email_err}")
 
         # ── Busy Mode commands ────────────────────────────────────
         try:
@@ -315,6 +378,32 @@ Output format:
                 return
         except Exception as _busy_err:
             logger.debug(f"[BUSY command] {_busy_err}")
+
+        # ── Recorded browser task replay (Cortex UI Browser widget) ──────
+        # Two ways in: (a) the scheduler fires the sentinel action text set by
+        # schedule_recording_job(), or (b) the user speaks a custom trigger
+        # phrase set in the recording's step editor (e.g. "check my messages").
+        # Either way, actual replay happens in the Electron renderer (not here)
+        # because only it can decrypt any safeStorage-encrypted credential
+        # steps before handing hydrated steps to the Playwright backend.
+        try:
+            if query.startswith(_RECORDING_TRIGGER_SENTINEL):
+                _rec_name = query[len(_RECORDING_TRIGGER_SENTINEL):]
+                from modules.ws_bridge import broadcast as _bc
+                _bc({"type": "browser_command", "action": "replay_recording", "name": _rec_name, "params": {}})
+                return
+            _rec_match = _match_recording_trigger(query)
+            if _rec_match:
+                _rec_name, _rec_params = _rec_match
+                try:
+                    from modules.ws_bridge import broadcast as _bc
+                    _bc({"type": "browser_command", "action": "replay_recording", "name": _rec_name, "params": _rec_params})
+                    self.speak(f'Running "{_rec_name}".')
+                except Exception:
+                    self.speak("Browser isn't open.")
+                return
+        except Exception as _rec_err:
+            logger.debug(f"[Recording trigger] {_rec_err}")
 
         # ── Subconsciousness permission gate (top-level, pre-split) ──
         # Dangerous whole-query check before we split into sub-commands.
@@ -774,56 +863,9 @@ Output format:
                 except Exception as _sh_pre_err:
                     import logging as _l; _l.getLogger("iZACH.Chain").debug(f"[SH-pre] {_sh_pre_err}")
 
-            # ── Agent fast-paths ──────────────────────────────────
-            # Each agent returns True when it handled the command.
-            # We mark _last_route_info["handled"] so the synonym learner in
-            # voice_loop can call record_success() for the right domain.
-
-            def _agent_handled():
-                import modules.command_chain as _m
-                _m._last_route_info["handled"] = True
-
-            if _domain == "whatsapp" and self._wa_agent.handle(resolved_cmd, self._domain_ctx):
-                _agent_handled(); continue
-
-            if _domain == "calendar" and self._cal_agent.handle(resolved_cmd, self._domain_ctx):
-                _agent_handled(); continue
-
-            if _domain == "system" and self._sys_agent.handle(resolved_cmd, self._domain_ctx):
-                _agent_handled(); continue
-
-            if _domain == "research" and self._res_agent.handle(resolved_cmd, self._domain_ctx):
-                _agent_handled(); continue
-
-            if _domain == "spotify" and self._spo_agent.handle(resolved_cmd, self._domain_ctx):
-                _agent_handled(); continue
-
-            if _domain == "file" and self._file_agent.handle(resolved_cmd, self._domain_ctx):
-                _agent_handled(); continue
-
-            if _domain == "memory" and self._mem_agent.handle(resolved_cmd, self._domain_ctx):
-                _agent_handled(); continue
-
-            if _domain == "vision" and self._vis_agent.handle(resolved_cmd, self._domain_ctx):
-                _agent_handled(); continue
-
-            # Multi-tab browser command
-            _MULTI_TAB_MARKERS = ["one for", "another tab", "first tab", "second tab",
-                                   "two tabs", "2 tabs", "3 tabs", "multiple tabs",
-                                   "in one tab", "in a tab", "in another tab"]
-            if "tab" in resolved_cmd and any(m in resolved_cmd for m in _MULTI_TAB_MARKERS):
-                _tabs = self._parse_multi_tab_command(resolved_cmd)
-                if _tabs and len(_tabs) >= 2:
-                    from modules import web_automation as _wa
-                    import threading as _thr
-                    self.speak(f"Opening {len(_tabs)} tabs.")
-                    _thr.Thread(
-                        target=lambda t=_tabs: self.speak(_wa.open_multiple_tabs(t)[1]),
-                        daemon=True,
-                    ).start()
-                    continue
-
-            # Web automation (before system control to intercept "open X")
+            # ── Web automation (before agent dispatch, to intercept "open X" /
+            # "play X on youtube" that the orchestrator/SystemAgent mis-routes
+            # as domain=system, intent=open_app, app_name=youtube) ──────────
             _WEB_AUTOMATION_TRIGGERS = [
                 # navigate
                 "open youtube", "open google", "open github", "open gmail", "open reddit",
@@ -880,6 +922,55 @@ Output format:
             if any(t in resolved_cmd for t in _WEB_AUTOMATION_TRIGGERS) or _YT_RE.search(resolved_cmd):
                 self._handle_web_automation(resolved_cmd)
                 continue
+
+            # ── Agent fast-paths ──────────────────────────────────
+            # Each agent returns True when it handled the command.
+            # We mark _last_route_info["handled"] so the synonym learner in
+            # voice_loop can call record_success() for the right domain.
+
+            def _agent_handled():
+                import modules.command_chain as _m
+                _m._last_route_info["handled"] = True
+
+            if _domain == "whatsapp" and self._wa_agent.handle(resolved_cmd, self._domain_ctx):
+                _agent_handled(); continue
+
+            if _domain == "calendar" and self._cal_agent.handle(resolved_cmd, self._domain_ctx):
+                _agent_handled(); continue
+
+            if _domain == "system" and self._sys_agent.handle(resolved_cmd, self._domain_ctx):
+                _agent_handled(); continue
+
+            if _domain == "research" and self._res_agent.handle(resolved_cmd, self._domain_ctx):
+                _agent_handled(); continue
+
+            if _domain == "spotify" and self._spo_agent.handle(resolved_cmd, self._domain_ctx):
+                _agent_handled(); continue
+
+            if _domain == "file" and self._file_agent.handle(resolved_cmd, self._domain_ctx):
+                _agent_handled(); continue
+
+            if _domain == "memory" and self._mem_agent.handle(resolved_cmd, self._domain_ctx):
+                _agent_handled(); continue
+
+            if _domain == "vision" and self._vis_agent.handle(resolved_cmd, self._domain_ctx):
+                _agent_handled(); continue
+
+            # Multi-tab browser command
+            _MULTI_TAB_MARKERS = ["one for", "another tab", "first tab", "second tab",
+                                   "two tabs", "2 tabs", "3 tabs", "multiple tabs",
+                                   "in one tab", "in a tab", "in another tab"]
+            if "tab" in resolved_cmd and any(m in resolved_cmd for m in _MULTI_TAB_MARKERS):
+                _tabs = self._parse_multi_tab_command(resolved_cmd)
+                if _tabs and len(_tabs) >= 2:
+                    from modules import web_automation as _wa
+                    import threading as _thr
+                    self.speak(f"Opening {len(_tabs)} tabs.")
+                    _thr.Thread(
+                        target=lambda t=_tabs: self.speak(_wa.open_multiple_tabs(t)[1]),
+                        daemon=True,
+                    ).start()
+                    continue
 
             # These must be handled BEFORE AI parse
             _SYSTEM_CONTROL_TRIGGERS = [
@@ -1188,6 +1279,47 @@ Output format:
             _bg(web_automation.summarize_page, announce="Reading the page.")
             return
 
+        # ── Voice-driven browsing (internal Browser widget, not Playwright) ──
+        # Distinct from "scroll down"/"click on X"/"go back" below, which stay
+        # on the Playwright automation engine — these all require the word
+        # "browser" so the two paths never collide.
+        _BROWSER_ORDINALS = {
+            "first": 1, "1st": 1, "second": 2, "2nd": 2, "third": 3, "3rd": 3,
+            "fourth": 4, "4th": 4, "fifth": 5, "5th": 5,
+        }
+        if re.search(r'\bbrowser\s+scroll\s+(down|up)\b|\bscroll\s+(?:the\s+)?browser\s+(down|up)\b', cmd, re.IGNORECASE):
+            _m = re.search(r'\b(down|up)\b', cmd, re.IGNORECASE)
+            direction = _m.group(1).lower() if _m else "down"
+            try:
+                from modules.ws_bridge import broadcast
+                broadcast({"type": "browser_command", "action": "scroll", "direction": direction})
+            except Exception:
+                self.speak("Browser isn't open.")
+            return
+
+        if re.search(r'\bbrowser\s+(back|forward)\b|\b(?:go\s+)?back\s+in\s+(?:the\s+)?browser\b|\bforward\s+in\s+(?:the\s+)?browser\b', cmd, re.IGNORECASE):
+            direction = "fwd" if "forward" in cmd.lower() else "back"
+            try:
+                from modules.ws_bridge import broadcast
+                broadcast({"type": "browser_command", "action": "nav", "direction": direction})
+            except Exception:
+                self.speak("Browser isn't open.")
+            return
+
+        _browser_link_m = re.search(
+            r'\bbrowser\s+click\s+link\s+(\d+|\w+)\b|\bclick\s+(?:the\s+)?(\d+|\w+)(?:st|nd|rd|th)?\s+link\s+in\s+(?:the\s+)?browser\b',
+            cmd, re.IGNORECASE,
+        )
+        if _browser_link_m:
+            raw = next((g for g in _browser_link_m.groups() if g), "1").lower()
+            index = int(raw) if raw.isdigit() else _BROWSER_ORDINALS.get(raw, 1)
+            try:
+                from modules.ws_bridge import broadcast
+                broadcast({"type": "browser_command", "action": "click_link", "index": index})
+            except Exception:
+                self.speak("Browser isn't open.")
+            return
+
         # ── Click element ──────────────────────────────────────
         if any(t in cmd for t in ["click on", "click the", "press the button", "press button"]):
             target = cmd
@@ -1256,11 +1388,19 @@ Output format:
             r'|\bsearch\s+on\s+youtube\s+for\s+(.+)',
             re.IGNORECASE,
         )
-        if any(t in cmd for t in _YT_TRIGGERS) or _YT_REGEX.search(cmd):
+        # "play X music video" / "play X video" (no "on youtube") → YouTube, visible.
+        _YT_VIDEO_REGEX = re.compile(
+            r'\b(?:play|put on|stream)\s+(.+?\b(?:music video|official video|video|mv|trailer))\b',
+            re.IGNORECASE,
+        )
+        _yt_vid_only = _YT_VIDEO_REGEX.search(cmd)
+        if any(t in cmd for t in _YT_TRIGGERS) or _YT_REGEX.search(cmd) or _yt_vid_only:
             # Try regex extraction first (handles "play X on youtube")
             _yt_m = _YT_REGEX.search(cmd)
             if _yt_m:
                 query = next((g for g in _yt_m.groups() if g), "").strip()
+            elif _yt_vid_only:
+                query = _yt_vid_only.group(1).strip()
             else:
                 query = cmd
                 for phrase in sorted([
@@ -1273,6 +1413,27 @@ Output format:
             if not query:
                 self.speak("What should I play on YouTube?")
                 return
+
+            # Video mode (visible) when the command names a video; else audio
+            # (background). Examples: "play X music video" → visible;
+            # "play X on youtube" → background song.
+            mode = "video" if re.search(r'\b(?:music video|official video|video|mv|trailer|watch)\b', cmd, re.IGNORECASE) else "audio"
+
+            # Prefer iZACH's internal browser when the UI is connected;
+            # fall back to the Playwright engine when running headless.
+            try:
+                from modules.ws_bridge import broadcast, has_clients
+                if has_clients():
+                    broadcast({"type": "browser_command", "action": "youtube_play",
+                               "query": query, "mode": mode})
+                    if mode == "video":
+                        self.speak(f"Playing {query}.")
+                    else:
+                        self.speak(f"Playing {query} in the background.")
+                    return
+            except Exception:
+                pass
+
             _bg(web_automation.youtube_play, query, announce=f"Finding {query} on YouTube.")
             return
 
@@ -1330,6 +1491,19 @@ Output format:
                 self.speak("What should I search for?")
                 return
             _bg(web_automation.search_google, query, announce=f"Searching for {query}.")
+            return
+
+        # ── Bookmarks (Browser widget / Settings → Custom Links) ────────────
+        if any(t in cmd for t in [
+            "my bookmarks", "list bookmarks", "list my bookmarks", "show my bookmarks",
+            "show bookmarks", "what are my bookmarks", "bookmarks folder", "bookmark folder",
+        ]):
+            folder = None
+            for marker in ("bookmarks folder", "bookmark folder"):
+                if marker in cmd:
+                    folder = cmd.split(marker, 1)[1].strip() or None
+                    break
+            self.speak(web_automation.list_bookmarks(folder))
             return
 
         # ── Open website ───────────────────────────────────────
@@ -3848,8 +4022,15 @@ Examples:
   Reply: "thodi der mein bhejta hu"
 - Match the tone {owner} wants based on his instruction"""
                 reply_text = _ai_func(prompt)
-                _send_message(number, reply_text)
-                self.speak(f"Replied to {sender}.")
+                _ok, _status = _send_message(number, reply_text)
+                if _ok:
+                    self.speak(f"Replied to {sender}.")
+                else:
+                    # _send_message already retried internally (whatsapp_sender
+                    # has its own retry loop) — a False here is a confirmed
+                    # failure, not a fluke, so don't claim success.
+                    _reason = _status.split(": ", 1)[-1] if ": " in _status else _status
+                    self.speak(f"Couldn't send that to {sender} — {_reason}")
             else:
                 self.speak("What should I say in the reply?")
             if _rg and _orig_instant:

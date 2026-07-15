@@ -11,7 +11,7 @@ from pathlib import Path
 # ─── Node registry ────────────────────────────────────────────
 NODES: dict[str, dict] = {
     "alliednode 2": {
-        "host":  "192.168.0.192",
+        "host":  "192.168.0.137",
         "port":  9797,
         "token": "izach-node-2026",
         "mac":   "F8-89-D2-00-DD-C9",  # Wi-Fi MAC (WoWLAN)

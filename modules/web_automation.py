@@ -161,6 +161,41 @@ _load_custom_websites()
 _load_custom_links()
 
 
+def list_bookmarks(folder: str = None) -> str:
+    """
+    Speak-friendly summary of bookmarks (same store as Settings → Custom
+    Links / the Browser widget's bookmarks). Pass folder to filter to one.
+    """
+    try:
+        import json as _json, os as _os
+        _path = _os.path.join(_os.path.dirname(os.path.dirname(__file__)), "custom_links.json")
+        with open(_path, encoding="utf-8") as f:
+            links = _json.load(f)
+    except Exception:
+        return "You don't have any bookmarks saved yet."
+
+    if not links:
+        return "You don't have any bookmarks saved yet."
+
+    if folder:
+        matches = [lk for lk in links if lk.get("folder", "General").lower() == folder.strip().lower()]
+        if not matches:
+            return f"No bookmarks found in the '{folder}' folder."
+        titles = ", ".join(lk.get("title", "?") for lk in matches)
+        return f"In '{folder}': {titles}."
+
+    groups: dict[str, list[str]] = {}
+    for lk in links:
+        groups.setdefault(lk.get("folder", "General"), []).append(lk.get("title", "?"))
+
+    if len(groups) == 1:
+        only_folder, titles = next(iter(groups.items()))
+        return f"You have {len(titles)} bookmark{'s' if len(titles) != 1 else ''}: {', '.join(titles)}."
+
+    parts = [f"{folder_name} ({len(titles)}): {', '.join(titles)}" for folder_name, titles in groups.items()]
+    return "Your bookmarks — " + "; ".join(parts) + "."
+
+
 def is_app_installed(service: str) -> bool:
     """Return True if a native desktop/Store app exists for the given service key."""
     info = _APP_CAPABLE.get(service.lower())
@@ -702,3 +737,50 @@ def extract_emails():
         return True, f"Found {len(emails)} email{'s' if len(emails) != 1 else ''}: {preview}{extra}."
     except Exception as e:
         return False, f"Email extraction failed: {e}"
+
+
+# ── Recorded task replay (Cortex UI Browser widget) ───────────
+
+def replay_recording(steps: list, start_url: str = None) -> dict:
+    """
+    Replay a browsing session recorded by cortex-ui.html's Browser widget.
+    steps: [{"type": "click"|"fill"|"navigate", "selector": str, "value": str, "url": str}, ...]
+    Runs in its own page so it doesn't disturb whatever tab iZACH's other
+    automation is currently using.
+    """
+    ctx = _get_context()
+    page = ctx.new_page()
+    result = {"ok": True, "completed": 0, "total": len(steps), "errors": []}
+    try:
+        if start_url:
+            page.goto(start_url, wait_until="domcontentloaded", timeout=20000)
+
+        for i, step in enumerate(steps):
+            try:
+                kind = step.get("type")
+                if kind == "navigate":
+                    page.goto(step["url"], wait_until="domcontentloaded", timeout=20000)
+                elif kind == "click":
+                    page.click(step["selector"], timeout=8000)
+                elif kind == "fill":
+                    page.fill(step["selector"], step.get("value", ""), timeout=8000)
+                page.wait_for_timeout(step.get("wait", 400))  # per-step wait, tunable in the step editor
+                result["completed"] += 1
+            except Exception as e:
+                # Graceful failure: stop here rather than blindly running the
+                # rest of the steps against a page whose expected state was
+                # never reached (e.g. a selector no longer matches because the
+                # site's layout changed) — the caller surfaces exactly which
+                # step failed and why.
+                result["errors"].append({"step": i, "error": str(e)})
+                break
+        result["ok"] = len(result["errors"]) == 0
+    except Exception as e:
+        result["ok"] = False
+        result["errors"].append({"step": -1, "error": str(e)})
+    finally:
+        try:
+            page.close()
+        except Exception:
+            pass
+    return result

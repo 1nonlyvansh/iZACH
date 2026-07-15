@@ -16,12 +16,33 @@ from typing import Optional
 
 _OWNER = os.getenv("OWNER_NAME", "User")
 
+
+def _load_nickname() -> str:
+    """User-set nickname (Settings → Nickname, Cortex/Forge UI), stored in
+    api_keys.json's "nickname" key. Loaded once at process start — same
+    "restart required" convention as the wake-word trigger it also feeds."""
+    try:
+        import json
+        path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "api_keys.json")
+        with open(path, encoding="utf-8") as f:
+            return (json.load(f).get("nickname") or "").strip()
+    except Exception:
+        return ""
+
+
+_NICKNAME = _load_nickname()
+_NICKNAME_LINE = (
+    f'\n{_OWNER} also calls you "{_NICKNAME}" — that\'s a nickname for you, same as "iZACH". '
+    f'If asked your name or nickname, you can mention both.\n'
+    if _NICKNAME else ""
+)
+
 # ─────────────────────────────────────────────
 # PERSONALITY SYSTEM PROMPT
 # Injected into every AI call to give iZACH character
 # ─────────────────────────────────────────────
 PERSONALITY_PROMPT = f"""You are iZACH — {_OWNER}'s personal AI. Like a smart best friend who's also insanely capable.
-
+{_NICKNAME_LINE}
 Personality:
 - Talk like a real person, not an AI. Short replies, casual tone, zero stiffness.
 - Match {_OWNER}'s energy exactly. Casual → be casual. Serious → sharp and direct.
@@ -55,7 +76,7 @@ Examples:
   {_OWNER}: "play chill music"
   iZACH: "on it."
 
-You are iZACH. {_OWNER} is the operator, not a user.
+You are iZACH{f' (also known as "{_NICKNAME}")' if _NICKNAME else ''}. {_OWNER} is the operator, not a user.
 """
 
 # ─────────────────────────────────────────────

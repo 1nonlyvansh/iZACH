@@ -42,6 +42,12 @@ import time
 import queue
 import asyncio
 import edge_tts
+# multiprocessing's "spawn" start method (used by face_auth.py/camera_vision.py
+# workers) re-imports this whole file fresh in every child process on Windows.
+# pygame prints its "Hello from the pygame community" banner unconditionally
+# at import time, so without this it reprinted on every single worker spawn —
+# not just real startup — spamming the console/log every few minutes.
+os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")
 import pygame
 import re
 import speech_recognition as sr
@@ -409,6 +415,7 @@ def get_ai_response(query):
     from modules.memory import get_memory_as_context
     from modules.context_memory import get_context_memory
     from modules.personality import PERSONALITY_PROMPT, detect_sentiment, get_companion_response, get_tone_for_sentiment
+    from modules.capabilities import CAPABILITIES_PROMPT
     from modules.response_generator import _detect_language
     from modules.state_engine import state
     cm = get_context_memory()
@@ -449,7 +456,7 @@ def get_ai_response(query):
         parts.append(f"Recent conversation:\n{history}")
 
     persona_prefix = state.get_persona_prefix()
-    parts.insert(0, persona_prefix + PERSONALITY_PROMPT)
+    parts.insert(0, persona_prefix + PERSONALITY_PROMPT + "\n\n" + CAPABILITIES_PROMPT)
 
     # Active window + location context — gives JARVIS-level awareness
     try:
@@ -812,7 +819,15 @@ def start_brain(ui=None):
             lambda msg:        print(f"[ERROR LOG] {msg}")
         )
 
-    init_whatsapp(speak, chain_engine.process, get_ai_response)
+    # get_ai_response_raw (not get_ai_response) — WhatsApp announcements/replies
+    # use fully self-contained prompts with strict output rules ("respond with
+    # ONLY X", "write from {owner}'s perspective"). Routing them through
+    # get_ai_response would prepend iZACH's own assistant personality prompt,
+    # conversation memory, and companion-sentiment filler — and would record
+    # each one as a fake conversation turn via cm.add_turn — which conflicts
+    # with those instructions and corrupts iZACH's real chat history/follow-up
+    # resolution with unrelated WhatsApp-reply prompts.
+    init_whatsapp(speak, chain_engine.process, get_ai_response_raw)
 
     # 6. Interrupt engine
     from modules.interrupt_engine import get_interrupt_engine
@@ -931,6 +946,22 @@ def start_brain(ui=None):
         print("[PROACTIVE] Agent started.")
     except Exception as _pe:
         print(f"[PROACTIVE] Init failed: {_pe}")
+
+    try:
+        from modules import screen_awareness as _screen_aware
+        _screen_aware.init(speak_fn=speak)
+        _screen_aware.start()
+        print("[SCREEN-AWARE] Started (off unless enabled in Settings).")
+    except Exception as _sae:
+        print(f"[SCREEN-AWARE] Init failed: {_sae}")
+
+    try:
+        from modules import email_agent as _email_agent
+        _email_agent.init(speak_fn=speak)
+        _email_agent.start()
+        print("[EMAIL AGENT] Started (off unless enabled in Settings).")
+    except Exception as _eae:
+        print(f"[EMAIL AGENT] Init failed: {_eae}")
 
     try:
         from modules import subconsciousness as _subcon
@@ -1069,6 +1100,13 @@ def start_brain(ui=None):
         print("[DND] Do Not Disturb engine initialized.")
     except Exception as _dnde:
         print(f"[DND] Init failed: {_dnde}")
+
+    try:
+        from modules import calendar_dnd as _cal_dnd
+        _cal_dnd.start()
+        print("[DND] Calendar-driven auto-DND poller started.")
+    except Exception as _cdnde:
+        print(f"[DND] Calendar-driven auto-DND init failed: {_cdnde}")
 
     try:
         from modules import busy_mode as _busy_mod

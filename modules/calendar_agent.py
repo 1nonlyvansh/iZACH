@@ -1,6 +1,8 @@
 import os
 import json
 import logging
+import threading
+import time
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
@@ -10,11 +12,41 @@ from googleapiclient.discovery import build
 
 logger = logging.getLogger(__name__)
 
+# get_upcoming_events() is polled every 5 minutes by proactive_agent's
+# background loop (2 calls/cycle) as well as called directly from voice
+# commands. When Calendar simply isn't configured (no token.json), that
+# background polling logged the identical error forever, every 5 minutes —
+# this rate-limits the "not configured" log line to once per cooldown window
+# while still returning [] immediately every time so callers behave the same.
+_UNCONFIGURED_LOG_COOLDOWN = 3600  # seconds
+_last_unconfigured_log_ts = 0.0
+
+
+def _log_upcoming_events_error(e: Exception):
+    global _last_unconfigured_log_ts
+    msg = str(e)
+    if "token.json missing or invalid" in msg:
+        now = time.time()
+        if now - _last_unconfigured_log_ts < _UNCONFIGURED_LOG_COOLDOWN:
+            return
+        _last_unconfigured_log_ts = now
+        logger.error(
+            "Calendar get_upcoming_events failed: %s "
+            "(this message repeats at most once an hour — connect Calendar in "
+            "Settings to stop seeing it)", msg
+        )
+    else:
+        logger.error(f"Calendar get_upcoming_events failed: {e}")
+
 SCOPES = ["https://www.googleapis.com/auth/calendar"]
 TOKEN_PATH = "token.json"
 CREDS_PATH = "credentials.json"
 TIMEZONE = "Asia/Kolkata"
 IST = ZoneInfo(TIMEZONE)
+
+# ── One-click reconnect (Settings → Google Calendar) ───────────────────────
+_reconnect_lock  = threading.Lock()
+_reconnect_state = {"status": "idle", "error": "", "user": None}
 
 
 def _get_service():
@@ -44,6 +76,81 @@ def _get_service():
         else:
             raise RuntimeError("token.json missing or invalid. Re-run OAuth flow.")
     return build("calendar", "v3", credentials=creds)
+
+
+def get_auth_status() -> dict:
+    """Report current connection state — used by the Settings UI."""
+    if _reconnect_state["status"] in ("connecting", "waiting_for_browser"):
+        return {"connected": False, **_reconnect_state}
+    try:
+        service = _get_service()
+        cal = service.calendars().get(calendarId="primary").execute()
+        return {
+            "connected": True, "status": "connected", "error": "",
+            "user": cal.get("id") or cal.get("summary"),
+        }
+    except Exception as e:
+        return {"connected": False, "status": "idle", "error": str(e), "user": None}
+
+
+def _run_reconnect():
+    """Runs in a background thread — opens the browser, waits for the user
+    to log in/authorize via Google's local-server OAuth flow, then writes
+    the new token.json. Blocking, so must never run on a Flask request thread."""
+    global _reconnect_state
+    try:
+        _reconnect_state = {"status": "waiting_for_browser", "error": "", "user": None}
+
+        if not os.path.exists(CREDS_PATH):
+            raise RuntimeError(f"{CREDS_PATH} not found — download it from Google Cloud Console first.")
+
+        # Drop any stale token so the browser flow can't silently reuse it.
+        try:
+            if os.path.exists(TOKEN_PATH):
+                os.remove(TOKEN_PATH)
+        except Exception as e:
+            logger.warning(f"[CALENDAR] Could not remove old token: {e}")
+
+        from google_auth_oauthlib.flow import InstalledAppFlow
+        flow = InstalledAppFlow.from_client_secrets_file(CREDS_PATH, SCOPES)
+        creds = flow.run_local_server(port=0)
+
+        with open(TOKEN_PATH, "w") as f:
+            f.write(creds.to_json())
+
+        service = build("calendar", "v3", credentials=creds)
+        cal = service.calendars().get(calendarId="primary").execute()
+        user = cal.get("id") or cal.get("summary")
+
+        _reconnect_state = {"status": "connected", "error": "", "user": user}
+        logger.info(f"[CALENDAR] Reconnected as {user}.")
+    except Exception as e:
+        logger.error(f"[CALENDAR] Reconnect failed: {e}")
+        _reconnect_state = {"status": "error", "error": str(e), "user": None}
+
+
+def start_reconnect() -> dict:
+    """Kick off the one-click (re)connect flow. Non-blocking — returns
+    immediately; poll get_auth_status() for progress."""
+    with _reconnect_lock:
+        if _reconnect_state["status"] == "waiting_for_browser":
+            return {"ok": False, "error": "A connect attempt is already in progress."}
+        threading.Thread(target=_run_reconnect, daemon=True).start()
+        return {"ok": True, "status": "waiting_for_browser"}
+
+
+def disconnect() -> dict:
+    """Clear the connected account so the Settings UI can connect a
+    different one."""
+    global _reconnect_state
+    try:
+        if os.path.exists(TOKEN_PATH):
+            os.remove(TOKEN_PATH)
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+    _reconnect_state = {"status": "idle", "error": "", "user": None}
+    logger.info("[CALENDAR] Disconnected.")
+    return {"ok": True}
 
 
 def add_event(title: str, date_str: str, time_str: str, description: str = "",
@@ -161,7 +268,7 @@ def get_upcoming_events(hours: int = 24) -> list[dict]:
         ).execute()
         return result.get("items", [])
     except Exception as e:
-        logger.error(f"Calendar get_upcoming_events failed: {e}")
+        _log_upcoming_events_error(e)
         return []
 
 

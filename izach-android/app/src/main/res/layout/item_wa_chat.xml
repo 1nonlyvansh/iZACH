@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:paddingHorizontal="16dp"
+    android:paddingVertical="14dp"
+    android:background="@color/bg_panel">
+
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:orientation="vertical">
+
+        <TextView android:id="@+id/tvName"
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:text="Contact name" android:textColor="@color/text_pri"
+            android:textSize="14sp" android:fontFamily="monospace" android:textStyle="bold"
+            android:maxLines="1" android:ellipsize="end" />
+
+        <TextView android:id="@+id/tvLastText"
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:layout_marginTop="3dp"
+            android:text="Last message preview" android:textColor="@color/text_sec"
+            android:textSize="12sp" android:fontFamily="monospace"
+            android:maxLines="1" android:ellipsize="end" />
+    </LinearLayout>
+
+    <TextView android:id="@+id/tvTime"
+        android:layout_width="wrap_content" android:layout_height="wrap_content"
+        android:text="12:34" android:textColor="@color/text_sec"
+        android:textSize="10sp" android:fontFamily="monospace" />
+
+</LinearLayout>

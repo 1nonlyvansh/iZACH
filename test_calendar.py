@@ -1,4 +1,7 @@
 import sys
+if __name__ != "__main__":
+    import unittest
+    raise unittest.SkipTest("script-style calendar smoke test; run directly")
 sys.path.insert(0, '.')
 from modules.calendar_agent import add_event, cancel_event, get_upcoming_events
 

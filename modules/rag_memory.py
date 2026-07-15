@@ -14,6 +14,21 @@ _COLLECTION_NAME = "izach_conversations"
 _DISTANCE_THRESHOLD = 0.8  # cosine distance; below this = relevant
 _MAX_RESULTS = 4
 
+# Bare greetings carry almost no semantic content, so their embeddings land
+# within _DISTANCE_THRESHOLD of a huge swath of unrelated stored small talk —
+# e.g. "hi" pulling in some unrelated old reply and having the LLM parrot it
+# back verbatim. Skipping retrieval entirely for these is more precise than
+# tightening the threshold globally, which would hurt substantive queries.
+_GREETING_PATTERNS = {
+    "hi", "hii", "hiii", "hey", "heyy", "heyyy", "hello", "hellow", "yo", "sup",
+    "good morning", "good afternoon", "good evening", "good night",
+    "whats up", "what's up", "howdy", "morning", "evening",
+}
+
+
+def _is_trivial_greeting(query: str) -> bool:
+    return (query or "").strip().lower().rstrip("!.? ") in _GREETING_PATTERNS
+
 _collection = None
 _init_lock  = threading.Lock()   # only ONE thread initialises ChromaDB at a time
 _init_done  = False              # True once init succeeded or permanently failed
@@ -145,6 +160,8 @@ def add_conversation(query: str, response: str) -> None:
 
 
 def get_relevant_context(query: str, n: int = _MAX_RESULTS) -> str:
+    if _is_trivial_greeting(query):
+        return ""
     col = _get_collection()
     if col is None:
         return ""

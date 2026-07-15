@@ -256,14 +256,23 @@
     </androidx.constraintlayout.widget.ConstraintLayout>
 
     <!-- ── Slide-in sidebar ── -->
-    <LinearLayout
-        android:id="@+id/sidebarNav"
+    <ScrollView
         android:layout_width="240dp"
         android:layout_height="match_parent"
         android:layout_gravity="start"
         android:background="@color/bg_panel"
+        android:scrollbars="vertical"
+        android:fillViewport="true"
+        android:overScrollMode="always">
+
+    <LinearLayout
+        android:id="@+id/sidebarNav"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@color/bg_panel"
         android:orientation="vertical"
-        android:paddingTop="52dp">
+        android:paddingTop="52dp"
+        android:paddingBottom="24dp">
 
         <!-- Sidebar header -->
         <TextView
@@ -525,6 +534,162 @@
             android:background="#FF005060"
             android:layout_marginVertical="4dp" />
 
+        <!-- Calendar -->
+        <LinearLayout android:id="@+id/sidebarCalendar"
+            android:layout_width="match_parent" android:layout_height="52dp"
+            android:orientation="horizontal" android:gravity="center_vertical"
+            android:paddingHorizontal="20dp"
+            android:background="?attr/selectableItemBackground">
+            <ImageView android:layout_width="20dp" android:layout_height="20dp"
+                android:src="@drawable/ic_calendar" android:layout_marginEnd="16dp"
+                android:contentDescription="Calendar" />
+            <TextView android:layout_width="0dp" android:layout_height="wrap_content"
+                android:layout_weight="1" android:text="Calendar"
+                android:textColor="@color/text_pri" android:textSize="14sp"
+                android:fontFamily="monospace" />
+        </LinearLayout>
+
+        <!-- Recordings -->
+        <LinearLayout android:id="@+id/sidebarRecordings"
+            android:layout_width="match_parent" android:layout_height="52dp"
+            android:orientation="horizontal" android:gravity="center_vertical"
+            android:paddingHorizontal="20dp"
+            android:background="?attr/selectableItemBackground">
+            <ImageView android:layout_width="20dp" android:layout_height="20dp"
+                android:src="@drawable/ic_recordings" android:layout_marginEnd="16dp"
+                android:contentDescription="Recordings" />
+            <TextView android:layout_width="0dp" android:layout_height="wrap_content"
+                android:layout_weight="1" android:text="Recordings"
+                android:textColor="@color/text_pri" android:textSize="14sp"
+                android:fontFamily="monospace" />
+        </LinearLayout>
+
+        <!-- Memory -->
+        <LinearLayout android:id="@+id/sidebarMemory"
+            android:layout_width="match_parent" android:layout_height="52dp"
+            android:orientation="horizontal" android:gravity="center_vertical"
+            android:paddingHorizontal="20dp"
+            android:background="?attr/selectableItemBackground">
+            <ImageView android:layout_width="20dp" android:layout_height="20dp"
+                android:src="@drawable/ic_memory" android:layout_marginEnd="16dp"
+                android:contentDescription="Memory" />
+            <TextView android:layout_width="0dp" android:layout_height="wrap_content"
+                android:layout_weight="1" android:text="Memory"
+                android:textColor="@color/text_pri" android:textSize="14sp"
+                android:fontFamily="monospace" />
+        </LinearLayout>
+
+        <!-- Automations -->
+        <LinearLayout android:id="@+id/sidebarAutomations"
+            android:layout_width="match_parent" android:layout_height="52dp"
+            android:orientation="horizontal" android:gravity="center_vertical"
+            android:paddingHorizontal="20dp"
+            android:background="?attr/selectableItemBackground">
+            <ImageView android:layout_width="20dp" android:layout_height="20dp"
+                android:src="@drawable/ic_automation" android:layout_marginEnd="16dp"
+                android:contentDescription="Automations" />
+            <TextView android:layout_width="0dp" android:layout_height="wrap_content"
+                android:layout_weight="1" android:text="Automations"
+                android:textColor="@color/text_pri" android:textSize="14sp"
+                android:fontFamily="monospace" />
+        </LinearLayout>
+
+        <!-- Bookmarks -->
+        <LinearLayout android:id="@+id/sidebarBookmarks"
+            android:layout_width="match_parent" android:layout_height="52dp"
+            android:orientation="horizontal" android:gravity="center_vertical"
+            android:paddingHorizontal="20dp"
+            android:background="?attr/selectableItemBackground">
+            <ImageView android:layout_width="20dp" android:layout_height="20dp"
+                android:src="@drawable/ic_bookmark" android:layout_marginEnd="16dp"
+                android:contentDescription="Bookmarks" />
+            <TextView android:layout_width="0dp" android:layout_height="wrap_content"
+                android:layout_weight="1" android:text="Bookmarks"
+                android:textColor="@color/text_pri" android:textSize="14sp"
+                android:fontFamily="monospace" />
+        </LinearLayout>
+
+        <!-- WhatsApp -->
+        <LinearLayout android:id="@+id/sidebarWhatsApp"
+            android:layout_width="match_parent" android:layout_height="52dp"
+            android:orientation="horizontal" android:gravity="center_vertical"
+            android:paddingHorizontal="20dp"
+            android:background="?attr/selectableItemBackground">
+            <ImageView android:layout_width="20dp" android:layout_height="20dp"
+                android:src="@drawable/ic_whatsapp" android:layout_marginEnd="16dp"
+                android:contentDescription="WhatsApp" />
+            <TextView android:layout_width="0dp" android:layout_height="wrap_content"
+                android:layout_weight="1" android:text="WhatsApp"
+                android:textColor="@color/text_pri" android:textSize="14sp"
+                android:fontFamily="monospace" />
+        </LinearLayout>
+
+        <!-- News & Market -->
+        <LinearLayout android:id="@+id/sidebarNews"
+            android:layout_width="match_parent" android:layout_height="52dp"
+            android:orientation="horizontal" android:gravity="center_vertical"
+            android:paddingHorizontal="20dp"
+            android:background="?attr/selectableItemBackground">
+            <ImageView android:layout_width="20dp" android:layout_height="20dp"
+                android:src="@drawable/ic_news" android:layout_marginEnd="16dp"
+                android:contentDescription="News" />
+            <TextView android:layout_width="0dp" android:layout_height="wrap_content"
+                android:layout_weight="1" android:text="News &amp; Market"
+                android:textColor="@color/text_pri" android:textSize="14sp"
+                android:fontFamily="monospace" />
+        </LinearLayout>
+
+        <!-- Browser -->
+        <LinearLayout android:id="@+id/sidebarBrowser"
+            android:layout_width="match_parent" android:layout_height="52dp"
+            android:orientation="horizontal" android:gravity="center_vertical"
+            android:paddingHorizontal="20dp"
+            android:background="?attr/selectableItemBackground">
+            <ImageView android:layout_width="20dp" android:layout_height="20dp"
+                android:src="@drawable/ic_browser" android:layout_marginEnd="16dp"
+                android:contentDescription="Browser" />
+            <TextView android:layout_width="0dp" android:layout_height="wrap_content"
+                android:layout_weight="1" android:text="Browser"
+                android:textColor="@color/text_pri" android:textSize="14sp"
+                android:fontFamily="monospace" />
+        </LinearLayout>
+
+        <!-- Search -->
+        <LinearLayout android:id="@+id/sidebarSearch"
+            android:layout_width="match_parent" android:layout_height="52dp"
+            android:orientation="horizontal" android:gravity="center_vertical"
+            android:paddingHorizontal="20dp"
+            android:background="?attr/selectableItemBackground">
+            <ImageView android:layout_width="20dp" android:layout_height="20dp"
+                android:src="@drawable/ic_search" android:layout_marginEnd="16dp"
+                android:contentDescription="Search" />
+            <TextView android:layout_width="0dp" android:layout_height="wrap_content"
+                android:layout_weight="1" android:text="Search"
+                android:textColor="@color/text_pri" android:textSize="14sp"
+                android:fontFamily="monospace" />
+        </LinearLayout>
+
+        <!-- Geofences -->
+        <LinearLayout android:id="@+id/sidebarGeofences"
+            android:layout_width="match_parent" android:layout_height="52dp"
+            android:orientation="horizontal" android:gravity="center_vertical"
+            android:paddingHorizontal="20dp"
+            android:background="?attr/selectableItemBackground">
+            <ImageView android:layout_width="20dp" android:layout_height="20dp"
+                android:src="@drawable/ic_geofence" android:layout_marginEnd="16dp"
+                android:contentDescription="Geofences" />
+            <TextView android:layout_width="0dp" android:layout_height="wrap_content"
+                android:layout_weight="1" android:text="Geofences"
+                android:textColor="@color/text_pri" android:textSize="14sp"
+                android:fontFamily="monospace" />
+        </LinearLayout>
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="#FF005060"
+            android:layout_marginVertical="4dp" />
+
         <!-- Settings -->
         <LinearLayout android:id="@+id/sidebarSettings"
             android:layout_width="match_parent" android:layout_height="52dp"
@@ -541,5 +706,6 @@
         </LinearLayout>
 
     </LinearLayout>
+    </ScrollView>
 
 </androidx.drawerlayout.widget.DrawerLayout>

@@ -11,6 +11,9 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.lifecycleScope
 import com.izach.android.databinding.ActivitySettingsBinding
 import com.izach.android.network.IZACHApi
@@ -31,26 +34,76 @@ class SettingsActivity : AppCompatActivity() {
                 val json = JSONObject(result.contents)
                 val url  = json.getString("backend_url")
                 val host = json.getString("ws_host")
+                val secret = json.optString("pairing_secret", "")
                 api.saveBackendUrl(url)
                 api.saveWsHost(host)
+                if (secret.isNotBlank()) api.savePairingSecret(secret)
                 binding.etBackendUrl.setText(url)
                 binding.etWsHost.setText(host)
+                binding.etPairingSecret.setText(secret)
                 toast("Connected! Restart app to apply.")
+                refreshPairingStatus()
             } catch (e: Exception) {
                 toast("Invalid QR code — not an iZACH QR")
             }
         }
     }
 
+    private fun refreshPairingStatus() {
+        if (api.pairingSecret().isBlank()) {
+            binding.pairedInfoCard.visibility = android.view.View.GONE
+            binding.unpairedSection.visibility = android.view.View.VISIBLE
+            return
+        }
+        lifecycleScope.launch {
+            api.verifyPairing()
+                .onSuccess { paired ->
+                    if (!paired) {
+                        // PC actually answered and rejected the secret — genuinely not paired.
+                        binding.pairedInfoCard.visibility = android.view.View.GONE
+                        binding.unpairedSection.visibility = android.view.View.VISIBLE
+                        return@onSuccess
+                    }
+                    binding.pairedInfoCard.visibility = android.view.View.VISIBLE
+                    binding.unpairedSection.visibility = android.view.View.GONE
+                    api.getSystemStatus().onSuccess { s ->
+                        binding.tvPairedPcName.text = "Connected to ${s.pcName.ifBlank { "PC" }}"
+                        binding.tvPairedBattery.text = when {
+                            s.batteryPct == null -> "Battery: unavailable"
+                            s.batteryPlugged == true -> "Battery: ${s.batteryPct}% (charging)"
+                            else -> "Battery: ${s.batteryPct}%"
+                        }
+                    }
+                }
+                .onFailure {
+                    // Couldn't reach the PC at all — still paired, just offline/unreachable
+                    // right now. Don't tell the user to re-scan for a plain connectivity blip.
+                    binding.pairedInfoCard.visibility = android.view.View.VISIBLE
+                    binding.unpairedSection.visibility = android.view.View.GONE
+                    binding.tvPairedPcName.text = "Paired — PC unreachable"
+                    binding.tvPairedBattery.text = "Check the PC is on and on the same network"
+                }
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        WindowCompat.setDecorFitsSystemWindows(window, false)
         binding = ActivitySettingsBinding.inflate(layoutInflater)
         setContentView(binding.root)
+
+        ViewCompat.setOnApplyWindowInsetsListener(binding.root) { view, insets ->
+            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            view.setPadding(view.paddingLeft, bars.top, view.paddingRight, bars.bottom)
+            insets
+        }
+
         api = IZACHApi(this)
 
         binding.etBackendUrl.setText(api.baseUrl())
         binding.etWsHost.setText(api.wsHost())
         binding.etAlliedUrl.setText(api.alliedBaseUrl())
+        binding.etPairingSecret.setText(api.pairingSecret())
 
         binding.btnScanQr.setOnClickListener {
             val options = ScanOptions()
@@ -60,6 +113,13 @@ class SettingsActivity : AppCompatActivity() {
                 .setOrientationLocked(false)
             qrLauncher.launch(options)
         }
+
+        binding.btnRepair.setOnClickListener {
+            binding.unpairedSection.visibility = android.view.View.VISIBLE
+            binding.pairedInfoCard.visibility = android.view.View.GONE
+        }
+
+        refreshPairingStatus()
 
         // Load notification category prefs
         val prefs = getSharedPreferences("izach_prefs", Context.MODE_PRIVATE)
@@ -73,10 +133,15 @@ class SettingsActivity : AppCompatActivity() {
         binding.swBiometric.isChecked = prefs.getBoolean("biometric_lock", false)
         binding.swFloatMic.isChecked  = prefs.getBoolean("float_mic_enabled", false)
 
+        binding.swPersistentStatus.isChecked = prefs.getBoolean(StatusNotificationService.PREF_ENABLED, true)
+
         // Auto-DND schedule
         binding.swAutoDnd.isChecked    = prefs.getBoolean("auto_dnd_enabled", false)
         binding.etDndStart.setText(prefs.getString("auto_dnd_start", "22:00"))
         binding.etDndEnd.setText(prefs.getString("auto_dnd_end",   "08:00"))
+
+        // Proactive agent — lives on the PC (api_keys.json via /settings), not local prefs
+        loadProactiveSettings()
 
         binding.swFloatMic.setOnCheckedChangeListener { _, isChecked ->
             if (isChecked) {
@@ -94,6 +159,18 @@ class SettingsActivity : AppCompatActivity() {
             }
         }
 
+        binding.swPersistentStatus.setOnCheckedChangeListener { _, isChecked ->
+            prefs.edit().putBoolean(StatusNotificationService.PREF_ENABLED, isChecked).apply()
+            if (isChecked) {
+                androidx.core.content.ContextCompat.startForegroundService(
+                    this, Intent(this, StatusNotificationService::class.java)
+                )
+            } else {
+                startService(Intent(this, StatusNotificationService::class.java)
+                    .setAction(StatusNotificationService.ACTION_STOP))
+            }
+        }
+
         binding.btnSave.setOnClickListener {
             val url = binding.etBackendUrl.text.toString().trim().trimEnd('/')
             val wsHost = binding.etWsHost.text.toString().trim()
@@ -103,6 +180,7 @@ class SettingsActivity : AppCompatActivity() {
             }
             api.saveBackendUrl(url)
             api.saveWsHost(wsHost)
+            api.savePairingSecret(binding.etPairingSecret.text.toString().trim())
 
             val alliedUrl = binding.etAlliedUrl.text.toString().trim().trimEnd('/')
             if (alliedUrl.isNotBlank()) api.saveAlliedUrl(alliedUrl)
@@ -132,7 +210,20 @@ class SettingsActivity : AppCompatActivity() {
             }
 
             // Save VIP contacts to backend
-            launch { api.setVipContacts(vipList) }
+
+            lifecycleScope.launch { api.setVipContacts(vipList) }
+
+            // Proactive agent settings — pushed straight to /settings (api_keys.json)
+            val briefingTime = binding.etBriefingTime.text.toString().trim().ifBlank { "08:00" }
+            val weatherCity  = binding.etWeatherCity.text.toString().trim().ifBlank { "New Delhi" }
+            lifecycleScope.launch {
+                api.setSetting("proactive_enabled", binding.swProactiveEnabled.isChecked)
+                api.setSetting("briefing_calendar", binding.swBriefingCalendar.isChecked)
+                api.setSetting("briefing_system", binding.swBriefingSystem.isChecked)
+                api.setSetting("pattern_automation_suggestions_enabled", binding.swPatternSuggestions.isChecked)
+                api.setSetting("morning_briefing_time", briefingTime)
+                api.setSetting("weather_city", weatherCity)
+            }
 
             toast("Saved. Restart app to reconnect.")
             finish()
@@ -166,6 +257,20 @@ class SettingsActivity : AppCompatActivity() {
                 addVipRow(entry)
             }
             binding.etVipInput.text?.clear()
+        }
+    }
+
+    private fun loadProactiveSettings() {
+        lifecycleScope.launch {
+            api.getProactiveSettings().onSuccess { s ->
+                binding.swProactiveEnabled.isChecked = s.get("proactive_enabled")?.asBoolean ?: true
+                val calendarDefault = s.get("briefing_events")?.asBoolean ?: true
+                binding.swBriefingCalendar.isChecked = s.get("briefing_calendar")?.asBoolean ?: calendarDefault
+                binding.swBriefingSystem.isChecked = s.get("briefing_system")?.asBoolean ?: false
+                binding.swPatternSuggestions.isChecked = s.get("pattern_automation_suggestions_enabled")?.asBoolean ?: true
+                binding.etBriefingTime.setText(s.get("morning_briefing_time")?.asString ?: "08:00")
+                binding.etWeatherCity.setText(s.get("weather_city")?.asString ?: "New Delhi")
+            }
         }
     }
 

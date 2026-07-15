@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>iZACH Browser</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=JetBrains+Mono:wght@300;400;500;700&display=swap" rel="stylesheet">
+<style>
+* { box-sizing:border-box; margin:0; padding:0; }
+:root {
+  --c:  #0094ff;
+  --bg: #010814;
+  --p:  rgba(1,5,20,0.97);
+  --b:  rgba(0,148,255,0.11);
+  --t:  #6ab0e0;
+  --th: #a8d8ff;
+  --t2: #4880c0;
+}
+html, body { width:100vw; height:100vh; overflow:hidden; }
+body {
+  background:var(--bg); font-family:'JetBrains Mono','Courier New',monospace;
+  color:var(--t); letter-spacing:0.04em; display:flex; flex-direction:column;
+  border:1px solid rgba(0,148,255,0.25);
+}
+
+#titlebar {
+  -webkit-app-region: drag;
+  height:36px; flex-shrink:0; display:flex; align-items:center; justify-content:space-between;
+  padding:0 10px; background:var(--p); border-bottom:1px solid rgba(0,148,255,0.12);
+}
+#titlebar-logo { font-size:10px; letter-spacing:.2em; color:var(--th); }
+#titlebar-ctrls { -webkit-app-region: no-drag; display:flex; gap:4px; }
+.tb-win-btn {
+  width:26px; height:22px; background:transparent; border:none; color:rgba(0,148,255,0.5);
+  cursor:pointer; font-size:11px; border-radius:3px;
+}
+.tb-win-btn:hover { background:rgba(0,148,255,0.12); color:var(--th); }
+#tb-win-close:hover { background:rgba(255,61,61,0.25); color:#ff8080; }
+
+#tabstrip { display:flex; align-items:center; gap:2px; padding:6px 6px 0; overflow-x:auto; flex-shrink:0; }
+.bw-tab {
+  display:flex; align-items:center; gap:8px; max-width:200px; padding:6px 10px; border-radius:5px 5px 0 0;
+  font-size:10px; cursor:pointer; white-space:nowrap; flex-shrink:0;
+}
+.bw-tab-label { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:150px; }
+.bw-tab-close { flex-shrink:0; opacity:.6; }
+.bw-tab-close:hover { opacity:1; color:#ff5050; }
+
+#navbar {
+  display:flex; align-items:center; gap:8px; padding:8px 12px; border-bottom:1px solid rgba(0,148,255,0.12); flex-shrink:0;
+}
+#navbar button {
+  background:transparent; border:none; color:rgba(0,148,255,0.6); cursor:pointer; padding:4px 6px; font-size:14px;
+}
+#navbar button:hover { color:var(--th); }
+#addr {
+  flex:1; background:rgba(0,148,255,0.05); border:1px solid rgba(0,148,255,0.18); border-radius:5px;
+  color:var(--th); font-family:'JetBrains Mono',monospace; font-size:12px; padding:8px 12px; outline:none;
+}
+#addr:focus { border-color:rgba(0,148,255,0.5); }
+
+#bookmarks-panel {
+  display:none; flex-direction:column; gap:6px; padding:10px 14px; border-bottom:1px solid rgba(0,148,255,0.12);
+  max-height:200px; overflow-y:auto; flex-shrink:0; font-size:10px;
+}
+.bw-bm-folder { color:rgba(0,148,255,0.45); letter-spacing:.15em; margin-top:6px; font-size:9px; }
+.bw-bm-row { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:4px 0 4px 10px; }
+.bw-bm-label { color:var(--th); cursor:pointer; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; }
+.bw-bm-del { background:transparent; border:none; color:rgba(255,80,80,0.5); cursor:pointer; font-size:10px; flex-shrink:0; }
+
+#webviews { flex:1; position:relative; }
+/* Inactive tabs are hidden with opacity/pointer-events, NEVER display:none —
+   Electron's <webview> guest compositor doesn't reliably re-attach at the
+   correct viewport size when a display:none element is shown again, which is
+   what caused pages to render letterboxed/partial after a tab switch. */
+webview { position:absolute; top:0; left:0; width:100%; height:100%; opacity:0; pointer-events:none; z-index:0; }
+webview.bw-active { opacity:1; pointer-events:auto; z-index:1; }
+</style>
+</head>
+<body>
+
+<div id="titlebar">
+  <div id="titlebar-logo">iZACH · BROWSER</div>
+  <div id="titlebar-ctrls">
+    <button class="tb-win-btn" onclick="window.electronAPI?.minimize()">─</button>
+    <button class="tb-win-btn" onclick="window.electronAPI?.maximize()">□</button>
+    <button class="tb-win-btn" id="tb-win-close" onclick="window.electronAPI?.close()">✕</button>
+  </div>
+</div>
+
+<div id="tabstrip"></div>
+
+<div id="navbar">
+  <button onclick="nav('back')" title="Back">‹</button>
+  <button onclick="nav('fwd')" title="Forward">›</button>
+  <button onclick="nav('reload')" title="Reload">↻</button>
+  <button onclick="goHome()" title="Home">⌂</button>
+  <input id="addr" type="text" placeholder="Search Google or enter a URL" onkeydown="if(event.key==='Enter')go(this.value)">
+  <button id="bm-btn" onclick="toggleBookmark()" title="Bookmark this page">☆</button>
+  <button id="autofill-btn" onclick="autofill()" title="No saved login for this site" disabled
+          style="opacity:0.3;cursor:default;">🔑</button>
+  <button onclick="newTab()" title="New tab">+</button>
+  <button onclick="toggleBookmarksPanel()" title="Bookmarks">★</button>
+  <button onclick="toggleDevTools()" title="Inspect (DevTools) — F12">&lt;/&gt;</button>
+</div>
+
+<div id="bookmarks-panel"></div>
+
+<div id="webviews">
+  <div id="findbar" style="display:none;position:absolute;top:8px;right:8px;z-index:5;
+       background:#050d1a;border:1px solid rgba(0,148,255,0.25);border-radius:4px;box-shadow:0 4px 16px rgba(0,0,0,0.4);
+       padding:6px 8px;align-items:center;gap:6px;font-family:'JetBrains Mono',monospace;">
+    <input id="find-input" type="text" placeholder="Find in page"
+           oninput="_findDebounced()"
+           onkeydown="if(event.key==='Enter'){event.preventDefault();_findNext(event.shiftKey);} else if(event.key==='Escape'){toggleFindInPage(true);}"
+           style="width:140px;background:rgba(0,148,255,0.05);border:1px solid rgba(0,148,255,0.15);border-radius:3px;color:var(--th);font-family:inherit;font-size:10px;padding:4px 6px;outline:none;">
+    <span id="find-count" style="font-size:8.5px;color:rgba(0,148,255,0.4);min-width:36px;">0/0</span>
+    <button onclick="_findNext(true)" title="Previous match" style="background:transparent;border:none;color:rgba(0,148,255,0.55);font-size:11px;cursor:pointer;padding:2px 4px;">▲</button>
+    <button onclick="_findNext(false)" title="Next match" style="background:transparent;border:none;color:rgba(0,148,255,0.55);font-size:11px;cursor:pointer;padding:2px 4px;">▼</button>
+    <button onclick="toggleFindInPage(true)" title="Close" style="background:transparent;border:none;color:rgba(255,80,80,0.5);font-size:11px;cursor:pointer;padding:2px 4px;">✕</button>
+  </div>
+</div>
+
+<script>
+const API = 'http://localhost:5050';
+const HOME_URL = null; // null => build the branded home page
+
+let tabs = [];
+let activeId = null;
+let tabSeq = 0;
+let resizeObs = null;
+
+function fitActive(){
+  const container = document.getElementById('webviews');
+  const tab = tabs.find(t => t.id === activeId);
+  if(!container || !tab) return;
+  const w = container.clientWidth, h = container.clientHeight;
+  if(w > 0 && h > 0){
+    tab.webview.style.width = w+'px';
+    tab.webview.style.height = h+'px';
+    // Resizing the HOST element doesn't fire a 'resize' event inside the GUEST
+    // page — sites that size things in JS on load (e.g. YouTube's video
+    // player) can end up stuck at whatever size the viewport was when they
+    // first laid out, rendering letterboxed even though the webview itself
+    // is now the correct size. Nudging the guest's own resize handling fixes it.
+    try{ tab.webview.executeJavaScript("window.dispatchEvent(new Event('resize'))").catch(()=>{}); }catch(e){}
+  }
+}
+function fitActiveSoon(){
+  fitActive();
+  if(typeof requestAnimationFrame !== 'undefined') requestAnimationFrame(fitActive);
+}
+function ensureResizeObserver(){
+  if(resizeObs || typeof ResizeObserver === 'undefined') return;
+  const container = document.getElementById('webviews');
+  if(!container) return;
+  resizeObs = new ResizeObserver(() => fitActiveSoon());
+  resizeObs.observe(container);
+}
+
+function esc(s){ return String(s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+function homePageHtml(bookmarks){
+  const groups = {};
+  (bookmarks||[]).forEach(b => { const f = b.folder||'General'; (groups[f]=groups[f]||[]).push(b); });
+  const sections = Object.keys(groups).sort().map(folder => {
+    const items = groups[folder].map(b => `<a href="${esc(b.url)}" class="bm-item">${esc(b.title)}</a>`).join('');
+    return `<div class="bm-folder"><div class="bm-folder-title">${esc(folder)}</div><div class="bm-folder-items">${items}</div></div>`;
+  }).join('');
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>iZACH Browser — Home</title><style>
+    *{box-sizing:border-box;}
+    body{margin:0;min-height:100vh;background:#010814;color:#6ab0e0;font-family:'JetBrains Mono',monospace;
+         display:flex;flex-direction:column;align-items:center;padding:80px 20px;}
+    h1{color:#0094ff;font-weight:400;letter-spacing:.35em;font-size:22px;margin:0 0 32px;}
+    form{display:flex;width:100%;max-width:560px;margin-bottom:40px;}
+    input{flex:1;padding:12px 16px;background:rgba(0,148,255,0.06);border:1px solid rgba(0,148,255,0.25);
+          border-radius:4px 0 0 4px;color:#a8d8ff;font-family:inherit;font-size:14px;outline:none;}
+    button{padding:12px 20px;background:rgba(0,148,255,0.15);border:1px solid rgba(0,148,255,0.25);border-left:none;
+           border-radius:0 4px 4px 0;color:#0094ff;cursor:pointer;font-family:inherit;}
+    .bm-wrap{width:100%;max-width:680px;}
+    .bm-folder{margin-bottom:20px;}
+    .bm-folder-title{font-size:11px;letter-spacing:.2em;color:rgba(0,148,255,0.4);margin-bottom:10px;}
+    .bm-folder-items{display:flex;flex-wrap:wrap;gap:10px;}
+    .bm-item{padding:8px 14px;background:rgba(0,148,255,0.06);border:1px solid rgba(0,148,255,0.15);border-radius:4px;
+             color:#6ab0e0;text-decoration:none;font-size:12px;}
+    .bm-item:hover{border-color:rgba(0,148,255,0.5);color:#a8d8ff;}
+    .bm-empty{color:rgba(0,148,255,0.3);font-size:11px;}
+  </style></head><body>
+    <h1>iZACH BROWSER</h1>
+    <form action="https://www.google.com/search" method="get">
+      <input name="q" placeholder="Search Google" autofocus>
+      <button type="submit">GO</button>
+    </form>
+    <div class="bm-wrap">${sections || '<div class="bm-empty">No bookmarks yet — click the ☆ in the address bar to add one.</div>'}</div>
+  </body></html>`;
+}
+
+async function fetchBookmarks(){
+  try{ const r = await fetch(`${API}/api/custom_links`).then(r => r.json()); return Array.isArray(r) ? r : []; }
+  catch(e){ return []; }
+}
+async function homeDataUrl(){
+  const bookmarks = await fetchBookmarks();
+  return 'data:text/html;charset=utf-8,' + encodeURIComponent(homePageHtml(bookmarks));
+}
+
+async function newTab(url){
+  ensureResizeObserver();
+  const id = 'bt' + (++tabSeq);
+  const wv = document.createElement('webview');
+  wv.id = 'wv-' + id;
+  wv.setAttribute('partition', 'persist:izach-browser');
+  document.getElementById('webviews').appendChild(wv);
+
+  const tab = { id, webview: wv, title: 'New Tab', url: url || '' };
+  tabs.push(tab);
+
+  wv.addEventListener('did-navigate', e => { tab.url = e.url; if(activeId===id){ syncAddr(); syncBookmarkBtn(); syncAutofillBtn(); } renderTabs(); });
+  wv.addEventListener('did-navigate-in-page', e => { tab.url = e.url; if(activeId===id){ syncAddr(); syncBookmarkBtn(); syncAutofillBtn(); } });
+  wv.addEventListener('page-title-updated', e => { tab.title = e.title || tab.url; renderTabs(); });
+  wv.addEventListener('page-favicon-updated', e => { tab.favicon = (e.favicons && e.favicons[0]) || null; renderTabs(); });
+  wv.addEventListener('before-input-event', (e) => {
+    const input = e.input;
+    if(!input || input.type !== 'keyDown') return;
+    const handled = _handleShortcut({key: input.key, ctrl: input.control||input.meta, shift: input.shift, alt: input.alt});
+    if(handled) e.preventDefault();
+  });
+  _wireFindInPage(wv);
+
+  wv.setAttribute('src', url ? url : await homeDataUrl());
+  switchTab(id);
+  return tab;
+}
+
+// A guest page's window.open()/target="_blank" request (denied at the guest
+// level by main.cjs's setWindowOpenHandler, forwarded here by preload.cjs) —
+// opens as a new tab, same as every other browser.
+window.addEventListener('izach-new-window', async e => {
+  const {url, disposition} = e.detail || {};
+  if(!url) return;
+  const prevActive = activeId;
+  const tab = await newTab(url);
+  if(disposition === 'background-tab' && prevActive) switchTab(prevActive);
+});
+
+function _activeWebview(){
+  const tab = tabs.find(t => t.id === activeId);
+  return tab ? tab.webview : null;
+}
+function zoom(delta){
+  const wv = _activeWebview();
+  if(!wv || !wv.getZoomLevel) return;
+  try{ wv.setZoomLevel(Math.max(-4, Math.min(6, wv.getZoomLevel()+delta))); }catch(e){}
+}
+function zoomReset(){
+  const wv = _activeWebview();
+  if(!wv || !wv.setZoomLevel) return;
+  try{ wv.setZoomLevel(0); }catch(e){}
+}
+function toggleDevTools(){
+  const wv = _activeWebview();
+  if(!wv || !wv.isDevToolsOpened) return;
+  try{ wv.isDevToolsOpened() ? wv.closeDevTools() : wv.openDevTools(); }catch(e){}
+}
+
+// Common-browser keyboard shortcuts. See cortex-ui.html's
+// _browserHandleShortcut for the full rationale on the two call sites
+// (host keydown + each webview's before-input-event) — a standalone window
+// doesn't share space with other app panels, so no "is this focused" gate
+// is needed here, unlike the embedded widget.
+function _handleShortcut({key, ctrl, shift, alt}){
+  const k = (key || '').toLowerCase();
+  if(ctrl && !shift && k === 't'){ newTab(); return true; }
+  if(ctrl && !shift && k === 'w'){ if(activeId) closeTab(activeId); return true; }
+  if(ctrl && k === 'tab'){
+    if(tabs.length > 1){
+      const idx = tabs.findIndex(t => t.id === activeId);
+      const next = shift ? (idx-1+tabs.length)%tabs.length : (idx+1)%tabs.length;
+      switchTab(tabs[next].id);
+    }
+    return true;
+  }
+  if(ctrl && !shift && k === 'l'){
+    const addr = document.getElementById('addr');
+    if(addr){ addr.focus(); addr.select(); }
+    return true;
+  }
+  if(ctrl && !shift && k === 'd'){ toggleBookmark(); return true; }
+  if(ctrl && !shift && k === 'f'){ toggleFindInPage(); return true; }
+  if((ctrl && !shift && k === 'r') || k === 'f5'){ nav('reload'); return true; }
+  if(alt && k === 'arrowleft'){ nav('back'); return true; }
+  if(alt && k === 'arrowright'){ nav('fwd'); return true; }
+  if(ctrl && (k === '+' || k === '=')){ zoom(0.5); return true; }
+  if(ctrl && k === '-'){ zoom(-0.5); return true; }
+  if(ctrl && k === '0'){ zoomReset(); return true; }
+  if(k === 'f12' || (ctrl && shift && k === 'i')){ toggleDevTools(); return true; }
+  return false;
+}
+document.addEventListener('keydown', e => {
+  const handled = _handleShortcut({key: e.key, ctrl: e.ctrlKey||e.metaKey, shift: e.shiftKey, alt: e.altKey});
+  if(handled) e.preventDefault();
+});
+
+// ── Find in page ─────────────────────────────────────────────────────────────
+let _findTimer = null;
+function toggleFindInPage(forceClose){
+  const bar = document.getElementById('findbar');
+  const open = bar.style.display === 'flex';
+  if(forceClose === true || open){
+    bar.style.display = 'none';
+    const wv = _activeWebview();
+    if(wv && wv.stopFindInPage) wv.stopFindInPage('clearSelection');
+    return;
+  }
+  bar.style.display = 'flex';
+  const input = document.getElementById('find-input');
+  input.value = '';
+  document.getElementById('find-count').textContent = '0/0';
+  input.focus();
+}
+function _findDebounced(){
+  clearTimeout(_findTimer);
+  _findTimer = setTimeout(() => _findNext(false, true), 200);
+}
+function _findNext(back, isNewSearch){
+  const wv = _activeWebview();
+  const text = document.getElementById('find-input').value;
+  if(!wv || !wv.findInPage || !text) return;
+  wv.findInPage(text, { forward: !back, findNext: !isNewSearch });
+}
+function _wireFindInPage(wv){
+  wv.addEventListener('found-in-page', e => {
+    const r = e.result;
+    const count = document.getElementById('find-count');
+    if(count) count.textContent = `${r.matches===0?0:r.activeMatchOrdinal}/${r.matches}`;
+  });
+}
+
+function closeTab(id, evt){
+  if(evt) evt.stopPropagation();
+  const idx = tabs.findIndex(t => t.id === id);
+  if(idx === -1) return;
+  tabs[idx].webview.remove();
+  tabs.splice(idx, 1);
+  if(tabs.length === 0){ window.electronAPI?.close(); return; }
+  if(activeId === id) switchTab(tabs[Math.max(0, idx-1)].id);
+  else renderTabs();
+}
+
+function switchTab(id){
+  tabs.forEach(t => { t.webview.classList.toggle('bw-active', t.id === id); });
+  activeId = id;
+  syncAddr();
+  syncBookmarkBtn();
+  syncAutofillBtn();
+  renderTabs();
+  fitActiveSoon();
+  toggleFindInPage(true); // find state is per-tab; close it like Chrome does on tab switch
+}
+
+function syncAddr(){
+  const tab = tabs.find(t => t.id === activeId);
+  const addr = document.getElementById('addr');
+  if(addr && tab) addr.value = tab.url;
+}
+
+function renderTabs(){
+  const strip = document.getElementById('tabstrip');
+  if(!strip) return;
+  strip.innerHTML = '';
+  tabs.forEach(t => {
+    const active = t.id === activeId;
+    const el = document.createElement('div');
+    el.className = 'bw-tab';
+    el.style.background = active ? 'rgba(0,148,255,0.14)' : 'transparent';
+    el.style.color = active ? 'var(--th)' : 'rgba(0,148,255,0.4)';
+    el.onclick = () => switchTab(t.id);
+    if(t.favicon){
+      const fav = document.createElement('img');
+      fav.src = t.favicon;
+      fav.style.cssText = 'width:12px;height:12px;flex-shrink:0;border-radius:2px;margin-right:6px;';
+      fav.onerror = () => { fav.style.display = 'none'; };
+      el.appendChild(fav);
+    }
+    const label = document.createElement('span');
+    label.className = 'bw-tab-label';
+    label.textContent = t.title || 'New Tab';
+    const close = document.createElement('span');
+    close.className = 'bw-tab-close';
+    close.textContent = '×';
+    close.onclick = (e) => closeTab(t.id, e);
+    el.appendChild(label); el.appendChild(close);
+    strip.appendChild(el);
+  });
+}
+
+async function go(value){
+  const v = (value||'').trim();
+  const tab = tabs.find(t => t.id === activeId);
+  if(!v || !tab) return;
+  const looksLikeUrl = /^https?:\/\//i.test(v) || (/^[\w.-]+\.[a-z]{2,}([/?#].*)?$/i.test(v) && !v.includes(' '));
+  const url = looksLikeUrl ? (/^https?:\/\//i.test(v) ? v : `https://${v}`) : `https://www.google.com/search?q=${encodeURIComponent(v)}`;
+  tab.webview.src = url;
+}
+
+function nav(action){
+  const tab = tabs.find(t => t.id === activeId);
+  if(!tab) return;
+  const wv = tab.webview;
+  if(action === 'back' && wv.canGoBack()) wv.goBack();
+  else if(action === 'fwd' && wv.canGoForward()) wv.goForward();
+  else if(action === 'reload') wv.reload();
+}
+
+async function goHome(){
+  const tab = tabs.find(t => t.id === activeId);
+  if(!tab) return;
+  tab.webview.src = await homeDataUrl();
+}
+
+async function syncBookmarkBtn(){
+  const tab = tabs.find(t => t.id === activeId);
+  const btn = document.getElementById('bm-btn');
+  if(!tab || !btn) return;
+  const bookmarks = await fetchBookmarks();
+  btn.textContent = bookmarks.some(b => b.url === tab.url) ? '★' : '☆';
+}
+
+// ── Autofill (Windows Hello gated) ───────────────────────────────────────────
+function _hostnameOf(url){
+  try{ return new URL(url).hostname.replace(/^www\./, '').toLowerCase(); }catch(e){ return ''; }
+}
+async function _findMatchingCredential(tab){
+  if(!window.izachPasswords || !tab) return null;
+  const host = _hostnameOf(tab.url);
+  if(!host) return null;
+  try{
+    const entries = await window.izachPasswords.list();
+    return entries.find(e => {
+      const site = (e.site||'').toLowerCase().replace(/^www\./,'').replace(/^https?:\/\//,'');
+      return site && (host.includes(site) || site.includes(host));
+    }) || null;
+  }catch(e){ return null; }
+}
+async function syncAutofillBtn(){
+  const tab = tabs.find(t => t.id === activeId);
+  const btn = document.getElementById('autofill-btn');
+  if(!tab || !btn) return;
+  const match = await _findMatchingCredential(tab);
+  btn.disabled = !match;
+  btn.dataset.credId = match ? match.id : '';
+  btn.style.opacity = match ? '1' : '0.3';
+  btn.style.cursor = match ? 'pointer' : 'default';
+  btn.title = match ? `Autofill saved login for ${match.site}` : 'No saved login for this site';
+}
+function _autofillScript(username, password){
+  return `(function(){
+    var pass=document.querySelector('input[type="password"]');
+    if(!pass) return false;
+    var form=pass.closest('form') || document;
+    var user=form.querySelector('input[type="email"], input[type="text"], input[autocomplete="username"], input[name*="user" i], input[name*="email" i]');
+    function setVal(el, val){
+      if(!el) return;
+      var proto=Object.getPrototypeOf(el);
+      var setter=Object.getOwnPropertyDescriptor(proto, 'value').set;
+      setter.call(el, val);
+      el.dispatchEvent(new Event('input', {bubbles:true}));
+      el.dispatchEvent(new Event('change', {bubbles:true}));
+    }
+    setVal(user, ${JSON.stringify(username||'')});
+    setVal(pass, ${JSON.stringify(password||'')});
+    return true;
+  })()`;
+}
+async function autofill(){
+  const btn = document.getElementById('autofill-btn');
+  const id = btn && btn.dataset.credId;
+  if(!id) return;
+  if(!window.izachWebAuthn || !window.izachPasswords) return;
+  const enrolled = await window.izachWebAuthn.isEnrolled();
+  if(!enrolled) return;
+  const result = await window.izachPasswords.autofillReveal(id);
+  if(!result.ok) return;
+  const tab = tabs.find(t => t.id === activeId);
+  if(!tab) return;
+  try{ await tab.webview.executeJavaScript(_autofillScript(result.username, result.password)); }catch(e){}
+}
+
+async function toggleBookmark(){
+  const tab = tabs.find(t => t.id === activeId);
+  const btn = document.getElementById('bm-btn');
+  if(!tab) return;
+  const list = await fetchBookmarks();
+  const idx = list.findIndex(b => b.url === tab.url);
+  if(idx >= 0){
+    list.splice(idx, 1);
+    await fetch(`${API}/api/custom_links`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(list) });
+    if(btn) btn.textContent = '☆';
+  } else {
+    const folder = (prompt('Bookmark folder (optional):', 'General') || 'General').trim() || 'General';
+    list.push({ title: tab.title || tab.url, url: tab.url, folder });
+    await fetch(`${API}/api/custom_links`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(list) });
+    if(btn) btn.textContent = '★';
+  }
+  const panel = document.getElementById('bookmarks-panel');
+  if(panel && panel.style.display === 'flex') loadBookmarksPanel();
+}
+
+function toggleBookmarksPanel(){
+  const panel = document.getElementById('bookmarks-panel');
+  const open = panel.style.display === 'flex';
+  panel.style.display = open ? 'none' : 'flex';
+  if(!open) loadBookmarksPanel();
+}
+
+async function loadBookmarksPanel(){
+  const panel = document.getElementById('bookmarks-panel');
+  panel.innerHTML = '<div style="color:rgba(0,148,255,0.35);">Loading…</div>';
+  const list = await fetchBookmarks();
+  if(!list.length){ panel.innerHTML = '<div style="color:rgba(0,148,255,0.35);">No bookmarks yet.</div>'; return; }
+  const groups = {};
+  list.forEach(b => { const f = b.folder||'General'; (groups[f]=groups[f]||[]).push(b); });
+  panel.innerHTML = '';
+  Object.keys(groups).sort().forEach(folder => {
+    const heading = document.createElement('div');
+    heading.className = 'bw-bm-folder';
+    heading.textContent = folder;
+    panel.appendChild(heading);
+    groups[folder].forEach(b => {
+      const row = document.createElement('div');
+      row.className = 'bw-bm-row';
+      const label = document.createElement('span');
+      label.className = 'bw-bm-label';
+      label.textContent = b.title;
+      label.title = b.url;
+      label.onclick = () => go(b.url);
+      const del = document.createElement('button');
+      del.className = 'bw-bm-del';
+      del.textContent = '✕';
+      del.title = 'Remove bookmark';
+      del.onclick = async () => {
+        const newList = list.filter(x => x !== b);
+        await fetch(`${API}/api/custom_links`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(newList) });
+        loadBookmarksPanel();
+        syncBookmarkBtn();
+      };
+      row.appendChild(label); row.appendChild(del);
+      panel.appendChild(row);
+    });
+  });
+}
+
+// Open at the URL passed from Cortex UI's "Open in iZACH Browser" button
+// (?url=...), continuing the session — otherwise show the home page.
+// ?t=<seconds>&paused=0|1 (if present) resume the docked panel's playback
+// position instead of starting the video over.
+(function init(){
+  const params = new URLSearchParams(location.search);
+  const startUrl = params.get('url');
+  const resumeAt = params.get('t');
+  const resumePaused = params.get('paused') === '1';
+  newTab(startUrl || undefined).then(tab => {
+    if(!startUrl || resumeAt == null) return;
+    const onLoad = () => {
+      tab.webview.removeEventListener('did-finish-load', onLoad);
+      tab.webview.executeJavaScript(`(function(){
+        try{
+          var v=document.querySelector('video');
+          if(!v) return false;
+          v.currentTime=${JSON.parse(resumeAt) || 0};
+          if(${resumePaused ? 'true' : 'false'}){ v.pause(); } else { v.muted=false; v.play(); }
+          return true;
+        }catch(e){ return false; }
+      })()`).catch(()=>{});
+    };
+    tab.webview.addEventListener('did-finish-load', onLoad);
+  });
+})();
+</script>
+</body>
+</html>

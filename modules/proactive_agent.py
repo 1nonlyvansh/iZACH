@@ -180,6 +180,7 @@ def _check_upcoming_events():
             title = event.get("summary", "Event")
             time_str = event_dt.strftime("%I:%M %p").lstrip("0")
             _speak_func and _speak_func(f"{title} in about an hour, at {time_str}.")
+            _push_calendar_notification(title, f"In about an hour, at {time_str}.")
 
         elif 10 <= mins_until <= 20 and "15min" not in announced:
             announced.add("15min")
@@ -190,6 +191,18 @@ def _check_upcoming_events():
             if has_link:
                 msg += " Link is ready."
             _speak_func and _speak_func(msg)
+            _push_calendar_notification(title, msg)
+
+
+def _push_calendar_notification(title: str, body: str):
+    # Calendar reminders used to be voice-only — nothing queryable was ever
+    # left behind, so /notifications/history (and the unified feed) never
+    # showed them. Now also recorded like every other notification source.
+    try:
+        from modules.notification_system import push
+        push(title, category="alerts", body=body, source="calendar")
+    except Exception:
+        pass
 
 
 # ── Check 3: Weather vs outdoor events ────────────────────────
@@ -274,6 +287,8 @@ _last_pattern_offer_ts: float = 0.0
 
 def _check_pattern_suggestion():
     global _last_pattern_offer_ts
+    if not _get_setting("pattern_automation_suggestions_enabled", True):
+        return
     if time.time() - _last_pattern_offer_ts < 3600:  # offer at most once per hour
         return
     try:

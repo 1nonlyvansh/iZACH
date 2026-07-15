@@ -44,6 +44,7 @@ class IZACHWebSocket(private val api: IZACHApi) {
     var onDndStatus: ((DndStatus) -> Unit)? = null
     var onBusyStatus: ((active: Boolean, reason: String) -> Unit)? = null
     var onReminder:   ((title: String, body: String) -> Unit)?     = null
+    var onBrowserHandoff: ((url: String, title: String) -> Unit)? = null
 
     private fun scheduleReconnect() {
         if (reconnectScheduled || !shouldReconnect) return
@@ -64,7 +65,24 @@ class IZACHWebSocket(private val api: IZACHApi) {
             override fun onOpen(ws: WebSocket, response: Response) {
                 isConnected = true
                 Log.d(TAG, "Connected")
-                ws.send("""{"type":"client_hello","name":"android_device","device_name":"${Build.MODEL}"}""")
+                // The WS port has no auth of its own, so the backend only
+                // trusts this hello (and flips the phone-connected indicator)
+                // if it proves possession of the pairing secret, the same way
+                // every signed HTTP request does — otherwise any device on
+                // the LAN could claim to be "android_device" and show as
+                // connected without ever being paired.
+                val secret = api.pairingSecret()
+                val hello = if (secret.isBlank()) {
+                    """{"type":"client_hello","name":"android_device","device_name":"${Build.MODEL}"}"""
+                } else {
+                    val ts = (System.currentTimeMillis() / 1000).toString()
+                    val message = "ws_hello|$ts".toByteArray()
+                    val mac = javax.crypto.Mac.getInstance("HmacSHA256")
+                    mac.init(javax.crypto.spec.SecretKeySpec(secret.toByteArray(), "HmacSHA256"))
+                    val sig = mac.doFinal(message).joinToString("") { "%02x".format(it) }
+                    """{"type":"client_hello","name":"android_device","device_name":"${Build.MODEL}","ts":"$ts","sig":"$sig"}"""
+                }
+                ws.send(hello)
                 onConnected?.invoke()
             }
 
@@ -203,6 +221,11 @@ class IZACHWebSocket(private val api: IZACHApi) {
                 val size = payload.get("size")?.asLong ?: 0L
                 val speedStr = payload.get("speed_str")?.asString ?: ""
                 onDownloadEvent?.invoke(event, filename, size, speedStr)
+            }
+            "browser_handoff" -> {
+                val url = payload.get("url")?.asString ?: return
+                val title = payload.get("title")?.asString ?: url
+                onBrowserHandoff?.invoke(url, title)
             }
         }
     }

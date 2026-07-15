@@ -13,6 +13,27 @@ app.use(express.json());
 let isReady = false;
 let activeClient = null;
 
+// Gates outgoing sends until WhatsApp Web's internal chat/contact store has
+// finished syncing after 'ready' — sending too early is a known trigger for
+// whatsapp-web.js's "No LID for user" error (WhatsApp's identity-migration
+// bug, see github.com/pedroslopez/whatsapp-web.js issues #3834/#5750/#3985).
+// This can't fully eliminate that upstream bug — it still surfaces
+// intermittently even in warmed-up sessions — but it removes the "bridge
+// just started, fired a send immediately" case entirely.
+let sendReady = false;
+function _waitUntilSendReady(maxMs = 10000) {
+    return new Promise((resolve) => {
+        if (sendReady) return resolve(true);
+        const start = Date.now();
+        const iv = setInterval(() => {
+            if (sendReady || Date.now() - start > maxMs) {
+                clearInterval(iv);
+                resolve(sendReady);
+            }
+        }, 250);
+    });
+}
+
 function createClient() {
     const client = new Client({
         authStrategy: new LocalAuth(),
@@ -37,12 +58,14 @@ function createClient() {
         notifyIZACH('/whatsapp/status', { status: 'connected' });
         setTimeout(() => {
             acceptMessages = true;
+            sendReady = true;
             console.log('[BRIDGE] Now accepting new messages');
         }, 8000);
     });
 
     client.on('disconnected', (reason) => {
         isReady = false;
+        sendReady = false;
         console.log(`[WHATSAPP] Disconnected: ${reason}. Restarting...`);
         notifyIZACH('/whatsapp/status', { status: 'disconnected' });
         setTimeout(() => {
@@ -143,6 +166,7 @@ app.post('/send-message', async (req, res) => {
     // Normalize number to WA format: strip non-digits, ensure @c.us suffix
     number = number.toString().replace(/[^0-9]/g, '');
     if (!number.endsWith('@c.us')) number = number + '@c.us';
+    await _waitUntilSendReady();
     try {
         await activeClient.sendMessage(number, text);
         res.json({ status: 'sent' });
@@ -156,6 +180,7 @@ app.post('/send-message', async (req, res) => {
 // Send voice note endpoint
 app.post('/send-voice', async (req, res) => {
     const { number, audio_path } = req.body;
+    await _waitUntilSendReady();
     try {
         const resolved = path.resolve(audio_path);
         const allowed = path.resolve(__dirname);

@@ -236,7 +236,7 @@ def offer_next_pattern() -> dict | None:
 
 
 def confirm_suggestion(pattern_id: str = None) -> bool:
-    """User said yes. Save as confirmed routine."""
+    """User said yes. Create a real automation."""
     global _pending_suggestion
     pid = pattern_id or (_pending_suggestion or {}).get("id")
     if not pid:
@@ -247,7 +247,7 @@ def confirm_suggestion(pattern_id: str = None) -> bool:
     for p in patterns:
         if p["id"] == pid:
             p["status"] = "confirmed"
-            _save_routine(p)
+            _create_automation(p)
             found = True
             break
 
@@ -286,6 +286,31 @@ def reject_suggestion(pattern_id: str = None) -> bool:
     _pending_suggestion = None
     logger.info(f"[PatternLearner] Pattern rejected: {pid}")
     return True
+
+
+def _create_automation(pattern: dict):
+    """Turn a confirmed pattern into a real smart-memory automation — visible
+    in the existing Automations UI (Android's AutomationsActivity today) and
+    fired by the shared automation_scheduler/APScheduler, instead of the old
+    pattern-learner-only routines.json/_routine_runner mechanism below (which
+    no other part of the app could see or manage)."""
+    try:
+        from modules import smart_memory
+        hour = int(pattern.get("hour_bucket", 0))
+        dow = "6,0" if pattern.get("day_type") == "weekend" else "1-5"
+        cron = f"0 {hour} * * {dow}"
+        cmd = pattern["example_cmd"]
+        smart_memory.add_smart_memory(
+            "automation", cmd,
+            raw_input=f"(learned pattern — {pattern.get('count', 0)} occurrences)",
+            auto_schedule={"cron": cron, "action": cmd, "job_id": None},
+        )
+    except Exception as e:
+        logger.error(f"[PatternLearner] Failed to create automation for {pattern.get('id')}: {e}")
+        # Don't lose the user's "yes" if smart_memory integration breaks —
+        # fall back to the old private mechanism, which still works
+        # (_routine_runner is always started alongside analysis in start()).
+        _save_routine(pattern)
 
 
 def _save_routine(pattern: dict):

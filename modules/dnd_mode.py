@@ -157,8 +157,9 @@ def turn_on(reason: str = "manual"):
     if _speak_fn and reason == "manual":
         _speak_fn("Do Not Disturb mode activated. Mic paused. Alerts will be held silently.")
     # Windows toast when auto-activated by meeting detection
-    if reason in ("zoom", "teams", "meet", "zoom_meeting", "teams_meeting", "google_meet"):
-        _meeting_name = {"zoom": "Zoom", "teams": "Microsoft Teams", "meet": "Google Meet"}.get(reason, reason.title())
+    if reason in ("zoom", "teams", "meet", "zoom_meeting", "teams_meeting", "google_meet", "calendar"):
+        _meeting_name = {"zoom": "Zoom", "teams": "Microsoft Teams", "meet": "Google Meet",
+                          "calendar": "Calendar"}.get(reason, reason.title())
         _notify_meeting_detected(_meeting_name)
 
 
@@ -294,6 +295,16 @@ def add_to_queue(item: dict):
             _broadcast_fn({"type": "dnd_alert", **item, "is_priority": is_priority})
         except Exception:
             pass
+    try:
+        from modules.fcm_push import send_push
+        who = item.get("from", "Someone")
+        send_push(
+            f"{'⭐ ' if is_priority else ''}DND — {who}",
+            (item.get("text") or "New message").strip()[:120],
+            category="dnd_alert",
+        )
+    except Exception:
+        pass
     logger.info(f"[DND] Queued alert: {item.get('type')} from {item.get('from','?')}{' [PRIORITY]' if is_priority else ''}{' [ESCALATED]' if escalate else ''}")
 
 
@@ -452,6 +463,16 @@ def _meeting_detector_loop():
             logger.debug(f"[DND] Meeting check error: {e}")
 
 
+# Reasons this detector loop itself is allowed to auto-disable. "calendar"
+# (modules/calendar_dnd.py) is deliberately excluded — this loop only knows
+# whether a video-call app process is running, so if it also auto-off'd a
+# calendar-driven session (e.g. an in-person meeting with no Zoom/Teams/Meet
+# process), it would immediately kill it within one poll interval since no
+# such process was ever running to begin with. Only calendar_dnd.py's own
+# poll (which tracks the actual event end time) may end a "calendar" session.
+_APP_DETECTED_REASONS = {"meet", "zoom", "teams", "zoom_meeting", "teams_meeting", "google_meet"}
+
+
 def _check_meetings():
     try:
         import psutil
@@ -462,7 +483,7 @@ def _check_meetings():
 
     with _lock:
         currently_active = _active
-        is_auto          = _auto_triggered
+        current_reason   = _reason
 
     if in_meeting and not currently_active:
         logger.info(f"[DND] Meeting detected ({detected_reason}) — auto-enabling DND.")
@@ -473,7 +494,7 @@ def _check_meetings():
             label = {"meet": "Google Meet", "zoom": "Zoom", "teams": "Teams"}.get(detected_reason, detected_reason)
             _speak_fn(f"{label} meeting detected. Enabling Do Not Disturb mode.")
 
-    elif not in_meeting and currently_active and is_auto:
+    elif not in_meeting and currently_active and current_reason in _APP_DETECTED_REASONS:
         logger.info("[DND] Meeting ended — auto-disabling DND.")
         turn_off()
         if _speak_fn:

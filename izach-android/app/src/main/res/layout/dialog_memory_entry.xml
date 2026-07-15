@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="20dp">
+
+    <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:text="What" android:textColor="#FF3a6070"
+        android:textSize="11sp" android:fontFamily="monospace"
+        android:layout_marginBottom="6dp" />
+
+    <EditText android:id="@+id/etKey"
+        android:layout_width="match_parent" android:layout_height="48dp"
+        android:background="@drawable/bg_input"
+        android:hint="e.g. favorite color"
+        android:textSize="14sp" android:fontFamily="monospace"
+        android:paddingHorizontal="12dp"
+        android:inputType="text"
+        android:layout_marginBottom="16dp" />
+
+    <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:text="Value" android:textColor="#FF3a6070"
+        android:textSize="11sp" android:fontFamily="monospace"
+        android:layout_marginBottom="6dp" />
+
+    <EditText android:id="@+id/etValue"
+        android:layout_width="match_parent" android:layout_height="48dp"
+        android:background="@drawable/bg_input"
+        android:hint="e.g. blue"
+        android:textSize="14sp" android:fontFamily="monospace"
+        android:paddingHorizontal="12dp"
+        android:inputType="text" />
+
+</LinearLayout>

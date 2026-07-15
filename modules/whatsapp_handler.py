@@ -82,7 +82,10 @@ def init_whatsapp(speak, chain, ai_func=None):
     )
 
     _load_contacts()
-    threading.Thread(target=lambda: app.run(host='0.0.0.0', port=5050, debug=False, use_reloader=False), daemon=True).start()
+    # threaded=True — without it, Werkzeug's dev server handles one request at a
+    # time, so any two concurrent callers (Cortex UI, the phone, N8N, Forge's
+    # own status/dashboard polling) can queue behind each other and stall.
+    threading.Thread(target=lambda: app.run(host='0.0.0.0', port=5050, debug=False, use_reloader=False, threaded=True), daemon=True).start()
     threading.Thread(target=_monitor_connection, daemon=True).start()
     print("[WHATSAPP] Handler Online on port 5050 — bridge lazy-loaded on first WA command.")
 
@@ -380,6 +383,11 @@ def incoming_message():
         })
     except Exception:
         pass
+    try:
+        from modules.notification_system import push as _notif_push
+        _notif_push(f"WhatsApp — {sender}", category="alerts", body=text[:120], source="whatsapp")
+    except Exception:
+        pass
 
     # extract calendar events from message (non-blocking)
     try:
@@ -515,8 +523,8 @@ def handle_whatsapp_command(cmd, speak):
 
     elif any(w in cmd for w in ["contact later", "reply later", "message them"]):
         reply = f"Hey! {_OWNER} saw your message and will get back to you soon."
-        _send_message(number, reply)
-        speak(f"Replied to {caller} saying you'll contact them later.")
+        ok, status = _send_message(number, reply)
+        speak(f"Replied to {caller} saying you'll contact them later." if ok else f"Couldn't send that to {caller} — {status}")
         _pending_call = None
 
     elif any(w in cmd for w in ["send voice", "voice note"]):
@@ -680,6 +688,11 @@ DEADLINE: Mathematics Assignment | 1 June"""
             })
         except Exception:
             pass
+        try:
+            from modules.notification_system import push as _notif_push
+            _notif_push(f"WhatsApp — {sender}", category="alerts", body=announcement, source="whatsapp")
+        except Exception:
+            pass
 
         # Extract deadline → event_extractor
         if "none" not in deadline_line.lower():
@@ -741,6 +754,12 @@ def incoming_media():
                 "text": f"📎 {sender} sent {'a video' if media_type == 'video' else 'a voice note'}.",
                 "ts": _t.strftime("%H:%M"),
             })
+        except Exception:
+            pass
+        try:
+            from modules.notification_system import push as _notif_push
+            label = "a video" if media_type == "video" else "a voice note"
+            _notif_push(f"WhatsApp — {sender}", category="alerts", body=f"Sent {label}.", source="whatsapp")
         except Exception:
             pass
         return jsonify({"status": "announced"})

@@ -2,6 +2,8 @@ import json
 import threading
 import asyncio
 import time as _time
+import hmac as _hmac
+import hashlib as _hashlib
 
 _clients = set()           # all connected WS clients
 _extension_clients = set() # only chrome extension clients
@@ -17,6 +19,35 @@ _ui_ready_callbacks: list = []
 def on_ui_connect(callback):
     """Register a callback fired once when first Electron/React client connects."""
     _ui_ready_callbacks.append(callback)
+
+def _verify_ws_hello_signature(data) -> bool:
+    """The WS accept path (port 5051) has no auth of its own — anything that
+    connects and sends {"type":"client_hello","name":"android_device"} used
+    to be trusted instantly, flipping the desktop's phone-connected indicator
+    to "connected" for ANY device on the LAN regardless of pairing. Requires
+    the same HMAC-over-secret proof the HTTP /command route already demands,
+    just over a fixed "ws_hello|<ts>" message instead of method|path|body."""
+    ts = data.get("ts")
+    sig = data.get("sig")
+    if not ts or not sig:
+        return False
+    try:
+        ts_int = int(ts)
+    except (TypeError, ValueError):
+        return False
+    if abs(_time.time() - ts_int) > 300:
+        return False
+    try:
+        from modules import ui_api as _uapi
+        secret = _uapi._get_or_create_pairing_secret()
+    except Exception:
+        return False
+    if not secret:
+        return False
+    message = f"ws_hello|{ts}".encode()
+    expected = _hmac.new(secret.encode(), message, _hashlib.sha256).hexdigest()
+    return _hmac.compare_digest(expected, sig)
+
 
 async def _send_state_snapshot(ws):
     try:
@@ -82,20 +113,27 @@ async def _handler(ws):
                         identified = True
                         print("[WS] Chrome extension connected.")
                     elif data.get("name") == "android_device":
-                        _android_clients.add(ws)
-                        identified = True
                         device_name = data.get("device_name", "Android")
-                        print(f"[WS] Android device connected: {device_name}")
-                        # Update phone status in ui_api
-                        try:
-                            from modules import ui_api as _uapi
-                            _uapi._phone_connected = True
-                            if device_name:
-                                _uapi._phone_device_name = device_name
-                        except Exception:
-                            pass
-                        # Broadcast phone_status: connected to cortex-ui (all non-android clients)
-                        _broadcast_to_non_android({"type": "phone_status", "connected": True, "device_name": device_name, "qr": None})
+                        if not _verify_ws_hello_signature(data):
+                            # Don't add to _android_clients (it would then also
+                            # receive every broadcast meant for the paired
+                            # phone — DND alerts, notifications, screenshots)
+                            # and don't flip the connected indicator.
+                            print(f"[WS] Rejected android_device hello (bad/missing pairing signature): {device_name}")
+                        else:
+                            _android_clients.add(ws)
+                            identified = True
+                            print(f"[WS] Android device connected: {device_name}")
+                            # Update phone status in ui_api
+                            try:
+                                from modules import ui_api as _uapi
+                                _uapi._phone_connected = True
+                                if device_name:
+                                    _uapi._phone_device_name = device_name
+                            except Exception:
+                                pass
+                            # Broadcast phone_status: connected to cortex-ui (all non-android clients)
+                            _broadcast_to_non_android({"type": "phone_status", "connected": True, "device_name": device_name, "qr": None})
 
                 elif data.get("type") == "fill_result":
                     filled = data.get("filled", 0)

@@ -15,7 +15,7 @@
 
 ---
 
-[![Version](https://img.shields.io/badge/Version-v2.1.0-00e5ff?style=flat-square&labelColor=050d1a)](.)
+[![Version](https://img.shields.io/badge/Version-v2.2.0-00e5ff?style=flat-square&labelColor=050d1a)](.)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-00e5ff?style=flat-square&logo=python&logoColor=00e5ff&labelColor=050d1a)](https://python.org)
 [![React](https://img.shields.io/badge/React-18-00e5ff?style=flat-square&logo=react&logoColor=00e5ff&labelColor=050d1a)](https://react.dev)
 [![Electron](https://img.shields.io/badge/Electron-Desktop-00e5ff?style=flat-square&logo=electron&logoColor=00e5ff&labelColor=050d1a)](https://electronjs.org)
@@ -33,7 +33,79 @@
 
 iZACH is a local-first, voice-controlled AI assistant that runs natively on Windows. It doesn't just answer questions — it **acts**. Control Spotify, automate WhatsApp, execute PowerShell, manage files, browse the web, read your calendar, watch your camera, and learn your behavioral patterns — all through natural speech or a neural-themed desktop UI.
 
-**v2.1.0** ships a full Skills system (on-demand AI agents with `#id` activation), a modular widget UI with an API usage monitor, 5 critical backend crash fixes, and a heavily upgraded Android app with PC audio streaming, DND inline reply, Quick Tiles, and App Shortcuts.
+**v2.2.0** ships a standalone multi-tab browser in Forge UI that shares live logins and saved passwords with Cortex UI, a custom nickname you can trigger iZACH with, an email agent that watches for OTPs/replies/order shipments, calendar-aware auto-DND, pattern-to-automation suggestions that create real automations, screen-aware assistance, a unified priority-ranked notification feed, and a round of phone-pairing security hardening. Full technical log: [CHANGELOG.md](CHANGELOG.md).
+
+---
+
+## What's New in v2.2.0
+
+### Forge UI Browser — Full Rebuild
+
+| Feature | Detail |
+|---|---|
+| **Standalone window** | Forge's browser is now its own OS window (multi-tab, up to 6 tabs), not an overlay inside the main Forge window |
+| **Shared login sessions** | Forge's browser and Cortex UI's browser share the exact same live cookies/sessions — log in once, stay logged in on both |
+| **Shared password vault** | Same encrypted `browser_passwords.json` vault as Cortex, same Windows Hello gate before any password is revealed/autofilled |
+| **Bookmarks, history, find-in-page** | Full parity with Cortex's browser — star/folder bookmarks, searchable history, in-page search, zoom, DevTools |
+| **Phone Tabs / Send to Phone** | Continue a tab from your phone, or push the current page to your phone, from Forge same as Cortex |
+| **Tab cap (6)** | Guardrail against unbounded RAM growth — each tab is a full browser engine instance under the hood |
+
+### Nickname
+
+| Feature | Detail |
+|---|---|
+| **Custom trigger word** | Set a nickname (e.g. "Neo") in Settings — works as an additional wake word/trigger alongside "iZACH", doesn't replace it |
+| **Self-aware** | iZACH knows its own nickname — ask "what's your nickname?" and it'll answer correctly |
+
+### Email Agent
+
+| Feature | Detail |
+|---|---|
+| **Off by default** | Nothing reads your inbox until you connect Gmail and turn it on in Settings |
+| **OTP watch** | Detects one-time codes in incoming mail and reads them out instantly — no waiting on a polling cycle |
+| **Reply watch** | Flags when someone replies to an email thread |
+| **Keyword/sender watch** | Configurable watchlist (e.g. "Dell Support Assist", "Amazon Delivery") |
+| **Order tracking** | Extracts carrier, description, and delivery date from shipping emails; tracks the same order across "shipped → out for delivery → delivered" updates |
+| **Own Gmail OAuth** | Separate, read-only Gmail connection from Google Calendar — connecting one never forces you to re-consent the other |
+
+### Calendar-Driven Auto-DND
+
+Automatically enables Do Not Disturb a configurable number of minutes before a calendar meeting starts, and disables it when the meeting ends — without clobbering a manually-enabled DND session or an app-detected Zoom/Teams/Meet session.
+
+### Pattern-to-Automation Suggestions
+
+iZACH already noticed recurring habits ("you play the coding playlist every weekday around 9") and asked if you wanted it automated — confirming "yes" now creates a **real** automation visible in the Android Automations screen, instead of a private routine only iZACH itself could see.
+
+### Screen-Aware Assistance
+
+| Feature | Detail |
+|---|---|
+| **Off by default** | Opt-in only, with a per-app exclusion list (password managers excluded by default) |
+| **Stack-trace detection** | Notices an error/exception on your active window and offers to help — pure regex match, no AI ever sees your screen content |
+| **Idle-tab nudge** | Notices a browser tab that's been sitting untouched for 20+ minutes and offers to close it |
+
+### Unified Notification Feed
+
+WhatsApp, Calendar reminders, system alerts, and email agent notifications are now aggregated into one feed, ranked by priority (VIP contacts + urgency) instead of scattered across separate channels with no shared history.
+
+### Security Hardening
+
+| Fix | Detail |
+|---|---|
+| **Phone pairing over WebSocket** | The WebSocket port used to trust *any* device on the LAN claiming to be the Android app — now requires the same signed proof every HTTP request already needed |
+| **Pairing-secret file safety** | A transient disk read error used to silently regenerate the pairing secret, invalidating every paired device — now only a genuinely missing file creates a new one |
+| **Android offline queue** | A rejected pairing secret (401) was queued for endless retry as if the PC were merely offline — now surfaces "not paired, re-scan the QR" instead |
+| **Android status accuracy** | The in-app "ONLINE" indicator could show connected even when commands would 401 — now verifies real pairing, not just reachability |
+
+### Also Fixed
+
+- **RAG memory bleeding into greetings** — a plain "hi" could echo back an unrelated stored reply from a past conversation; greetings now skip memory retrieval
+- **"Play X on YouTube" reusing the last video** — now always opens a fresh tab and searches correctly
+- **Browser-window playback handoff** — resuming playback in a new external window now carries over the current timestamp/pause state
+- **Android silent-failure bugs** — `pcPower`/`alliedPower`/`alliedVolume`/`alliedBrightness`/`alliedScreenshot` no longer report success on an HTTP error
+- **Android persistent status notification** — ongoing notification showing PC connection + DND/Busy/Background mode state
+- **Android file-transfer progress** — upload notifications now show live percentage instead of just start/done
+- Missing dependencies (`apscheduler`, `google-auth-oauthlib`, `tkwebview2`/`pywebview`) pinned in `requirements.txt` that the app silently relied on being installed
 
 ---
 
@@ -159,20 +231,30 @@ iZACH is a local-first, voice-controlled AI assistant that runs natively on Wind
 - Multi-skill: `#skill-a & #skill-b` chains two agents
 - All projects auto-saved to dated folders
 
+**✉️ Email Agent (v2.2.0)**
+- Off by default — connect Gmail (read-only) to enable
+- Instant OTP read-out on arrival
+- Reply + configurable keyword/sender watch
+- Order/shipment tracking with carrier + ETA extraction
+- Separate OAuth from Google Calendar
+
 </td>
 <td width="50%" valign="top">
 
 **🧠 Intelligence**
 - Behavioral pattern learner (Phase 5)
-- Routine suggestions from usage history
+- Routine suggestions — confirming one now creates a **real** automation (v2.2.0)
+- Screen-aware assistance — stack-trace + idle-tab detection, opt-in (v2.2.0)
 - Short + long-term context memory
 - MongoDB brain (falls back to local JSON)
 - Proactive task suggestions
 - Calendar event extraction from speech
+- Calendar-driven auto-DND (v2.2.0)
 - Curiosity engine — builds personal profile during idle moments
 - System log analyzer — Gemini analysis of 10-day Windows event logs
 - Obsidian brain graph — `[[wikilinks]]` between all memory nodes
 - Relationship memory — people profiles linked to WhatsApp contacts
+- Unified, priority-ranked notification feed across WhatsApp/Calendar/system/email (v2.2.0)
 
 **📱 Connectivity**
 - WhatsApp bridge — lazy-started on first WA command
@@ -182,6 +264,7 @@ iZACH is a local-first, voice-controlled AI assistant that runs natively on Wind
 - Ngrok tunnel for remote access
 - Auto-draft WhatsApp reply with voice approval flow
 - Samsung SmartThings smart home control
+- Custom nickname — extra voice trigger alongside "iZACH" (v2.2.0)
 
 **🔐 Security**
 - Face authentication — lazy-loaded on first face command
@@ -263,6 +346,9 @@ The **Cortex UI** (`cortex-ui.html`) is iZACH's primary desktop interface — a 
 - **DND Inline Reply** — reply to WhatsApp DND alerts from notification tray *(v2.1.0)*
 - **5 Quick Settings Tiles** — DND, Busy, Lock PC, Mute PC toggles in notification shade *(v2.1.0)*
 - **App Shortcuts** — long-press icon for Lock PC / Screenshot / Voice Command *(v2.1.0)*
+- **Persistent status notification** — ongoing notification showing PC connection + DND/Busy/Background mode *(v2.2.0)*
+- **File-transfer progress** — upload notifications show live percentage, not just start/done *(v2.2.0)*
+- **Accurate pairing status** — "ONLINE" now reflects real signed-pairing state, not just reachability *(v2.2.0)*
 
 </td>
 <td width="50%" valign="top">
@@ -664,11 +750,13 @@ iZACH/
 ├── Agents/
 │   ├── memory_agent.py           # Voice → memory intent handler
 │   └── reminder_agent.py
-├── izach-ui/                     # Electron + React desktop app (Forge UI)
+├── izach-ui/                     # Electron + React desktop app (Cortex UI)
 │   └── src/
 │       ├── App.jsx
 │       ├── components/
 │       └── hooks/useIZACH.js
+├── forge_ui.py                   # Legacy Tkinter desktop UI (Forge) — standalone
+│                                  #   multi-tab browser w/ shared Cortex sessions (v2.2.0)
 ├── izach-android/                # Android companion app (Kotlin)
 │   └── app/src/main/java/com/izach/android/
 │       ├── MainActivity.kt
@@ -707,7 +795,8 @@ iZACH/
 | Speech | `SpeechRecognition` + `edge-tts` (Microsoft Neural voices) |
 | Backend | Python 3.12 · Flask · WebSockets |
 | Primary UI | Single-file HTML/JS — `cortex-ui.html` (Electron) |
-| Forge UI | React 18 · Electron · Vite · Tailwind |
+| Cortex UI | React 18 · Electron · Vite · Tailwind (`izach-ui/`) |
+| Forge UI | Python · Tkinter — legacy desktop UI, standalone WebView2 browser (v2.2.0) |
 | Browser Automation | Playwright (Chromium) |
 | Vision | OpenCV · face_recognition (dlib) · Gemini Vision |
 | System Automation | PyAutoGUI · pywin32 · psutil |

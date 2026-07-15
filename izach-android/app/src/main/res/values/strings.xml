@@ -25,4 +25,52 @@
     <string name="tile_busy">iZACH Busy</string>
     <string name="tile_lock_pc">Lock PC</string>
     <string name="tile_mute_pc">Mute PC</string>
+
+    <!-- App Actions (Google Assistant) feature synonyms — see res/xml/actions.xml -->
+    <string-array name="featureCalendarSynonyms">
+        <item>Calendar</item>
+        <item>reminders</item>
+        <item>events</item>
+    </string-array>
+    <string-array name="featureBookmarksSynonyms">
+        <item>Bookmarks</item>
+        <item>saved links</item>
+    </string-array>
+    <string-array name="featureMemorySynonyms">
+        <item>Memory</item>
+        <item>notes</item>
+    </string-array>
+    <string-array name="featureAutomationsSynonyms">
+        <item>Automations</item>
+        <item>routines</item>
+        <item>scheduler</item>
+    </string-array>
+    <string-array name="featureRecordingsSynonyms">
+        <item>Recordings</item>
+        <item>macros</item>
+    </string-array>
+    <string-array name="featureWhatsAppSynonyms">
+        <item>WhatsApp</item>
+        <item>messages</item>
+        <item>chats</item>
+    </string-array>
+    <string-array name="featureNewsSynonyms">
+        <item>News</item>
+        <item>market</item>
+        <item>headlines</item>
+    </string-array>
+    <string-array name="featureDashboardSynonyms">
+        <item>Dashboard</item>
+        <item>system status</item>
+    </string-array>
+    <string-array name="featureSearchSynonyms">
+        <item>Search</item>
+    </string-array>
+    <string-array name="featureSettingsSynonyms">
+        <item>Settings</item>
+    </string-array>
+    <string-array name="featureBrowserSynonyms">
+        <item>Browser</item>
+        <item>web browser</item>
+    </string-array>
 </resources>

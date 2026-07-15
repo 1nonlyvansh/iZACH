@@ -8,6 +8,9 @@ import android.os.Environment
 import android.view.View
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
 import com.izach.android.databinding.ActivityScreenshotBinding
 import androidx.lifecycle.lifecycleScope
 import com.izach.android.network.IZACHApi
@@ -23,8 +26,17 @@ class ScreenshotViewerActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        WindowCompat.setDecorFitsSystemWindows(window, false)
         binding = ActivityScreenshotBinding.inflate(layoutInflater)
         setContentView(binding.root)
+
+        val dp8 = (8 * resources.displayMetrics.density + 0.5f).toInt()
+        ViewCompat.setOnApplyWindowInsetsListener(binding.root) { _, insets ->
+            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            binding.ssTopBar.setPadding(dp8, bars.top, dp8, 0)
+            binding.root.setPadding(0, 0, 0, bars.bottom)
+            insets
+        }
 
         api = IZACHApi(this)
         filename = intent.getStringExtra("filename") ?: ""

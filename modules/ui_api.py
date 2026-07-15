@@ -43,6 +43,111 @@ os.makedirs(SHARED_DIR, exist_ok=True)
 
 ui_bp = Blueprint("ui_api", __name__)
 
+# ─────────────────────────────────────────────────────────────
+# Pairing-secret + HMAC request auth
+#
+# Every route on this blueprint used to be reachable by anything on the
+# LAN with no auth at all. A per-install secret is generated once, handed
+# to the phone inside the /connect/qr payload (and shown for manual copy
+# in the desktop UI), and every subsequent request must be signed with it.
+# ─────────────────────────────────────────────────────────────
+import hmac as _hmac
+import hashlib as _hashlib
+import secrets as _secrets
+
+_PAIRING_SECRET_FILE = os.path.join(os.path.dirname(os.path.dirname(__file__)), "pairing_secret.json")
+_HMAC_MAX_SKEW_SECONDS = 300  # reject requests whose timestamp is off by more than this (replay protection)
+
+# Routes reachable with no signature at all:
+#  - /connect/qr: the phone doesn't have the secret until it scans this
+#  - /status: a harmless health/reachability check, used before pairing too
+#  - /browser/webauthn-gate: opened by Electron's own main process on
+#    localhost for the WebAuthn ceremony, never called by the phone
+#  - /ai/respond, /notes/save, /whatsapp/send: pre-existing n8n webhook
+#    routes already gated by their own shared token (_check_n8n_token) —
+#    n8n has no way to obtain the phone's pairing secret
+_HMAC_EXEMPT_PATHS = {
+    "/connect/qr", "/status", "/browser/webauthn-gate",
+    "/ai/respond", "/notes/save", "/whatsapp/send",
+}
+
+
+_pairing_secret_cache = None  # loaded once — every /command etc. hit this per-request otherwise
+
+
+def _get_or_create_pairing_secret():
+    global _pairing_secret_cache
+    if _pairing_secret_cache:
+        return _pairing_secret_cache
+    try:
+        with open(_PAIRING_SECRET_FILE, encoding="utf-8") as f:
+            import json as _j
+            secret = _j.load(f).get("secret")
+            if secret:
+                _pairing_secret_cache = secret
+                return secret
+    except FileNotFoundError:
+        pass
+    except Exception as e:
+        # The file exists but couldn't be read/parsed — do NOT silently mint
+        # a new secret over it. That used to instantly invalidate every
+        # already-paired phone/device on what could be a one-off transient
+        # glitch (a momentary lock, a race with another process). Only a
+        # genuinely missing file gets a fresh secret; anything else fails
+        # closed (every signed request 401s until this is fixed by hand)
+        # rather than silently re-pairing everyone.
+        print(f"[UI API] WARNING: pairing_secret.json exists but couldn't be read ({e}). "
+              f"Refusing to overwrite it — fix/restore the file, or delete it to re-pair from scratch.")
+        return None
+    secret = _secrets.token_hex(32)
+    try:
+        import json as _j
+        with open(_PAIRING_SECRET_FILE, "w", encoding="utf-8") as f:
+            _j.dump({"secret": secret}, f)
+    except Exception:
+        pass
+    _pairing_secret_cache = secret
+    return secret
+
+
+def _verify_request_signature() -> bool:
+    sig = request.headers.get("X-iZACH-Signature", "")
+    ts = request.headers.get("X-iZACH-Timestamp", "")
+    if not sig or not ts:
+        return False
+    try:
+        ts_int = int(ts)
+    except ValueError:
+        return False
+    if abs(time.time() - ts_int) > _HMAC_MAX_SKEW_SECONDS:
+        return False
+    secret = _get_or_create_pairing_secret()
+    if not secret:
+        return False
+    body = request.get_data() or b""
+    message = f"{request.method}|{request.path}|{ts}".encode() + b"|" + body
+    expected = _hmac.new(secret.encode(), message, _hashlib.sha256).hexdigest()
+    return _hmac.compare_digest(expected, sig)
+
+
+def _is_localhost_request() -> bool:
+    # The desktop's own Electron UI (cortex-ui.html) talks to this same API
+    # over http://localhost:5050 — hundreds of pre-existing calls that were
+    # never going to carry a signature. Flask binds 0.0.0.0 so it can also
+    # reach the phone over the LAN, but a loopback connection arrives with a
+    # distinct remote_addr from a real network client, so this is a reliable
+    # way to trust "this machine calling itself" without weakening the check
+    # for anything actually arriving over the network.
+    return request.remote_addr in ("127.0.0.1", "::1")
+
+
+@ui_bp.before_request
+def _require_pairing_signature():
+    if request.path in _HMAC_EXEMPT_PATHS or _is_localhost_request():
+        return None
+    if not _verify_request_signature():
+        return jsonify({"ok": False, "error": "Not paired — scan the QR code in Settings to pair this device"}), 401
+
 
 def _friendly_error(exc: Exception) -> str:
     """
@@ -435,6 +540,23 @@ def ui_status():
         except Exception:
             pass
 
+        pc_name = ""
+        try:
+            import socket as _socket
+            pc_name = _socket.gethostname()
+        except Exception:
+            pass
+
+        battery_pct = None
+        battery_plugged = None
+        try:
+            batt = psutil.sensors_battery()
+            if batt is not None:
+                battery_pct = round(batt.percent, 0)
+                battery_plugged = bool(batt.power_plugged)
+        except Exception:
+            pass
+
         return jsonify({
             "ok":              True,
             "cpu":             round(cpu, 1),
@@ -447,6 +569,9 @@ def ui_status():
             "ts":              time.strftime("%H:%M:%S"),
             "whatsapp":        wa_online,
             "mma":             mma_online,
+            "pc_name":         pc_name,
+            "battery_pct":     battery_pct,
+            "battery_plugged": battery_plugged,
         })
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
@@ -504,11 +629,65 @@ def spotify_volume():
 # Returns current track info from SpotifyController
 # ─────────────────────────────────────────────────────────────
 
+# Circuit breaker — the UI polls /spotify every 5s. If Spotify keeps
+# failing (e.g. account lacks Premium, so current_playback() 403s every
+# time), stop hitting the API and let failures cool down instead of
+# hammering Spotify + spamming logs every 5 seconds forever.
+_spotify_fail_count         = 0
+_spotify_circuit_open_until = 0.0
+_SPOTIFY_FAIL_THRESHOLD = 3      # consecutive failures before backing off
+_SPOTIFY_BACKOFF_BASE   = 15     # seconds, doubles per failure past threshold
+_SPOTIFY_BACKOFF_MAX    = 300    # seconds cap
+
+# invalid_client means the configured Spotify app credentials themselves are
+# wrong (bad client ID/secret, or a redirect URI mismatch) — no amount of
+# retrying current_playback() will ever fix that. Without this, the circuit
+# breaker above just kept reopening every 300s forever, re-printing the same
+# unhelpful OAuth error indefinitely. Detect it once and go quiet for an hour
+# instead, with a message that actually says what to do.
+_SPOTIFY_PERMANENT_ERRORS = ("invalid_client", "invalid_grant", "unauthorized_client")
+_spotify_permanent_failure_logged_until = 0.0
+_SPOTIFY_PERMANENT_COOLDOWN = 3600  # seconds — re-check hourly instead of every 5 min
+
+
+def _spotify_is_permanent_error(err: str) -> bool:
+    return any(p in err for p in _SPOTIFY_PERMANENT_ERRORS)
+
+
+def _spotify_note_failure(err: str = "") -> float:
+    """Record a /spotify failure; returns backoff seconds if circuit just opened, else 0."""
+    global _spotify_fail_count, _spotify_circuit_open_until, _spotify_permanent_failure_logged_until
+    _spotify_fail_count += 1
+    if _spotify_fail_count < _SPOTIFY_FAIL_THRESHOLD:
+        return 0
+
+    if _spotify_is_permanent_error(err):
+        now = time.time()
+        _spotify_circuit_open_until = now + _SPOTIFY_PERMANENT_COOLDOWN
+        if now >= _spotify_permanent_failure_logged_until:
+            _spotify_permanent_failure_logged_until = now + _SPOTIFY_PERMANENT_COOLDOWN
+            return _SPOTIFY_PERMANENT_COOLDOWN  # signal caller to log once
+        return 0  # already logged this cooldown window — stay quiet
+
+    backoff = min(_SPOTIFY_BACKOFF_MAX, _SPOTIFY_BACKOFF_BASE * (2 ** (_spotify_fail_count - _SPOTIFY_FAIL_THRESHOLD)))
+    _spotify_circuit_open_until = time.time() + backoff
+    return backoff
+
+
 @ui_bp.route("/spotify", methods=["GET"])
 def ui_spotify():
+    global _spotify_fail_count
     try:
         if _spotify_api is None:
             return jsonify({"ok": False, "error": "Spotify not initialised"}), 503
+
+        now = time.time()
+        if now < _spotify_circuit_open_until:
+            return jsonify({
+                "ok": False,
+                "error": "Spotify unavailable — backing off after repeated failures",
+                "retry_after": int(_spotify_circuit_open_until - now),
+            }), 503
 
         # current_playback() can block indefinitely on slow network.
         # Run with 5 s timeout to prevent hanging a Flask worker thread.
@@ -518,10 +697,24 @@ def ui_spotify():
             try:
                 with _cf_sp.ThreadPoolExecutor(max_workers=1) as _spex:
                     pb = _spex.submit(_spotify_api.sp.current_playback).result(timeout=5)
+                _spotify_fail_count = 0
             except _cf_sp.TimeoutError:
+                backoff = _spotify_note_failure()
+                if backoff:
+                    print(f"[UI API] Spotify timing out repeatedly — backing off {backoff:.0f}s")
                 return jsonify({"ok": False, "error": "Spotify timeout"}), 504
             except Exception as _spe:
-                return jsonify({"ok": False, "error": str(_spe)}), 500
+                _spe_str = str(_spe)
+                backoff = _spotify_note_failure(_spe_str)
+                if backoff and _spotify_is_permanent_error(_spe_str):
+                    print(
+                        f"[UI API] Spotify auth is misconfigured ({_spe_str}) — this won't fix itself by "
+                        f"retrying. Check your Spotify client ID/secret/redirect URI in Settings. "
+                        f"Going quiet for {backoff/60:.0f} min."
+                    )
+                elif backoff:
+                    print(f"[UI API] Spotify failing repeatedly ({_spe_str}) — backing off {backoff:.0f}s")
+                return jsonify({"ok": False, "error": _spe_str}), 500
 
         if pb is None or not pb.get("is_playing"):
             return jsonify({
@@ -559,6 +752,34 @@ def ui_spotify():
         })
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
+
+
+# ─────────────────────────────────────────────────────────────
+# Spotify account connect / disconnect — one-click, from Settings.
+# GET  /spotify/auth/status   — connection state (poll while connecting)
+# POST /spotify/auth/connect  — opens browser, waits for authorization
+# POST /spotify/auth/disconnect — clears the connected account
+# ─────────────────────────────────────────────────────────────
+
+@ui_bp.route("/spotify/auth/status", methods=["GET"])
+def spotify_auth_status():
+    if _spotify_api is None:
+        return jsonify({"connected": False, "status": "idle", "error": "Spotify not initialised", "user": None})
+    return jsonify(_spotify_api.get_auth_status())
+
+
+@ui_bp.route("/spotify/auth/connect", methods=["POST"])
+def spotify_auth_connect():
+    if _spotify_api is None:
+        return jsonify({"ok": False, "error": "Spotify not initialised"}), 503
+    return jsonify(_spotify_api.start_reconnect())
+
+
+@ui_bp.route("/spotify/auth/disconnect", methods=["POST"])
+def spotify_auth_disconnect():
+    if _spotify_api is None:
+        return jsonify({"ok": False, "error": "Spotify not initialised"}), 503
+    return jsonify(_spotify_api.disconnect())
 
 
 # ─────────────────────────────────────────────────────────────
@@ -885,6 +1106,19 @@ def settings_post():
             "font_size",
             "battery_auto_switch", "lid_close_trigger",
             "push_to_talk",
+            "nickname",
+            # ── Calendar-driven auto-DND ──
+            "auto_dnd_before_meetings", "auto_dnd_lead_minutes",
+            # ── Proactive agent (Android's Settings screen writes both of
+            # these already; "proactive_enabled" was missing here, so the
+            # master proactive-agent toggle silently did nothing — fixed
+            # alongside adding the new pattern-suggestions-specific one) ──
+            "proactive_enabled", "pattern_automation_suggestions_enabled",
+            # ── Screen-aware assistance (off by default) ──
+            "screen_aware_enabled", "screen_aware_excluded_apps",
+            # ── Email agent (off by default) ──
+            "email_agent_enabled", "email_watch_otp", "email_watch_replies",
+            "email_watch_keywords", "email_track_orders",
         }
         for k, v in incoming.items():
             if k in allowed:
@@ -1647,10 +1881,11 @@ def custom_links_post():
         # Validate each entry
         cleaned = []
         for item in data:
-            title = (item.get("title") or "").strip()
-            url   = (item.get("url")   or "").strip()
+            title  = (item.get("title") or "").strip()
+            url    = (item.get("url")   or "").strip()
+            folder = (item.get("folder") or "General").strip() or "General"
             if title and url:
-                cleaned.append({"title": title, "url": url})
+                cleaned.append({"title": title, "url": url, "folder": folder})
         _write_custom_links(cleaned)
         return jsonify({"ok": True, "count": len(cleaned)})
     except Exception as e:
@@ -2188,6 +2423,24 @@ def phone_status_post():
     except Exception:
         pass
     return jsonify({"ok": True})
+
+
+@ui_bp.route("/phone/fcm-token", methods=["POST"])
+def phone_fcm_token():
+    """Android app calls this once it has an FCM token, so DND/reminder/
+    handoff alerts can still reach the phone via push when the WebSocket
+    connection is down. No-op storage-wise if Firebase isn't configured —
+    see modules/fcm_push.py."""
+    try:
+        data = request.get_json(silent=True) or {}
+        token = (data.get("token") or "").strip()
+        if not token:
+            return jsonify({"ok": False, "error": "token required"}), 400
+        from modules.fcm_push import save_token
+        save_token(token, data.get("device_name", ""))
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
 
 
 @ui_bp.route("/phone/qr", methods=["GET"])
@@ -3002,10 +3255,17 @@ def connect_qr():
     except Exception:
         lan_ip = "127.0.0.1"
 
-    tailscale_ip = _get_tailscale_ip()
+    # Only shell out to the `tailscale` binary when actually asked for it —
+    # this used to run unconditionally on every QR load (even the default
+    # mode=lan, which never uses the result), adding up to 3s of pure latency
+    # from the subprocess call before the QR would render.
+    tailscale_ip = _get_tailscale_ip() if mode == "tailscale" else None
     ip = tailscale_ip if (mode == "tailscale" and tailscale_ip) else lan_ip
+    secret = _get_or_create_pairing_secret()
+    if not secret:
+        return jsonify({"ok": False, "error": "Pairing secret unavailable — check the server log."}), 500
 
-    payload = _json2.dumps({"backend_url": f"http://{ip}:5050", "ws_host": ip})
+    payload = _json2.dumps({"backend_url": f"http://{ip}:5050", "ws_host": ip, "pairing_secret": secret})
     _qr_img = _qr.QRCode(version=1, box_size=8, border=3)
     _qr_img.add_data(payload)
     _qr_img.make(fit=True)
@@ -3014,12 +3274,13 @@ def connect_qr():
     img.save(buf, format="PNG")
     b64 = _b64.b64encode(buf.getvalue()).decode()
     return jsonify({
-        "ok":           True,
-        "qr_base64":    b64,
-        "backend_url":  f"http://{ip}:5050",
-        "ws_host":      ip,
-        "tailscale_ip": tailscale_ip,
-        "mode":         mode,
+        "ok":            True,
+        "qr_base64":     b64,
+        "backend_url":   f"http://{ip}:5050",
+        "ws_host":       ip,
+        "tailscale_ip":  tailscale_ip,
+        "mode":          mode,
+        "pairing_secret": secret,
     })
 
 
@@ -3032,6 +3293,19 @@ def notifications_history():
     try:
         from modules.notification_system import history
         return jsonify({"ok": True, "notifications": history()})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@ui_bp.route("/notifications/feed", methods=["GET"])
+def notifications_feed():
+    """Same entries as /notifications/history, but ranked by priority
+    (VIP sender + category weight) instead of plain insertion order —
+    unifies WhatsApp/Calendar/system/email into one prioritized feed."""
+    try:
+        from modules.notification_system import feed
+        limit = request.args.get("limit", 20, type=int)
+        return jsonify({"ok": True, "notifications": feed(limit=limit)})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
 
@@ -3353,6 +3627,31 @@ def shell_cancel():
 
 # ── WhatsApp Logout ───────────────────────────────────────────
 
+@ui_bp.route("/whatsapp/restart-bridge", methods=["POST"])
+def whatsapp_restart_bridge():
+    try:
+        import requests as _req
+        from modules.whatsapp_handler import ensure_bridge_running
+        from modules.ws_bridge import broadcast
+
+        try:
+            r = _req.post("http://localhost:3000/restart", timeout=8)
+            data = r.json()
+            if data.get("status") in {"restarting", "ok"}:
+                broadcast({"type": "whatsapp_status", "connected": False, "pending_qr": True})
+                broadcast({"type": "whatsapp_qr", "qr": "", "pending": True})
+                return jsonify({"ok": True, "status": "restarting"})
+        except Exception:
+            pass
+
+        ensure_bridge_running()
+        broadcast({"type": "whatsapp_status", "connected": False, "pending_qr": True})
+        broadcast({"type": "whatsapp_qr", "qr": "", "pending": True})
+        return jsonify({"ok": True, "status": "starting"})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
 @ui_bp.route("/whatsapp/logout", methods=["POST"])
 def whatsapp_logout():
     try:
@@ -3386,6 +3685,39 @@ def whatsapp_logout():
         return jsonify({"ok": False, "error": data.get("message", "Logout failed")})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
+
+
+# whatsapp_bridge.js (the Node process on port 3000) already exposes
+# /messages/history and /messages/chat directly, but that port isn't reachable
+# from the phone — only the Python backend (port 5050) is. These just forward
+# the same two endpoints so the Android app can browse recent WhatsApp
+# activity, not just get DND quick-reply notifications.
+@ui_bp.route("/whatsapp/messages/history", methods=["GET"])
+def whatsapp_messages_history():
+    try:
+        import requests as _req
+        hours = request.args.get("hours", "24")
+        r = _req.get("http://localhost:3000/messages/history", params={"hours": hours}, timeout=15)
+        return jsonify(r.json()), r.status_code
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e), "messages": []}), 500
+
+
+@ui_bp.route("/whatsapp/messages/chat", methods=["GET"])
+def whatsapp_messages_chat():
+    try:
+        import requests as _req
+        number = request.args.get("number", "")
+        limit = request.args.get("limit", "20")
+        if not number:
+            return jsonify({"ok": False, "error": "number required", "messages": []}), 400
+        r = _req.get(
+            "http://localhost:3000/messages/chat",
+            params={"number": number, "limit": limit}, timeout=15,
+        )
+        return jsonify(r.json()), r.status_code
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e), "messages": []}), 500
 
 
 # ── Relationships ─────────────────────────────────────────────
@@ -4036,6 +4368,92 @@ def fitness_disconnect():
         return jsonify(disconnect())
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+# ── Google Calendar connect / disconnect — one-click, from Settings ──────────
+@ui_bp.route("/calendar/auth/status", methods=["GET"])
+def calendar_auth_status():
+    try:
+        from modules.calendar_agent import get_auth_status
+        return jsonify(get_auth_status())
+    except Exception as e:
+        return jsonify({"connected": False, "status": "idle", "error": str(e), "user": None}), 500
+
+
+@ui_bp.route("/calendar/auth/connect", methods=["POST"])
+def calendar_auth_connect():
+    try:
+        from modules.calendar_agent import start_reconnect
+        return jsonify(start_reconnect())
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@ui_bp.route("/calendar/auth/disconnect", methods=["POST"])
+def calendar_auth_disconnect():
+    try:
+        from modules.calendar_agent import disconnect
+        return jsonify(disconnect())
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+# ── Email agent (Gmail OAuth is separate from Calendar's — own token file,
+# own consent, so enabling one never forces re-consent on the other) ───────
+
+@ui_bp.route("/email/auth/status", methods=["GET"])
+def email_auth_status():
+    try:
+        from modules.email_agent import get_auth_status
+        return jsonify(get_auth_status())
+    except Exception as e:
+        return jsonify({"connected": False, "status": "idle", "error": str(e), "user": None}), 500
+
+
+@ui_bp.route("/email/auth/connect", methods=["POST"])
+def email_auth_connect():
+    try:
+        from modules.email_agent import start_reconnect
+        return jsonify(start_reconnect())
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@ui_bp.route("/email/auth/disconnect", methods=["POST"])
+def email_auth_disconnect():
+    try:
+        from modules.email_agent import disconnect
+        return jsonify(disconnect())
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@ui_bp.route("/email/watchlist", methods=["GET"])
+def email_watchlist_get():
+    try:
+        from modules.email_agent import get_watchlist
+        return jsonify({"ok": True, "watchlist": get_watchlist()})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@ui_bp.route("/email/watchlist", methods=["POST"])
+def email_watchlist_post():
+    try:
+        from modules.email_agent import set_watchlist
+        incoming = request.get_json(silent=True) or {}
+        return jsonify(set_watchlist(incoming.get("watchlist", [])))
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@ui_bp.route("/email/orders", methods=["GET"])
+def email_orders_get():
+    try:
+        from modules.email_agent import get_tracked_orders
+        return jsonify({"ok": True, "orders": get_tracked_orders()})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
 
 
 # =============================================================================
@@ -5030,5 +5448,401 @@ def dnd_vip_post():
         with open("api_keys.json", "w") as f:
             _json.dump(data, f, indent=2)
         return jsonify({"ok": True, "vip": data["dnd_priority_contacts"]})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+# ── Browser recorded tasks (Cortex UI Browser widget) ─────────────────────────
+_RECORDINGS_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "browser_recordings")
+
+
+def _recording_path(name: str) -> str:
+    os.makedirs(_RECORDINGS_DIR, exist_ok=True)
+    return os.path.join(_RECORDINGS_DIR, secure_filename(name) + ".json")
+
+
+@ui_bp.route("/browser/recordings", methods=["GET"])
+def browser_recordings_list():
+    try:
+        os.makedirs(_RECORDINGS_DIR, exist_ok=True)
+        out = []
+        for fname in sorted(os.listdir(_RECORDINGS_DIR)):
+            if not fname.endswith(".json"):
+                continue
+            try:
+                with open(os.path.join(_RECORDINGS_DIR, fname), encoding="utf-8") as f:
+                    rec = _json.load(f)
+                out.append({
+                    "name": rec.get("name", fname[:-5]),
+                    "start_url": rec.get("start_url", ""),
+                    "steps": len(rec.get("steps", [])),
+                    "trigger_phrases": rec.get("trigger_phrases", []),
+                    "schedule_cron": rec.get("schedule_cron", ""),
+                    "created_at": rec.get("created_at", ""),
+                })
+            except Exception:
+                continue
+        return jsonify({"ok": True, "recordings": out})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@ui_bp.route("/browser/recordings/<name>", methods=["GET"])
+def browser_recordings_get(name):
+    try:
+        path = _recording_path(name)
+        if not os.path.exists(path):
+            return jsonify({"ok": False, "error": "Recording not found"}), 404
+        with open(path, encoding="utf-8") as f:
+            rec = _json.load(f)
+        return jsonify({
+            "ok": True,
+            "name": rec.get("name", name),
+            "start_url": rec.get("start_url", ""),
+            "steps": rec.get("steps", []),
+            "trigger_phrases": rec.get("trigger_phrases", []),
+            "schedule_cron": rec.get("schedule_cron", ""),
+            "created_at": rec.get("created_at", ""),
+        })
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+def _sync_recording_schedule(name: str, cron_expr: str):
+    """(Un)registers this recording's APScheduler job to match schedule_cron.
+    The job's action text is a sentinel command_chain.py recognizes and routes
+    straight to a replay_recording WS broadcast — see _handle_web_automation."""
+    job_id = f"rec_{name}"
+    try:
+        from modules.automation_scheduler import schedule_recording_job, unschedule_memory_job
+        if cron_expr:
+            schedule_recording_job(name, cron_expr)
+        else:
+            unschedule_memory_job(job_id)
+    except Exception as e:
+        print(f"[Recordings] Schedule sync failed for {name}: {e}")
+
+
+@ui_bp.route("/browser/recordings", methods=["POST"])
+def browser_recordings_save():
+    """Body: {"name": str, "start_url": str, "steps": [...], "trigger_phrases": [...], "schedule_cron": str}"""
+    try:
+        from datetime import datetime
+        data = request.get_json(silent=True) or {}
+        name = (data.get("name") or "").strip()
+        steps = data.get("steps") or []
+        if not name:
+            return jsonify({"ok": False, "error": "name is required"}), 400
+        if not isinstance(steps, list) or not steps:
+            return jsonify({"ok": False, "error": "steps must be a non-empty list"}), 400
+
+        trigger_phrases = [str(t).strip().lower() for t in (data.get("trigger_phrases") or []) if str(t).strip()]
+        schedule_cron = (data.get("schedule_cron") or "").strip()
+
+        rec = {
+            "name": name,
+            "start_url": data.get("start_url", ""),
+            "steps": steps,
+            "trigger_phrases": trigger_phrases,
+            "schedule_cron": schedule_cron,
+            "created_at": datetime.now().isoformat(timespec="seconds"),
+        }
+        with open(_recording_path(name), "w", encoding="utf-8") as f:
+            _json.dump(rec, f, indent=2)
+        _sync_recording_schedule(name, schedule_cron)
+        return jsonify({"ok": True, "name": name, "steps": len(steps)})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@ui_bp.route("/browser/recordings/<name>", methods=["DELETE"])
+def browser_recordings_delete(name):
+    try:
+        path = _recording_path(name)
+        if os.path.exists(path):
+            os.remove(path)
+        _sync_recording_schedule(name, "")
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@ui_bp.route("/browser/recordings/<name>/replay", methods=["POST"])
+def browser_recordings_replay(name):
+    """Body (optional): {"steps": [...], "start_url": str} — a hydrated
+    override (params substituted, sensitive values decrypted by the renderer)
+    takes priority over what's on disk, since the recording file only ever
+    holds encrypted credential blobs the backend can't decrypt itself."""
+    try:
+        data = request.get_json(silent=True) or {}
+        steps = data.get("steps")
+        start_url = data.get("start_url")
+
+        if steps is None:
+            path = _recording_path(name)
+            if not os.path.exists(path):
+                return jsonify({"ok": False, "error": "Recording not found"}), 404
+            with open(path, encoding="utf-8") as f:
+                rec = _json.load(f)
+            steps = rec.get("steps", [])
+            start_url = rec.get("start_url")
+
+        from modules.web_automation import replay_recording
+        result = replay_recording(steps, start_url)
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+# ── WebAuthn/Windows Hello consent gate (password autofill) ───────────────────
+# A tiny, self-contained ceremony page. It must be served over http://localhost
+# rather than loaded as a file:// page — Chromium only treats file:// origins
+# as WebAuthn-eligible in narrow cases, but always treats http(s)://localhost
+# as a "potentially trustworthy origin", so this route exists purely to give
+# the gate window a real localhost origin to run navigator.credentials under.
+# The actual enroll/verify orchestration (opening the window, storing the
+# resulting credential ID, deciding pass/fail) lives in Electron's main.cjs —
+# this route only renders the page that runs inside that window.
+_WEBAUTHN_GATE_HTML = """<!DOCTYPE html><html><head><meta charset="utf-8"><title>iZACH — Verify</title><style>
+body{margin:0;height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;
+     background:#050d1a;color:#a8d8ff;font-family:'Segoe UI',sans-serif;text-align:center;}
+h1{font-size:14px;font-weight:400;letter-spacing:.05em;color:#0094ff;margin:0 0 8px;}
+p{font-size:12px;color:rgba(168,216,255,0.6);margin:0;}
+.spin{width:28px;height:28px;border-radius:50%;border:2px solid rgba(0,148,255,0.2);border-top-color:#0094ff;
+      animation:sp 0.8s linear infinite;margin-bottom:16px;}
+@keyframes sp{to{transform:rotate(360deg);}}
+</style></head><body>
+<div class="spin"></div>
+<h1 id="status">Waiting for Windows Hello…</h1>
+<p id="detail">Follow the prompt to continue.</p>
+<script>
+function b64ToBuf(b64){ b64=b64.replace(/-/g,'+').replace(/_/g,'/'); const bin=atob(b64); const buf=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++) buf[i]=bin.charCodeAt(i); return buf.buffer; }
+function bufToB64(buf){ const bytes=new Uint8Array(buf); let bin=''; for(const b of bytes) bin+=String.fromCharCode(b); return btoa(bin).replace(/\\+/g,'-').replace(/\\//g,'_').replace(/=+$/,''); }
+
+async function run(){
+  const params=new URLSearchParams(location.search);
+  const mode=params.get('mode');
+  const statusEl=document.getElementById('status');
+  const detailEl=document.getElementById('detail');
+  const report=(payload)=>{ if(window.izachWebAuthnGate) window.izachWebAuthnGate.reportResult(payload); };
+
+  if(!window.PublicKeyCredential){
+    statusEl.textContent='Not supported';
+    detailEl.textContent='This machine has no WebAuthn platform authenticator available.';
+    report({ok:false, error:'unsupported'});
+    return;
+  }
+
+  try{
+    const challenge=crypto.getRandomValues(new Uint8Array(32));
+    if(mode==='register'){
+      const userId=crypto.getRandomValues(new Uint8Array(16));
+      const cred=await navigator.credentials.create({ publicKey: {
+        challenge, rp: { name: 'iZACH', id: 'localhost' },
+        user: { id: userId, name: 'izach-user', displayName: 'iZACH' },
+        pubKeyCredParams: [{alg:-7, type:'public-key'}, {alg:-257, type:'public-key'}],
+        authenticatorSelection: { authenticatorAttachment: 'platform', userVerification: 'required' },
+        timeout: 60000, attestation: 'none',
+      }});
+      statusEl.textContent='Enrolled';
+      detailEl.textContent='Windows Hello is now set up for autofill.';
+      report({ok:true, credentialId: bufToB64(cred.rawId)});
+    } else {
+      const credentialId=params.get('credential_id');
+      const assertion=await navigator.credentials.get({ publicKey: {
+        challenge, allowCredentials: [{ id: b64ToBuf(credentialId), type: 'public-key' }],
+        userVerification: 'required', timeout: 60000,
+      }});
+      statusEl.textContent='Verified';
+      detailEl.textContent='You may close this window.';
+      report({ok:true});
+    }
+  }catch(e){
+    statusEl.textContent='Cancelled or failed';
+    detailEl.textContent=String(e.message||e);
+    report({ok:false, error:String(e.message||e)});
+  }
+}
+run();
+</script>
+</body></html>"""
+
+
+@ui_bp.route("/browser/webauthn-gate", methods=["GET"])
+def browser_webauthn_gate():
+    return Response(_WEBAUTHN_GATE_HTML, mimetype="text/html")
+
+
+# ── Browser history (Cortex UI Browser widget / Browser Settings) ─────────────
+_HISTORY_FILE = os.path.join(os.path.dirname(os.path.dirname(__file__)), "browser_history.json")
+_HISTORY_MAX_ENTRIES = 5000
+
+
+def _read_history() -> list:
+    try:
+        with open(_HISTORY_FILE, encoding="utf-8") as f:
+            return _json.load(f)
+    except Exception:
+        return []
+
+
+def _write_history(entries: list):
+    with open(_HISTORY_FILE, "w", encoding="utf-8") as f:
+        _json.dump(entries[-_HISTORY_MAX_ENTRIES:], f, indent=2, ensure_ascii=False)
+
+
+@ui_bp.route("/browser/history", methods=["GET"])
+def browser_history_get():
+    try:
+        q = (request.args.get("q") or "").strip().lower()
+        limit = min(int(request.args.get("limit", 200)), _HISTORY_MAX_ENTRIES)
+        entries = list(reversed(_read_history()))  # newest first
+        if q:
+            entries = [e for e in entries if q in e.get("url", "").lower() or q in e.get("title", "").lower()]
+        return jsonify({"ok": True, "entries": entries[:limit]})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@ui_bp.route("/browser/history", methods=["POST"])
+def browser_history_add():
+    """Body: {"url": str, "title": str, "device": str} — appended fire-and-forget on every
+    navigation. "device" is optional and defaults to "pc" so the desktop Electron browser
+    (which predates this field) keeps working unchanged; the Android browser sends its own
+    device name so both surfaces share one history list with per-entry provenance."""
+    try:
+        from datetime import datetime
+        data = request.get_json(silent=True) or {}
+        url = (data.get("url") or "").strip()
+        if not url or url.startswith("data:"):  # skip the generated home page itself
+            return jsonify({"ok": True, "skipped": True})
+        entries = _read_history()
+        entries.append({
+            "id": "h" + str(int(time.time() * 1000)),
+            "url": url,
+            "title": (data.get("title") or url).strip(),
+            "device": (data.get("device") or "pc").strip(),
+            "ts": datetime.now().isoformat(timespec="seconds"),
+        })
+        _write_history(entries)
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@ui_bp.route("/browser/handoff", methods=["POST"])
+def browser_handoff():
+    """Push a page from the PC's browser straight to the paired phone's iZACH browser.
+    Body: {"url": str, "title": str}. Delivered over the existing WS event bus (the same
+    channel DND alerts/notifications already use), so no new phone-side connection is needed —
+    just a new event name the phone listens for."""
+    try:
+        data = request.get_json(silent=True) or {}
+        url = (data.get("url") or "").strip()
+        if not url:
+            return jsonify({"ok": False, "error": "url required"}), 400
+        title = (data.get("title") or url).strip()
+        from modules.ws_bridge import emit
+        emit("browser_handoff", "cortex_ui", {"url": url, "title": title, "ts": int(time.time())})
+        try:
+            from modules.fcm_push import send_push
+            send_push("📱 Sent from PC", title, category="browser_handoff")
+        except Exception:
+            pass
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@ui_bp.route("/browser/history", methods=["DELETE"])
+def browser_history_clear():
+    try:
+        _write_history([])
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@ui_bp.route("/browser/history/<entry_id>", methods=["DELETE"])
+def browser_history_delete_one(entry_id):
+    try:
+        entries = [e for e in _read_history() if e.get("id") != entry_id]
+        _write_history(entries)
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+_TABS_FILE = os.path.join(os.path.dirname(os.path.dirname(__file__)), "browser_tabs.json")
+
+
+def _read_tabs() -> dict:
+    try:
+        with open(_TABS_FILE, encoding="utf-8") as f:
+            return _json.load(f)
+    except Exception:
+        return {}
+
+
+def _write_tabs(snapshot: dict):
+    with open(_TABS_FILE, "w", encoding="utf-8") as f:
+        _json.dump(snapshot, f, indent=2, ensure_ascii=False)
+
+
+@ui_bp.route("/browser/tabs", methods=["POST"])
+def browser_tabs_push():
+    """Body: {"device": str, "tabs": [{"url","title"}]} — each device pushes its
+    FULL current open-tab list on every change (not an append, since tabs also
+    close/reorder), overwriting only its own entry so other devices' snapshots
+    are untouched."""
+    try:
+        data = request.get_json(silent=True) or {}
+        device = (data.get("device") or "").strip()
+        if not device:
+            return jsonify({"ok": False, "error": "device required"}), 400
+        tabs = [
+            {"url": (t.get("url") or "").strip(), "title": (t.get("title") or "").strip()}
+            for t in (data.get("tabs") or [])
+            if (t.get("url") or "").strip()
+        ]
+        snapshot = _read_tabs()
+        snapshot[device] = {"tabs": tabs, "ts": int(time.time())}
+        _write_tabs(snapshot)
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@ui_bp.route("/browser/tabs", methods=["GET"])
+def browser_tabs_get():
+    """Optional ?exclude=<device> omits the caller's own snapshot, so "continue
+    on this device" pickers only show OTHER devices' open tabs."""
+    try:
+        exclude = (request.args.get("exclude") or "").strip()
+        snapshot = _read_tabs()
+        if exclude:
+            snapshot = {k: v for k, v in snapshot.items() if k != exclude}
+        return jsonify({"ok": True, "devices": snapshot})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@ui_bp.route("/browser/autofill-request", methods=["POST"])
+def browser_autofill_request():
+    """Phone asks the PC to autofill a saved login for a URL. The credential
+    vault can only be decrypted inside Electron's main process (Windows
+    DPAPI-backed safeStorage) and this REST layer has no per-request auth, so
+    the decrypted password must never travel over this connection or to the
+    phone: the PC does its own lookup, its own fresh Windows Hello prompt, and
+    its own field injection locally, exactly like a manually-triggered
+    autofill. This route only relays "look at this URL" to the desktop UI."""
+    try:
+        data = request.get_json(silent=True) or {}
+        url = (data.get("url") or "").strip()
+        if not url:
+            return jsonify({"ok": False, "error": "url required"}), 400
+        from modules.ws_bridge import _broadcast_to_non_android
+        _broadcast_to_non_android({"type": "browser_command", "action": "autofill_request", "url": url})
+        return jsonify({"ok": True})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500

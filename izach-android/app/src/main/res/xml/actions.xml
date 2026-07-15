@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Google Assistant App Actions capability declarations.
+  Lets phrases like "Open Calendar in iZACH" or "Show Bookmarks in iZACH"
+  deep-link straight into the matching screen via izach://feature/{name},
+  handled by MainActivity's VIEW intent-filter (see AndroidManifest.xml)
+  and routed in MainActivity.handleIncomingIntent().
+
+  NOTE: verifying real Assistant utterances ("Hey Google, ...") requires
+  the App Actions Test Tool signed into the same Google account configured
+  in the Actions Console — it can't be exercised via adb/emulator alone.
+-->
+<actions>
+    <action intentName="actions.intent.OPEN_APP_FEATURE">
+        <fulfillment urlTemplate="izach://feature/{foo.feature}">
+            <parameter-mapping urlParameter="foo.feature" intentParameter="feature" />
+        </fulfillment>
+        <parameter name="feature">
+            <entity-set-reference entitySetId="FeatureSet" />
+        </parameter>
+    </action>
+
+    <entity-set entitySetId="FeatureSet">
+        <entity name="calendar" alternateName="@array/featureCalendarSynonyms" />
+        <entity name="bookmarks" alternateName="@array/featureBookmarksSynonyms" />
+        <entity name="memory" alternateName="@array/featureMemorySynonyms" />
+        <entity name="automations" alternateName="@array/featureAutomationsSynonyms" />
+        <entity name="recordings" alternateName="@array/featureRecordingsSynonyms" />
+        <entity name="whatsapp" alternateName="@array/featureWhatsAppSynonyms" />
+        <entity name="news" alternateName="@array/featureNewsSynonyms" />
+        <entity name="dashboard" alternateName="@array/featureDashboardSynonyms" />
+        <entity name="search" alternateName="@array/featureSearchSynonyms" />
+        <entity name="settings" alternateName="@array/featureSettingsSynonyms" />
+        <entity name="browser" alternateName="@array/featureBrowserSynonyms" />
+    </entity-set>
+</actions>

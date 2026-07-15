@@ -9,5 +9,8 @@ data class SystemStatus(
     val ramUsedGb: Float,
     val ramTotalGb: Float,
     val whatsapp: Boolean,
-    val mma: Boolean
+    val mma: Boolean,
+    val pcName: String = "",
+    val batteryPct: Int? = null,
+    val batteryPlugged: Boolean? = null
 )

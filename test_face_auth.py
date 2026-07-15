@@ -1,5 +1,8 @@
 ﻿import sys; sys.path.insert(0, '.')
 from unittest.mock import patch, MagicMock
+if __name__ != "__main__":
+    import unittest
+    raise unittest.SkipTest("script-style face auth smoke test; run directly")
 import numpy as np
 import pickle, os, time, threading
 

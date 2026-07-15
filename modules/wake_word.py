@@ -3,6 +3,8 @@ modules/wake_word.py
 Wake word state machine — no separate audio stream.
 Recognition runs inline in listen() via the existing pyaudio stream.
 """
+import os
+import json
 import time
 from typing import Callable, Optional
 
@@ -14,9 +16,29 @@ _NAME_VARIANTS = {
     "isak",  "i zak",
     "izak",  "izaak",
     "i sack", "isack",
-    "i jack",
+    "i jack", "hijack",
     "eye zach", "eye sack",
 }
+
+
+def _load_custom_nickname() -> str:
+    """User-set nickname (Settings → Nickname, both Cortex and Forge UI),
+    stored in api_keys.json's "nickname" key. Loaded once at process start —
+    same "restart required" convention as the wake_word_enabled setting."""
+    try:
+        path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "api_keys.json")
+        with open(path, encoding="utf-8") as f:
+            return (json.load(f).get("nickname") or "").strip().lower()
+    except Exception:
+        return ""
+
+
+# Added to _NAME_VARIANTS itself (not kept separate) so command_chain.py's
+# leading-wake-word stripper — which imports _NAME_VARIANTS directly — picks
+# the nickname up automatically with no changes needed on its side.
+_custom_nickname = _load_custom_nickname()
+if _custom_nickname:
+    _NAME_VARIANTS.add(_custom_nickname)
 
 _PREFIXES = {"hey", "hi", "okay", "ok", "yo", "hello", "aye"}
 

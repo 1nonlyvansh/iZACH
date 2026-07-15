@@ -66,19 +66,110 @@ class SpotifyController:
             "user-read-recently-played"
         )
 
+        self._cache_path = ".cache"
+        # Reconnect flow state — polled by GET /spotify/auth/status while a
+        # browser-based (re)connect is in progress. "idle" once at rest.
+        self._reconnect_lock  = threading.Lock()
+        self._reconnect_state = {"status": "idle", "error": "", "user": None}
+
         try:
             self.sp = spotipy.Spotify(auth_manager=SpotifyOAuth(
                 client_id=self.client_id,
                 client_secret=self.client_secret,
                 redirect_uri=self.redirect_uri,
                 scope=self.scope,
-                cache_path=".cache",
+                cache_path=self._cache_path,
                 open_browser=True
             ))
             logger.info("[SPOTIFY] Controller online.")
         except Exception as e:
             logger.error(f"[SPOTIFY] Initialization Error: {e}")
             self.sp = None
+
+    # ─────────────────────────────────────────────
+    # ACCOUNT CONNECT / DISCONNECT
+    # ─────────────────────────────────────────────
+
+    def get_auth_status(self) -> dict:
+        """Report current connection state — used by the Settings UI."""
+        if self._reconnect_state["status"] in ("connecting", "waiting_for_browser"):
+            return {"connected": False, **self._reconnect_state}
+        if self.sp is None:
+            return {"connected": False, "status": "idle", "error": "", "user": None}
+        try:
+            me = self.sp.current_user()
+            return {
+                "connected": True,
+                "status": "connected",
+                "error": "",
+                "user": me.get("display_name") or me.get("id"),
+                "product": me.get("product", "unknown"),
+            }
+        except Exception as e:
+            return {"connected": False, "status": "idle", "error": str(e), "user": None}
+
+    def _run_reconnect(self):
+        """Runs in a background thread — opens the browser, waits for the
+        user to log in/authorize, then swaps in the newly authenticated
+        client. Blocking (spotipy starts a local server on the redirect
+        port and waits for the callback), so this must never run on a
+        Flask request thread."""
+        try:
+            self._reconnect_state = {"status": "waiting_for_browser", "error": "", "user": None}
+
+            # Drop any cached token so the browser flow can't silently
+            # reuse whichever account was last connected.
+            try:
+                if os.path.exists(self._cache_path):
+                    os.remove(self._cache_path)
+            except Exception as e:
+                logger.warning(f"[SPOTIFY] Could not remove old token cache: {e}")
+
+            oauth = SpotifyOAuth(
+                client_id=self.client_id,
+                client_secret=self.client_secret,
+                redirect_uri=self.redirect_uri,
+                scope=self.scope,
+                cache_path=self._cache_path,
+                open_browser=True,
+                show_dialog=True,   # force Spotify's account chooser/consent screen
+            )
+            oauth.get_access_token(as_dict=False, check_cache=False)
+
+            new_client = spotipy.Spotify(auth_manager=oauth)
+            me = new_client.current_user()
+
+            self.sp = new_client
+            self._reconnect_state = {
+                "status": "connected", "error": "",
+                "user": me.get("display_name") or me.get("id"),
+            }
+            logger.info(f"[SPOTIFY] Reconnected as {self._reconnect_state['user']}.")
+        except Exception as e:
+            logger.error(f"[SPOTIFY] Reconnect failed: {e}")
+            self._reconnect_state = {"status": "error", "error": str(e), "user": None}
+
+    def start_reconnect(self) -> dict:
+        """Kick off the one-click (re)connect flow. Non-blocking — returns
+        immediately; poll get_auth_status() for progress."""
+        with self._reconnect_lock:
+            if self._reconnect_state["status"] == "waiting_for_browser":
+                return {"ok": False, "error": "A connect attempt is already in progress."}
+            threading.Thread(target=self._run_reconnect, daemon=True).start()
+            return {"ok": True, "status": "waiting_for_browser"}
+
+    def disconnect(self) -> dict:
+        """Clear the connected account so the Settings UI can connect a
+        different one."""
+        try:
+            if os.path.exists(self._cache_path):
+                os.remove(self._cache_path)
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+        self.sp = None
+        self._reconnect_state = {"status": "idle", "error": "", "user": None}
+        logger.info("[SPOTIFY] Disconnected.")
+        return {"ok": True}
 
 
     # ─────────────────────────────────────────────

@@ -27,23 +27,48 @@ def _restore_jobs():
         from modules.smart_memory import list_smart_memories
         for m in list_smart_memories("automation"):
             if m.get("enabled") and m.get("auto_schedule", {}).get("cron"):
-                _do_schedule(m["id"], m["auto_schedule"]["cron"], m["auto_schedule"]["action"])
+                _do_schedule(f"mem_{m['id']}", m["auto_schedule"]["cron"], m["auto_schedule"]["action"])
     except Exception as e:
         print(f"[AutoSched] Restore error: {e}")
+
+    try:
+        import os, json
+        recordings_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "browser_recordings")
+        if os.path.isdir(recordings_dir):
+            for fname in os.listdir(recordings_dir):
+                if not fname.endswith(".json"):
+                    continue
+                try:
+                    with open(os.path.join(recordings_dir, fname), encoding="utf-8") as f:
+                        rec = json.load(f)
+                    if rec.get("schedule_cron"):
+                        schedule_recording_job(rec["name"], rec["schedule_cron"])
+                except Exception:
+                    continue
+    except Exception as e:
+        print(f"[AutoSched] Recording schedule restore error: {e}")
 
 
 def schedule_memory_job(memory_id: str, cron_expr: str, action_text: str) -> str:
     job_id = f"mem_{memory_id}"
-    _do_schedule(memory_id, cron_expr, action_text)
+    _do_schedule(job_id, cron_expr, action_text)
     return job_id
 
 
-def _do_schedule(memory_id: str, cron_expr: str, action_text: str):
+def schedule_recording_job(name: str, cron_expr: str) -> str:
+    """Recording feature's scheduling hook — 'run my X recording every morning
+    at 9'. The action text is a sentinel command_chain.py matches directly (no
+    trigger-phrase text needed) and routes to a replay_recording WS broadcast,
+    since only the Electron renderer can decrypt any credential steps."""
+    job_id = f"rec_{name}"
+    _do_schedule(job_id, cron_expr, f"__replay_recording__::{name}")
+    return job_id
+
+
+def _do_schedule(job_id: str, cron_expr: str, action_text: str):
     global _scheduler, _speak_fn
     if not _scheduler:
         return
-
-    job_id = f"mem_{memory_id}"
 
     # Drop existing
     try:

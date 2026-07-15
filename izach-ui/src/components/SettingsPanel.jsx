@@ -1050,6 +1050,88 @@ function WhatsAppLogoutRow() {
   )
 }
 
+// ── Spotify one-click connect ────────────────────────────────
+function SpotifyConnectRow() {
+  const [status, setStatus] = useState({ connected: false, status: 'idle', error: '', user: null })
+  const [busy, setBusy] = useState(false)
+  const pollRef = React.useRef(null)
+
+  const refresh = React.useCallback(async () => {
+    try {
+      const r = await fetch(`${BASE}/spotify/auth/status`).then(r => r.json())
+      setStatus(r)
+      return r
+    } catch {
+      setStatus(s => ({ ...s, error: 'Backend not reachable.' }))
+      return null
+    }
+  }, [])
+
+  useEffect(() => { refresh() }, [refresh])
+  useEffect(() => () => clearInterval(pollRef.current), [])
+
+  async function connect() {
+    setBusy(true)
+    try {
+      const r = await fetch(`${BASE}/spotify/auth/connect`, { method: 'POST' }).then(r => r.json())
+      if (!r.ok) { setStatus(s => ({ ...s, error: r.error || 'Could not start connect flow.' })); setBusy(false); return }
+      pollRef.current = setInterval(async () => {
+        const r = await refresh()
+        if (r && (r.status === 'connected' || r.status === 'error')) {
+          clearInterval(pollRef.current)
+          setBusy(false)
+        }
+      }, 2000)
+    } catch {
+      setStatus(s => ({ ...s, error: 'Backend not reachable.' }))
+      setBusy(false)
+    }
+  }
+
+  async function disconnect() {
+    setBusy(true)
+    try {
+      await fetch(`${BASE}/spotify/auth/disconnect`, { method: 'POST' })
+      await refresh()
+    } catch {}
+    setBusy(false)
+  }
+
+  const waiting = status.status === 'waiting_for_browser'
+  const label = waiting ? 'WAITING FOR BROWSER...'
+    : busy ? 'CONNECTING...'
+    : status.connected ? 'DISCONNECT SPOTIFY'
+    : 'CONNECT SPOTIFY ACCOUNT'
+
+  return (
+    <div style={{ padding: '6px 20px 14px' }}>
+      <p style={{ color: '#3a6070', fontFamily: "'Share Tech Mono'", fontSize: '9px', letterSpacing: '0.1em', marginBottom: 8 }}>
+        SPOTIFY ACCOUNT
+      </p>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        <Btn
+          label={label}
+          onClick={status.connected ? disconnect : connect}
+          danger={status.connected}
+          color={status.connected ? undefined : '#1db954'}
+        />
+        <span style={{ color: '#5a9ab0', fontFamily: "'JetBrains Mono'", fontSize: '9px' }}>
+          {status.connected
+            ? `Connected as ${status.user}${status.product ? ` (${status.product})` : ''}`
+            : waiting
+              ? 'Finish signing in and click Allow in the browser window that opened.'
+              : 'Not connected — opens Spotify in your browser, no manual setup needed.'}
+        </span>
+      </div>
+      {status.error && (
+        <p style={{ color: '#ff6b6b', fontFamily: "'JetBrains Mono'", fontSize: '9px', marginTop: 6 }}>
+          {status.error}
+        </p>
+      )}
+    </div>
+  )
+}
+
 // ── Keys & ID Tab ─────────────────────────────────────────────
 const KEY_GROUPS = [
   {
@@ -1151,6 +1233,7 @@ function KeysTab() {
       {KEY_GROUPS.map(({ section, fields }) => (
         <div key={section}>
           <SectionHeader label={section} />
+          {section === 'SPOTIFY' && <SpotifyConnectRow />}
           {fields.map(({ key, label, hint, password }) => (
             <div key={key} style={{ padding: '0 20px 10px' }}>
               <p style={labelStyle}>{label}</p>

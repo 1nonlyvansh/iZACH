@@ -58,7 +58,7 @@ Rules:
 
 def _fallback(reason: str = "") -> dict:
     if reason:
-        print(f"[ORCHESTRATOR] fallback → chat ({reason})")
+        print(f"[ORCHESTRATOR] fallback -> chat ({reason})")
     return {"domain": "chat", "confidence": 0.0, "summary": ""}
 
 

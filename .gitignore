@@ -28,10 +28,21 @@ api_keys/
 # ========================
 credentials.json
 token.json
+token_gmail.json
 service_account.json
+firebase_service_account.json
+google-services.json
 fitness_credentials.json
 fitness_token.json
 smart_home_credentials.json
+
+# Spotipy's OAuth token cache — a literal file named ".cache" at repo root
+# (not a directory), holding a real access/refresh token pair.
+.cache
+
+# Phone↔PC pairing secret (HMAC key every signed API request is checked
+# against) — CRITICAL, equivalent to a password.
+pairing_secret.json
 
 # ========================
 # Smart Home secrets (CRITICAL)
@@ -57,6 +68,9 @@ iZACH-Brain/People/
 iZACH-Brain/Calls/
 iZACH-Brain/Learned Facts.md
 iZACH-Brain/System Weaknesses.md
+iZACH-Brain/Frequent Commands.md
+iZACH-Brain/Usage Insights.md
+iZACH-Brain/iZACH Brain.md
 iZACH-Brain/.obsidian/workspace.json
 iZACH-Brain/.obsidian/.obsidian/
 
@@ -76,6 +90,32 @@ contacts.json
 owner_face.pkl
 *.pkl
 biometric/
+
+# Recorded browsing sessions (Cortex UI Browser widget) — may contain
+# visited URLs and form input from arbitrary third-party sites
+browser_recordings/
+
+# Browser history + password vault (Cortex UI Browser widget). Vault entries
+# are encrypted at rest (Electron safeStorage/DPAPI) but still never commit —
+# the file is meaningless without the same OS user account anyway.
+browser_history.json
+browser_passwords.json
+browser_permissions.json
+browser_downloads.json
+browser_webauthn.json
+browser_tabs.json
+custom_links.json
+
+# Email agent (Gmail monitoring) — order/shipment contents and internal
+# seen-message state.
+tracked_orders.json
+email_agent_state.json
+
+# Voice biometrics (voice ID enrollment / speaker diarization profiles)
+owner_voice.json
+owner_voice.npy
+voice_profiles/
+speaker_profiles/
 
 # ========================
 # Command history & logs (CRITICAL)
@@ -104,6 +144,7 @@ news_settings.json
 print_settings.json
 file_manager_config.json
 instagram_settings.json
+api_usage.json
 
 # ========================
 # N8N workflow exports (may contain tokens)
@@ -211,6 +252,27 @@ keys and ids*
 structure.txt
 *.zip
 *.rar
+
+# ========================
+# Personal documents / stray artifacts (not project content)
+# ========================
+iZACH Project Report.docx
+iZACH Project Report.pdf
+iZACH Cover Page Report File.docx
+iZACH Cover Page Report File.pdf
+iZACH Sample Website.zip
+iZACH MMA2*.json
+iZACH DND Auto-Reply.json
+\!\!*qhlogs*
+\!qhlogs*
+~$*.docx
+CProjectsiZACHsetup
+
+# Personal Obsidian notes at vault root (per-person relationship notes like
+# People/, but placed directly under iZACH-Brain/ instead of the subfolder)
+iZACH-Brain/Yogita.md
+iZACH-Brain/Untitled*.base
+iZACH-Brain/Untitled*.canvas
 
 # ========================
 # Large binaries / executables

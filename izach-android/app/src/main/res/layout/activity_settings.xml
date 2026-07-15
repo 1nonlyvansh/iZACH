@@ -53,83 +53,192 @@
             android:letterSpacing="0.2"
             android:layout_marginBottom="12dp" />
 
-        <Button
-            android:id="@+id/btnScanQr"
-            android:layout_width="match_parent"
-            android:layout_height="52dp"
-            android:text="SCAN QR CODE"
-            android:textColor="@color/bg_deep"
-            android:backgroundTint="@color/cyan"
-            android:fontFamily="monospace"
-            android:letterSpacing="0.2"
-            android:textStyle="bold"
-            android:layout_marginBottom="8dp" />
-
-        <TextView
+        <!-- Paired state — replaces the scan prompt once pairingSecret() is set
+             and the PC actually confirms it via /status. -->
+        <LinearLayout
+            android:id="@+id/pairedInfoCard"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Point camera at the QR code shown in the iZACH desktop panel"
-            android:textColor="@color/text_sec"
-            android:textSize="11sp"
-            android:fontFamily="monospace"
-            android:gravity="center"
-            android:layout_marginBottom="20dp" />
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="— or enter manually —"
-            android:textColor="@color/text_sec"
-            android:textSize="10sp"
-            android:fontFamily="monospace"
-            android:letterSpacing="0.1"
-            android:gravity="center"
-            android:layout_marginBottom="16dp" />
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="@string/label_backend_url"
-            android:textColor="@color/text_sec"
-            android:textSize="11sp"
-            android:fontFamily="monospace"
-            android:letterSpacing="0.1"
-            android:layout_marginBottom="6dp" />
-
-        <EditText
-            android:id="@+id/etBackendUrl"
-            android:layout_width="match_parent"
-            android:layout_height="48dp"
+            android:orientation="vertical"
             android:background="@drawable/bg_input"
-            android:hint="@string/hint_backend_url"
-            android:textColor="@color/text_pri"
-            android:textSize="13sp"
-            android:fontFamily="monospace"
-            android:paddingHorizontal="12dp"
-            android:inputType="textUri"
-            android:layout_marginBottom="20dp" />
+            android:padding="14dp"
+            android:visibility="gone"
+            android:layout_marginBottom="20dp">
 
-        <TextView
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+                <View
+                    android:layout_width="10dp"
+                    android:layout_height="10dp"
+                    android:background="@drawable/dot_green" />
+                <TextView
+                    android:id="@+id/tvPairedPcName"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:layout_marginStart="8dp"
+                    android:text="Connected to PC"
+                    android:textColor="@color/text_pri"
+                    android:textSize="13sp"
+                    android:fontFamily="monospace"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/tvPairedBattery"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text=""
+                android:textColor="@color/text_sec"
+                android:textSize="11sp"
+                android:fontFamily="monospace"
+                android:layout_marginTop="6dp" />
+
+            <Button
+                android:id="@+id/btnRepair"
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                android:text="RE-PAIR / SCAN NEW QR"
+                android:textColor="@color/cyan"
+                android:textSize="10sp"
+                android:background="@android:color/transparent"
+                android:fontFamily="monospace"
+                android:letterSpacing="0.1"
+                android:paddingHorizontal="0dp"
+                android:layout_marginTop="8dp" />
+        </LinearLayout>
+
+        <!-- Not-paired state — scan prompt + manual entry fields -->
+        <LinearLayout
+            android:id="@+id/unpairedSection"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="@string/label_ws_host"
-            android:textColor="@color/text_sec"
-            android:textSize="11sp"
-            android:fontFamily="monospace"
-            android:letterSpacing="0.1"
-            android:layout_marginBottom="6dp" />
+            android:orientation="vertical">
 
-        <EditText
-            android:id="@+id/etWsHost"
-            android:layout_width="match_parent"
-            android:layout_height="48dp"
-            android:background="@drawable/bg_input"
-            android:hint="@string/hint_ws_host"
-            android:textColor="@color/text_pri"
-            android:textSize="13sp"
-            android:fontFamily="monospace"
-            android:paddingHorizontal="12dp"
-            android:layout_marginBottom="32dp" />
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="12dp">
+                <View
+                    android:layout_width="10dp"
+                    android:layout_height="10dp"
+                    android:background="@drawable/dot_amber" />
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:layout_marginStart="8dp"
+                    android:text="Not paired — scan the QR code below"
+                    android:textColor="@color/amber"
+                    android:textSize="11sp"
+                    android:fontFamily="monospace" />
+            </LinearLayout>
+
+            <Button
+                android:id="@+id/btnScanQr"
+                android:layout_width="match_parent"
+                android:layout_height="52dp"
+                android:text="SCAN QR CODE"
+                android:textColor="@color/bg_deep"
+                android:backgroundTint="@color/cyan"
+                android:fontFamily="monospace"
+                android:letterSpacing="0.2"
+                android:textStyle="bold"
+                android:layout_marginBottom="8dp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Point camera at the QR code shown in the iZACH desktop panel"
+                android:textColor="@color/text_sec"
+                android:textSize="11sp"
+                android:fontFamily="monospace"
+                android:gravity="center"
+                android:layout_marginBottom="20dp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="— or enter manually —"
+                android:textColor="@color/text_sec"
+                android:textSize="10sp"
+                android:fontFamily="monospace"
+                android:letterSpacing="0.1"
+                android:gravity="center"
+                android:layout_marginBottom="16dp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/label_backend_url"
+                android:textColor="@color/text_sec"
+                android:textSize="11sp"
+                android:fontFamily="monospace"
+                android:letterSpacing="0.1"
+                android:layout_marginBottom="6dp" />
+
+            <EditText
+                android:id="@+id/etBackendUrl"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:background="@drawable/bg_input"
+                android:hint="@string/hint_backend_url"
+                android:textColor="@color/text_pri"
+                android:textSize="13sp"
+                android:fontFamily="monospace"
+                android:paddingHorizontal="12dp"
+                android:inputType="textUri"
+                android:layout_marginBottom="20dp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/label_ws_host"
+                android:textColor="@color/text_sec"
+                android:textSize="11sp"
+                android:fontFamily="monospace"
+                android:letterSpacing="0.1"
+                android:layout_marginBottom="6dp" />
+
+            <EditText
+                android:id="@+id/etWsHost"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:background="@drawable/bg_input"
+                android:hint="@string/hint_ws_host"
+                android:textColor="@color/text_pri"
+                android:textSize="13sp"
+                android:fontFamily="monospace"
+                android:paddingHorizontal="12dp"
+                android:layout_marginBottom="20dp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Pairing Secret"
+                android:textColor="@color/text_sec"
+                android:textSize="11sp"
+                android:fontFamily="monospace"
+                android:letterSpacing="0.1"
+                android:layout_marginBottom="6dp" />
+
+            <EditText
+                android:id="@+id/etPairingSecret"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:background="@drawable/bg_input"
+                android:hint="Copied from the desktop app under the QR code"
+                android:textColor="@color/text_pri"
+                android:textSize="11sp"
+                android:fontFamily="monospace"
+                android:paddingHorizontal="12dp"
+                android:layout_marginBottom="32dp" />
+        </LinearLayout>
 
         <Button
             android:id="@+id/btnTest"
@@ -264,6 +373,23 @@
             <androidx.appcompat.widget.SwitchCompat android:id="@+id/swFloatMic"
                 android:layout_width="wrap_content" android:layout_height="wrap_content"
                 android:checked="false" />
+        </LinearLayout>
+
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:orientation="horizontal" android:gravity="center_vertical"
+            android:layout_marginBottom="24dp">
+            <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content"
+                android:layout_weight="1" android:orientation="vertical">
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                    android:text="Persistent status notification"
+                    android:textColor="@color/text_pri" android:textSize="13sp" android:fontFamily="monospace" />
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                    android:text="Connection, DND, Busy &amp; PC Background Mode at a glance"
+                    android:textColor="@color/text_sec" android:textSize="11sp" android:fontFamily="monospace" />
+            </LinearLayout>
+            <androidx.appcompat.widget.SwitchCompat android:id="@+id/swPersistentStatus"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:checked="true" />
         </LinearLayout>
 
         <!-- AlliedNode 2 section -->
@@ -427,6 +553,119 @@
                 android:backgroundTint="@color/cyan"
                 android:fontFamily="monospace"
                 android:paddingHorizontal="14dp" />
+        </LinearLayout>
+
+        <!-- Proactive agent section -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="PROACTIVE AGENT"
+            android:textColor="@color/cyan"
+            android:textSize="11sp"
+            android:fontFamily="monospace"
+            android:letterSpacing="0.2"
+            android:layout_marginTop="24dp"
+            android:layout_marginBottom="12dp" />
+
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:orientation="horizontal" android:gravity="center_vertical"
+            android:layout_marginBottom="8dp">
+            <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content"
+                android:layout_weight="1" android:orientation="vertical">
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                    android:text="Proactive agent enabled"
+                    android:textColor="@color/text_pri" android:textSize="13sp" android:fontFamily="monospace" />
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                    android:text="Morning briefing, event alerts, idle nudges"
+                    android:textColor="@color/text_sec" android:textSize="11sp" android:fontFamily="monospace" />
+            </LinearLayout>
+            <androidx.appcompat.widget.SwitchCompat android:id="@+id/swProactiveEnabled"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:checked="true" />
+        </LinearLayout>
+
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:orientation="horizontal" android:gravity="center_vertical"
+            android:layout_marginBottom="8dp">
+            <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content"
+                android:layout_weight="1" android:orientation="vertical">
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                    android:text="Calendar event alerts"
+                    android:textColor="@color/text_pri" android:textSize="13sp" android:fontFamily="monospace" />
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                    android:text="Announce events 60/15 min ahead"
+                    android:textColor="@color/text_sec" android:textSize="11sp" android:fontFamily="monospace" />
+            </LinearLayout>
+            <androidx.appcompat.widget.SwitchCompat android:id="@+id/swBriefingCalendar"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:checked="true" />
+        </LinearLayout>
+
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:orientation="horizontal" android:gravity="center_vertical"
+            android:layout_marginBottom="12dp">
+            <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content"
+                android:layout_weight="1" android:orientation="vertical">
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                    android:text="System status in briefing"
+                    android:textColor="@color/text_pri" android:textSize="13sp" android:fontFamily="monospace" />
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                    android:text="Mention battery/RAM in morning briefing"
+                    android:textColor="@color/text_sec" android:textSize="11sp" android:fontFamily="monospace" />
+            </LinearLayout>
+            <androidx.appcompat.widget.SwitchCompat android:id="@+id/swBriefingSystem"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:checked="false" />
+        </LinearLayout>
+
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:orientation="horizontal" android:gravity="center_vertical"
+            android:layout_marginBottom="12dp">
+            <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content"
+                android:layout_weight="1" android:orientation="vertical">
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                    android:text="Pattern-to-automation suggestions"
+                    android:textColor="@color/text_pri" android:textSize="13sp" android:fontFamily="monospace" />
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                    android:text="Offer to automate things you do on a schedule"
+                    android:textColor="@color/text_sec" android:textSize="11sp" android:fontFamily="monospace" />
+            </LinearLayout>
+            <androidx.appcompat.widget.SwitchCompat android:id="@+id/swPatternSuggestions"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:checked="true" />
+        </LinearLayout>
+
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:orientation="horizontal" android:layout_marginBottom="24dp">
+            <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content"
+                android:layout_weight="1" android:orientation="vertical"
+                android:layout_marginEnd="8dp">
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                    android:text="Briefing time (24h)"
+                    android:textColor="@color/text_sec" android:textSize="11sp" android:fontFamily="monospace"
+                    android:layout_marginBottom="4dp" />
+                <EditText android:id="@+id/etBriefingTime"
+                    android:layout_width="match_parent" android:layout_height="44dp"
+                    android:background="@drawable/bg_input"
+                    android:hint="08:00" android:textColor="@color/text_pri"
+                    android:textSize="13sp" android:fontFamily="monospace"
+                    android:paddingHorizontal="10dp"
+                    android:inputType="time" />
+            </LinearLayout>
+            <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content"
+                android:layout_weight="1" android:orientation="vertical">
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                    android:text="Weather city"
+                    android:textColor="@color/text_sec" android:textSize="11sp" android:fontFamily="monospace"
+                    android:layout_marginBottom="4dp" />
+                <EditText android:id="@+id/etWeatherCity"
+                    android:layout_width="match_parent" android:layout_height="44dp"
+                    android:background="@drawable/bg_input"
+                    android:hint="New Delhi" android:textColor="@color/text_pri"
+                    android:textSize="13sp" android:fontFamily="monospace"
+                    android:paddingHorizontal="10dp"
+                    android:inputType="text" />
+            </LinearLayout>
         </LinearLayout>
 
         <Button

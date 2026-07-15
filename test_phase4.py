@@ -1,5 +1,8 @@
 """Phase 4 test suite — run from project root."""
 import sys, time, json
+if __name__ != "__main__":
+    import unittest
+    raise unittest.SkipTest("script-style phase 4 smoke test; run directly")
 sys.path.insert(0, '.')
 from dotenv import load_dotenv
 load_dotenv()

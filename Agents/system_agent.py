@@ -113,6 +113,21 @@ Rules:
 
 _CONFIRM_INTENTS = {"shutdown", "restart"}   # require confirmation before executing
 
+# open_app's LLM parser occasionally misreads a command like "play X on
+# youtube" as "open youtube" — before blindly typing the app name into
+# Windows Search (which launches whatever the top result happens to be),
+# check whether it's actually installed. Well-known websites that have no
+# native Windows app get opened in the browser instead; anything else gets
+# an honest "not installed" rather than a false "opened" claim.
+_OPEN_APP_WEBSITE_FALLBACKS = {
+    "youtube": "https://youtube.com", "netflix": "https://netflix.com",
+    "twitter": "https://twitter.com", "x": "https://x.com",
+    "instagram": "https://instagram.com", "reddit": "https://reddit.com",
+    "gmail": "https://mail.google.com", "github": "https://github.com",
+    "linkedin": "https://linkedin.com", "amazon": "https://amazon.com",
+    "chatgpt": "https://chat.openai.com", "netflix.com": "https://netflix.com",
+}
+
 
 class SystemAgent:
     """
@@ -231,7 +246,20 @@ class SystemAgent:
             self.speak("Which app should I open?")
             return True
         try:
-            from modules.context_engine import handle_open_with_position
+            from modules.context_engine import handle_open_with_position, _APP_DIRECT_LAUNCH
+            from modules.automation import is_app_installed
+
+            app_lower = app.lower().strip()
+            if app_lower not in _APP_DIRECT_LAUNCH and not is_app_installed(app):
+                website = _OPEN_APP_WEBSITE_FALLBACKS.get(app_lower)
+                if website:
+                    from modules.ws_bridge import broadcast
+                    broadcast({"type": "browser_command", "action": "open_url", "url": website})
+                    self.speak(f"{app} isn't installed as an app here — opening it in the browser instead.")
+                else:
+                    self.speak(f"I don't see '{app}' installed on this PC — if I misheard you, try again.")
+                return True
+
             result = handle_open_with_position(app, None)
             if result:
                 self.speak(result)
