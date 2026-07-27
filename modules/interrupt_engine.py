@@ -67,6 +67,16 @@ class InterruptEngine:
             self._is_speaking = val
             self._interrupted = False
         if val:
+            # Never open the mic for barge-in detection if the user has
+            # explicitly muted it via the UI toggle — this loop had no
+            # awareness of that flag at all before, so muting during/before
+            # a TTS response still left the mic listening for interruptions.
+            try:
+                from modules.ui_api import is_mic_active
+                if not is_mic_active():
+                    return
+            except Exception:
+                pass
             self._start_voice_monitor()
         else:
             self._stop_voice_monitor()
@@ -163,6 +173,12 @@ class InterruptEngine:
                     pass  # best-effort; non-fatal
 
                 while self._listening and self._is_speaking:
+                    try:
+                        from modules.ui_api import is_mic_active
+                        if not is_mic_active():
+                            break
+                    except Exception:
+                        pass
                     try:
                         audio = self._rec.listen(
                             source,

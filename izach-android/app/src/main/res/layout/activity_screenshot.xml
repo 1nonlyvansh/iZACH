@@ -9,7 +9,8 @@
     <LinearLayout
         android:id="@+id/ssTopBar"
         android:layout_width="0dp"
-        android:layout_height="52dp"
+        android:layout_height="wrap_content"
+        android:minHeight="52dp"
         android:background="@color/bg_panel"
         android:gravity="center_vertical"
         android:paddingHorizontal="8dp"

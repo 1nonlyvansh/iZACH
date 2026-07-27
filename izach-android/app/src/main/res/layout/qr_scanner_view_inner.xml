@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Mirrors zxing-android-embedded's own zxing_barcode_scanner.xml exactly
+     (same ids, required by DecoratedBarcodeView's internal lookup), swapping
+     in QrViewfinderView for the stock ViewfinderView. -->
+<merge xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <com.journeyapps.barcodescanner.BarcodeView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:id="@+id/zxing_barcode_surface"/>
+
+    <com.izach.android.ui.QrViewfinderView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:id="@+id/zxing_viewfinder_view"/>
+
+    <TextView android:id="@+id/zxing_status_view"
+              android:layout_width="wrap_content"
+              android:layout_height="wrap_content"
+              android:layout_gravity="bottom|center_horizontal"
+              android:layout_marginBottom="48dp"
+              android:background="@android:color/transparent"
+              android:textColor="@color/text_pri"
+              android:fontFamily="monospace"/>
+</merge>

@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginBottom="14dp">
+
+    <LinearLayout android:id="@+id/cardRoot"
+        android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:orientation="horizontal" android:gravity="center_vertical"
+        android:background="@color/bg_card" android:padding="16dp"
+        android:clickable="true" android:focusable="true"
+        android:foreground="?attr/selectableItemBackground">
+
+        <TextView android:id="@+id/tvIcon"
+            android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:text="💻" android:textSize="28sp" android:layout_marginEnd="14dp" />
+
+        <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content"
+            android:layout_weight="1" android:orientation="vertical">
+            <TextView android:id="@+id/tvName"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:text="—" android:textColor="@color/text_pri" android:textSize="15sp"
+                android:fontFamily="monospace" android:textStyle="bold" />
+            <TextView android:id="@+id/tvSubtitle"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:text="Checking…" android:textColor="@color/text_sec" android:textSize="11sp"
+                android:fontFamily="monospace" android:layout_marginTop="3dp" />
+        </LinearLayout>
+
+        <TextView android:id="@+id/tvBattery"
+            android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:text="" android:textColor="@color/cyan" android:textSize="13sp"
+            android:fontFamily="monospace" android:layout_marginEnd="10dp" />
+
+        <ImageButton android:id="@+id/btnSettings"
+            android:layout_width="36dp" android:layout_height="36dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@android:drawable/ic_menu_manage"
+            android:contentDescription="Device settings"
+            app:tint="@color/text_sec" />
+    </LinearLayout>
+
+    <!-- Dims + labels the card OFFLINE when paired but unreachable, without
+         needing a real blur-effect dependency — same "inactive" signal. -->
+    <LinearLayout android:id="@+id/offlineOverlay"
+        android:layout_width="match_parent" android:layout_height="match_parent"
+        android:background="#B0050d1a" android:gravity="center"
+        android:visibility="gone" android:clickable="false" android:focusable="false">
+        <TextView
+            android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:text="PAIRED · OFFLINE" android:textColor="@color/text_sec" android:textSize="10sp"
+            android:fontFamily="monospace" android:letterSpacing="0.1" />
+    </LinearLayout>
+
+</FrameLayout>

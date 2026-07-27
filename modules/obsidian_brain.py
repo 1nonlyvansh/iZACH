@@ -8,8 +8,13 @@ import os
 from datetime import datetime
 
 # ── CONFIG ────────────────────────────────────────────────────
-# Set this to your Obsidian vault path
-VAULT_PATH = r"C:\Projects\iZACH\iZACH-Brain"
+# Obsidian vault path — derived relative to the project root (was previously
+# a hardcoded Windows path, which meant this silently never worked on macOS).
+# Override with the IZACH_VAULT_PATH env var if your vault lives elsewhere.
+VAULT_PATH = os.environ.get(
+    "IZACH_VAULT_PATH",
+    os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "iZACH-Brain"),
+)
 
 
 FILES = {

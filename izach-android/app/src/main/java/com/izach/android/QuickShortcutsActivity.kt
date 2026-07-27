@@ -47,6 +47,7 @@ class QuickShortcutsActivity : AppCompatActivity() {
         }
 
         loadShortcuts()
+        applyPlatformTileVisibility()
 
         adapter = ShortcutsAdapter(shortcuts,
             onTap = { s ->
@@ -84,6 +85,10 @@ class QuickShortcutsActivity : AppCompatActivity() {
             }
         }
 
+        binding.tileDevices.setOnClickListener {
+            startActivity(Intent(this, DevicesActivity::class.java))
+        }
+
         binding.tileCortex.setOnClickListener {
             lifecycleScope.launch {
                 api.setUiMode("scifi").onSuccess {
@@ -104,7 +109,21 @@ class QuickShortcutsActivity : AppCompatActivity() {
                 isBackground = (mode == "background")
                 updateBgTile()
             }
+            // Refreshes the cached platform (getSystemStatus caches it as a
+            // side effect) in case this is the first screen hit since pairing
+            // and the tiles above were shown by default before we knew.
+            api.getSystemStatus().onSuccess { applyPlatformTileVisibility() }
         }
+    }
+
+    // Forge UI and Background Mode don't exist on macOS iZACH — hide both
+    // tiles entirely (not just disable) when paired to a Mac. Unknown
+    // platform (never successfully connected yet) defaults to showing both,
+    // same as before this feature existed.
+    private fun applyPlatformTileVisibility() {
+        val isMac = api.activePlatform() == "mac"
+        binding.tileForge.visibility = if (isMac) android.view.View.GONE else android.view.View.VISIBLE
+        binding.tileBgMode.visibility = if (isMac) android.view.View.GONE else android.view.View.VISIBLE
     }
 
     private fun updateBgTile() {

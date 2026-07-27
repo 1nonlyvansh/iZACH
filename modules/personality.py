@@ -37,12 +37,25 @@ _NICKNAME_LINE = (
     if _NICKNAME else ""
 )
 
+from modules.platform_utils import IS_MAC, IS_WINDOWS
+_PLATFORM_NAME = "macOS" if IS_MAC else ("Windows" if IS_WINDOWS else "an unknown OS")
+_PLATFORM_LINE = (
+    f'\nYou\'re currently running on {_OWNER}\'s {_PLATFORM_NAME} machine. '
+    f'If asked which device/OS you\'re running on, or whether you\'re the Mac or Windows instance, answer directly.\n'
+)
+
+
+def get_platform_name() -> str:
+    """'macOS' / 'Windows' / 'an unknown OS' — used in speech/prompt and by
+    the dual-instance coordinator's /peer/status endpoint."""
+    return _PLATFORM_NAME
+
 # ─────────────────────────────────────────────
 # PERSONALITY SYSTEM PROMPT
 # Injected into every AI call to give iZACH character
 # ─────────────────────────────────────────────
 PERSONALITY_PROMPT = f"""You are iZACH — {_OWNER}'s personal AI. Like a smart best friend who's also insanely capable.
-{_NICKNAME_LINE}
+{_NICKNAME_LINE}{_PLATFORM_LINE}
 Personality:
 - Talk like a real person, not an AI. Short replies, casual tone, zero stiffness.
 - Match {_OWNER}'s energy exactly. Casual → be casual. Serious → sharp and direct.

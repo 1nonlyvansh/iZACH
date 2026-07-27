@@ -351,13 +351,15 @@ class BrowserActivity : AppCompatActivity() {
     }
 
     // Only the URL is sent — the PC looks up the saved login, re-verifies with
-    // Windows Hello, and fills the page itself. No credential ever reaches
-    // this phone or crosses the network.
+    // the OS's platform authenticator (Windows Hello / Touch ID), and fills
+    // the page itself. No credential ever reaches this phone or crosses the
+    // network.
     private fun requestAutofillOnPc() {
         val url = activeTab()?.url?.takeIf { it.isNotBlank() } ?: return
+        val authName = if (api.activePlatform() == "mac") "Touch ID" else "Windows Hello"
         lifecycleScope.launch {
             api.requestAutofillOnPc(url)
-                .onSuccess { toast("Requested — approve with Windows Hello on your PC") }
+                .onSuccess { toast("Requested — approve with $authName on your PC") }
                 .onFailure { toast("Failed: ${it.message}") }
         }
     }

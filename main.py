@@ -1,5 +1,6 @@
 import os
 import sys
+from modules.platform_utils import IS_WINDOWS, IS_MAC
 os.environ.setdefault("PYTHONIOENCODING", "utf-8")  # prevent DeepFace emoji crash on Windows
 
 # ── Crash handler — MUST be first so it catches every later import/init crash.
@@ -503,9 +504,9 @@ def get_ai_response_raw(query):
 # --- 6. COMMAND LOOP ---
 
 _recognizer = sr.Recognizer()
-_recognizer.pause_threshold         = 2.5
+_recognizer.pause_threshold         = 1.0
 _recognizer.phrase_threshold        = 0.2
-_recognizer.non_speaking_duration   = 1.0
+_recognizer.non_speaking_duration   = 0.5
 _recognizer.energy_threshold        = 250
 _recognizer.dynamic_energy_threshold = False
 _mic = None
@@ -530,19 +531,44 @@ def listen():
 
     # ── Barge-in command queue check ─────────────────────────
     # If user spoke during TTS playback, that command was captured by
-    # interrupt_engine._voice_monitor_loop. Consume it here first.
+    # interrupt_engine._voice_monitor_loop. Consume it here first — but
+    # only EXECUTE it if the mic is still active. Without this gate, a
+    # command queued while the mic was on (barge-in during a TTS reply)
+    # would still execute even after the user muted the mic before this
+    # next listen() call ran, making iZACH appear to "still take voice
+    # input" right after the user turned the mic off. Still drain the
+    # queue either way (get_barge_in_command() clears it as a side
+    # effect) — otherwise a stale command fires unexpectedly the next
+    # time the mic is turned back on.
     try:
         from modules.interrupt_engine import get_interrupt_engine
+        from modules.ui_api import is_mic_active
         _barge_cmd = get_interrupt_engine().get_barge_in_command()
-        if _barge_cmd:
+        if _barge_cmd and is_mic_active():
             print(f"[BARGE-IN] Executing queued command: {_barge_cmd!r}")
             return _barge_cmd
+        elif _barge_cmd:
+            print(f"[BARGE-IN] Discarded queued command (mic muted): {_barge_cmd!r}")
     except Exception:
         pass
 
     try:
         from modules.ui_api import is_mic_active
         if not is_mic_active():
+            # Release the underlying PyAudio/CoreAudio session, not just
+            # skip calling listen() on it. _mic lives for the whole process
+            # lifetime and is only ever opened/closed per-listen() via its
+            # `with` block — closing a stream doesn't tear down the
+            # PyAudio instance itself, so macOS keeps showing this process
+            # as actively holding the microphone (the menu bar indicator)
+            # even while correctly muted and not processing anything.
+            # Dropping _mic here lets it get garbage-collected (which
+            # terminates the PyAudio session); _init_mic() already lazily
+            # recreates it the next time the mic is turned back on.
+            if _mic is not None:
+                with PYAUDIO_INIT_LOCK:
+                    _mic = None
+                print("[MIC] Released — mic toggled off.")
             time.sleep(0.5)
             return "none"
     except Exception:
@@ -744,9 +770,47 @@ def _start_battery_monitor(speak_fn):
 # start_brain — works with ui=None (Electron/headless) OR
 #               ui=JarvisUI instance (old tkinter mode)
 # ─────────────────────────────────────────────────────────────
+def _start_secondary_connector(reason: str):
+    """Dual-instance (Windows+macOS) 'Secondary Connector' mode — another
+    iZACH install is already primary on the network. Keeps the Flask API
+    (system control via modules/system_control.py, plus /peer/status and
+    /peer/handoff) and the WS bridge alive for remote control, but skips the
+    entire voice-loop/LLM-brain stack: no wake word, no mic, no CommandChain,
+    no background agents. Scope mirrors the existing Allied Node receiver
+    (node_receiver/receiver.py) — this is that same idea, just symmetric
+    between your own two machines instead of a dedicated always-on second PC.
+    ensure_bridge_running() (modules/whatsapp_handler.py) checks the current
+    role itself before ever launching the real Node WhatsApp bridge, so no
+    live WhatsApp session starts here even though the Flask app does."""
+    print(f"[DUAL-INSTANCE] Starting Secondary Connector — {reason}")
+    speak("iZACH is already running on the other device. Starting in connector mode.")
+
+    from modules.whatsapp_handler import init_whatsapp
+    init_whatsapp(speak, None, None)
+
+    from modules.ws_bridge import start_ws_bridge
+    start_ws_bridge()
+
+    from modules.instance_coordinator import watch_for_auto_promotion
+    threading.Thread(target=watch_for_auto_promotion, daemon=True, name="AutoPromoteWatcher").start()
+
+    print("[DUAL-INSTANCE] Secondary Connector ready — system control + peer status active, brain inactive.")
+
+
 def start_brain(ui=None):
     global app, orchestrator, agent_orch, chain_engine
     app = ui  # None when Electron UI is used
+
+    # Dual-instance role decision — must happen before anything else. A solo
+    # install (no peer configured) returns "primary" immediately with zero
+    # network calls, so this is a no-op unless the feature's actually set up.
+    from modules import instance_coordinator as _dual
+    _dual_role, _dual_reason = _dual.decide_role()
+    if _dual.is_configured():
+        print(f"[DUAL-INSTANCE] Role: {_dual_role} — {_dual_reason}")
+    if _dual_role == "secondary":
+        _start_secondary_connector(_dual_reason)
+        return
 
     # 0. Pre-warm ChromaDB / ONNX model in a BACKGROUND thread.
     #    The init lock inside rag_memory prevents concurrent downloads.
@@ -805,8 +869,11 @@ def start_brain(ui=None):
     _sc.start_bluetooth_watcher(speak)
     _sc.start_drive_watcher(speak)
 
-    # Battery / lid auto-switch monitor
-    _start_battery_monitor(speak)
+    # Battery / lid auto-switch monitor — Background Mode isn't offered on
+    # macOS (removed there; may return as its own project later), so this
+    # whole monitor (whose only job is auto-switching into it) is Windows-only.
+    if IS_WINDOWS:
+        _start_battery_monitor(speak)
 
     # 4. WhatsApp callbacks — real ones if old UI, dummy lambdas if headless
     from modules.whatsapp_handler import set_ui_callbacks
@@ -1155,15 +1222,22 @@ def start_brain(ui=None):
     else:
         print("[WAKE WORD] Disabled — always listening mode")
 
-    # Kill any leftover process on port 5051
-    import subprocess
+    # Kill any leftover process on port 5051 — psutil is cross-platform, so this
+    # replaces the old netstat/taskkill (Windows-only) approach on both OSes.
+    # Iterates per-process rather than psutil.net_connections() (system-wide):
+    # on macOS the system-wide call raises AccessDenied outright if even one
+    # other-user process is inaccessible, aborting the whole scan — per-process
+    # lets us skip just the ones we can't inspect (own-user processes work fine).
     try:
-        netstat = subprocess.run(["netstat", "-aon"], capture_output=True, text=True)
-        for line in netstat.stdout.splitlines():
-            if ":5051 " in line:
-                parts = line.split()
-                if parts:
-                    subprocess.run(["taskkill", "/F", "/PID", parts[-1]], capture_output=True)
+        import psutil
+        for proc in psutil.process_iter(["pid"]):
+            try:
+                for conn in proc.net_connections(kind="inet"):
+                    if conn.laddr and conn.laddr.port == 5051:
+                        proc.kill()
+                        break
+            except (psutil.AccessDenied, psutil.NoSuchProcess, PermissionError):
+                continue
     except Exception:
         pass
 

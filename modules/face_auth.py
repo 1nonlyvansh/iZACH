@@ -59,12 +59,14 @@ def is_enrolled() -> bool:
 
 def _grab_rgb():
     """Open camera, grab one RGB frame, release immediately."""
+    import sys
     import cv2
     try:
         from modules.camera_vision import _cam_device_index as _idx
     except Exception:
         _idx = 0
-    cap = cv2.VideoCapture(_idx, cv2.CAP_DSHOW)
+    backend = cv2.CAP_AVFOUNDATION if sys.platform == "darwin" else cv2.CAP_DSHOW
+    cap = cv2.VideoCapture(_idx, backend)
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
     cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)

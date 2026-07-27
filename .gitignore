@@ -292,3 +292,6 @@ izach-godot/
 !package-lock.json
 !izach-ui/package.json
 !izach-ui/package-lock.json
+
+# Syncthing's own per-instance marker — meaningless on another machine
+.stfolder/

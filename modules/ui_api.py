@@ -14,6 +14,8 @@ from flask import Blueprint, request, jsonify, send_from_directory, Response, st
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
 
+from modules.platform_utils import IS_MAC
+
 # ── Safe mode — commands requiring explicit confirmation ──────
 _DANGEROUS_CMDS = [
     "shutdown pc", "shut down pc", "shutdown computer", "shut down computer",
@@ -69,6 +71,7 @@ _HMAC_MAX_SKEW_SECONDS = 300  # reject requests whose timestamp is off by more t
 _HMAC_EXEMPT_PATHS = {
     "/connect/qr", "/status", "/browser/webauthn-gate",
     "/ai/respond", "/notes/save", "/whatsapp/send",
+    "/peer/status", "/peer/handoff", "/peer/check", "/peer/local",
 }
 
 
@@ -143,7 +146,17 @@ def _is_localhost_request() -> bool:
 
 @ui_bp.before_request
 def _require_pairing_signature():
-    if request.path in _HMAC_EXEMPT_PATHS or _is_localhost_request():
+    # /screenshot/image/<filename> is fetched by DownloadManager (Save) and
+    # the system share sheet (Share) on Android, neither of which can attach
+    # a custom HMAC header — same class of "must work unsigned" requirement
+    # as /connect/qr below, just with a dynamic filename segment instead of
+    # a fixed path, so it needs a prefix check rather than exact-set
+    # membership. Without this, those requests 401 with a small JSON body
+    # that BitmapFactory silently fails to decode into a bitmap — the phone
+    # just shows a blank/black image with no visible error.
+    if (request.path in _HMAC_EXEMPT_PATHS
+            or request.path.startswith("/screenshot/image/")
+            or _is_localhost_request()):
         return None
     if not _verify_request_signature():
         return jsonify({"ok": False, "error": "Not paired — scan the QR code in Settings to pair this device"}), 401
@@ -280,6 +293,54 @@ def _log_message(sender: str, text: str):
     })
     if len(_message_log) > MAX_LOG:
         _message_log = _message_log[-MAX_LOG:]
+
+
+# ─────────────────────────────────────────────────────────────
+# Text-command TTS suppression — shared by /command and /confirm_command.
+#
+# CommandChain.__init__ (modules/command_chain.py) constructs 8 specialized
+# agents ONCE at backend startup (SystemAgent, WhatsAppAgent, CalendarAgent,
+# ResearchAgent, SpotifyAgent, FileAgent, MemoryAgent, VisionAgent), each
+# given its OWN permanent `self.speak = speak_func` reference — a completely
+# separate attribute from the CommandChain object's own `self.speak`. A
+# request that only patches chain_obj.speak leaves every agent-routed command
+# (i.e. most real commands, per the Agents/ migration) both speaking out loud
+# AND showing a different, separately-generated reply in the UI (since
+# `captured` stays empty and code falls back to a redundant direct-AI call
+# whose text doesn't even match what was actually said) — this bit both
+# endpoints below independently before this got centralized here.
+# ─────────────────────────────────────────────────────────────
+
+_TEXT_REPLY_AGENT_ATTRS = ('_sys_agent', '_wa_agent', '_cal_agent', '_res_agent',
+                           '_spo_agent', '_file_agent', '_mem_agent', '_vis_agent')
+
+
+def _patch_agents_for_text_reply(chain_obj, captured: list):
+    """Redirect chain_obj's speak AND every specialized agent's speak into
+    `captured` instead of real TTS, for the duration of a text-command
+    request. Returns the patch list — pass to _unpatch_agents() when done."""
+    def _capture_speak(msg, **kwargs):
+        if msg and msg.strip():
+            import re as _re
+            clean = _re.sub(r'<[^>]+>', '', msg).strip()
+            clean = _re.sub(r'^\[TONE:[^\]]+\]', '', clean).strip()
+            if clean:
+                captured.append(clean)
+        # Text commands: NO TTS — text reply only
+
+    patched = []
+    if chain_obj is not None:
+        targets = [chain_obj] + [getattr(chain_obj, a, None) for a in _TEXT_REPLY_AGENT_ATTRS]
+        for obj in targets:
+            if obj is not None and hasattr(obj, 'speak'):
+                patched.append((obj, obj.speak))
+                obj.speak = _capture_speak
+    return patched
+
+
+def _unpatch_agents(patched: list):
+    for obj, original in patched:
+        obj.speak = original
 
 
 # ─────────────────────────────────────────────────────────────
@@ -428,30 +489,27 @@ def ui_command():
 
     try:
         if _chain_fn is None:
+            try:
+                from modules.instance_coordinator import get_role
+                if get_role() == "secondary":
+                    return jsonify({
+                        "ok": False,
+                        "error": "This machine is in Secondary Connector mode — voice/chat "
+                                 "commands run on the other (primary) machine. Say \"hand off "
+                                 "to this device\" from the primary, or restart this machine "
+                                 "after the primary goes offline, to make it primary.",
+                    }), 503
+            except Exception:
+                pass
             return jsonify({"ok": False, "error": "Backend not initialized"}), 503
 
         captured = []
-
-        def _capture_speak(msg, **kwargs):
-            if msg and msg.strip():
-                import re as _re
-                clean = _re.sub(r'<[^>]+>', '', msg).strip()
-                clean = _re.sub(r'^\[TONE:[^\]]+\]', '', clean).strip()
-                if clean:
-                    captured.append(clean)
-            # Text commands: NO TTS — text reply only
-
-        # Patch speak on the chain object for this request
-        chain_obj     = getattr(_chain_fn, '__self__', None)
-        original_speak = None
-        if chain_obj and hasattr(chain_obj, 'speak'):
-            original_speak    = chain_obj.speak
-            chain_obj.speak   = _capture_speak
+        chain_obj = getattr(_chain_fn, '__self__', None)
+        _patched = _patch_agents_for_text_reply(chain_obj, captured)
 
         _chain_fn(text)
 
-        if chain_obj and original_speak is not None:
-            chain_obj.speak = original_speak
+        _unpatch_agents(_patched)
 
         # If chain didn't speak, fall back to direct AI
         if not captured and _get_resp:
@@ -572,7 +630,53 @@ def ui_status():
             "pc_name":         pc_name,
             "battery_pct":     battery_pct,
             "battery_plugged": battery_plugged,
+            "platform":        "mac" if IS_MAC else "windows",
         })
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+# ─────────────────────────────────────────────────────────────
+# GET  /processes     — running process list (Android System Dashboard)
+# POST /kill_process  — {"pid": N}
+# Cross-platform via psutil, no OS branching needed — the Android app has
+# been calling these since the process-list UI was built, but neither route
+# ever actually existed server-side (404), so it silently showed 0 processes
+# forever on every platform.
+# ─────────────────────────────────────────────────────────────
+
+@ui_bp.route("/processes", methods=["GET"])
+def list_processes():
+    procs = []
+    for p in psutil.process_iter(["pid", "name", "cpu_percent", "memory_info"]):
+        try:
+            info = p.info
+            mem = info.get("memory_info")
+            procs.append({
+                "pid":        info.get("pid"),
+                "name":       info.get("name") or "unknown",
+                "cpu":        round(info.get("cpu_percent") or 0.0, 1),
+                "memory_mb":  round((mem.rss / 1e6) if mem else 0.0, 1),
+            })
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            continue
+    procs.sort(key=lambda x: x["memory_mb"], reverse=True)
+    return jsonify({"ok": True, "processes": procs[:200]})
+
+
+@ui_bp.route("/kill_process", methods=["POST"])
+def kill_process_route():
+    data = request.get_json(silent=True) or {}
+    pid = data.get("pid")
+    if not isinstance(pid, int):
+        return jsonify({"ok": False, "error": "pid (int) required"}), 400
+    try:
+        psutil.Process(pid).terminate()
+        return jsonify({"ok": True, "msg": f"Terminated PID {pid}"})
+    except psutil.NoSuchProcess:
+        return jsonify({"ok": False, "error": f"No process with PID {pid}"}), 404
+    except psutil.AccessDenied:
+        return jsonify({"ok": False, "error": f"Permission denied killing PID {pid}"}), 403
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
 
@@ -1119,13 +1223,40 @@ def settings_post():
             # ── Email agent (off by default) ──
             "email_agent_enabled", "email_watch_otp", "email_watch_replies",
             "email_watch_keywords", "email_track_orders",
+            # ── Dual-instance (Windows+macOS) coordination — see
+            # modules/instance_coordinator.py. Nested object:
+            # {enabled, peer_host, peer_port, primary_pin, auto_promote_enabled,
+            #  auto_promote_timeout_minutes}. The shared secret (IZACH_PEER_TOKEN)
+            # lives in .env via /api-keys instead, same as every other secret. ──
+            "dual_instance",
+            # ── Boot Settings tab — which services launch_izach.py starts
+            # at boot. Nested object: {boot_interface, backend, ngrok,
+            # whatsapp_bridge, n8n} — all bool, restart required to apply. ──
+            "boot_terminals",
         }
+        # Auto-promotion watchdog (see modules/instance_coordinator.py) needs
+        # launchd to own the backend's process lifecycle to actually restart
+        # it after auto-promotion's os._exit(0) — install/remove that
+        # registration in lockstep with the toggle, not left for the user to
+        # wire up separately.
+        _old_auto_promote = bool((existing.get("dual_instance") or {}).get("auto_promote_enabled"))
+        _new_di = incoming.get("dual_instance")
+        _new_auto_promote = bool(_new_di.get("auto_promote_enabled")) if isinstance(_new_di, dict) else _old_auto_promote
+
         for k, v in incoming.items():
             if k in allowed:
                 existing[k] = v
 
         with open(SETTINGS_FILE, "w") as f:
             _json.dump(existing, f, indent=2)
+
+        if _new_auto_promote != _old_auto_promote:
+            from modules.instance_coordinator import install_watchdog, uninstall_watchdog
+            if _new_auto_promote:
+                install_watchdog()
+            else:
+                uninstall_watchdog()
+
         return jsonify({"ok": True})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
@@ -1149,6 +1280,9 @@ _MUTABLE_KEYS = [
     "SPOTIPY_CLIENT_ID", "SPOTIPY_CLIENT_SECRET", "SPOTIPY_REDIRECT_URI",
     "OPENROUTER_API_KEY",
     "EDAMAM_APP_ID", "EDAMAM_APP_KEY",
+    # Dual-instance (Windows+macOS) shared secret — must be identical in
+    # both machines' .env files. See modules/instance_coordinator.py.
+    "IZACH_PEER_TOKEN",
 ]
 _ENV_FILE = ".env"
 
@@ -1763,6 +1897,83 @@ def n8n_whatsapp_send():
 
 
 # ─────────────────────────────────────────────────────────────
+# GET  /peer/status   — dual-instance (Windows+macOS) coordination.
+#                       Called by the OTHER iZACH machine, not the phone —
+#                       gated by its own X-iZACH-Peer-Token, not the phone's
+#                       HMAC pairing signature (see _HMAC_EXEMPT_PATHS).
+# POST /peer/handoff  — {"action": "promote"|"demote"}
+# ─────────────────────────────────────────────────────────────
+
+def _check_peer_token() -> bool:
+    from modules.instance_coordinator import verify_peer_token
+    return verify_peer_token(request.headers.get("X-iZACH-Peer-Token", ""))
+
+
+@ui_bp.route("/peer/status", methods=["GET"])
+def peer_status():
+    # Deliberately unauthenticated read — same status this machine would
+    # show locally in Settings, no secrets in the payload (platform/hostname/
+    # role only). Keeps peer discovery simple; /peer/handoff is the
+    # token-gated one since that actually changes state.
+    from modules.instance_coordinator import get_status
+    return jsonify(get_status())
+
+
+@ui_bp.route("/peer/check", methods=["GET"])
+def peer_check():
+    """Local-only helper for Settings UI's 'Test Connection' — this machine
+    reaches out to ITS configured peer and reports what it found (or that the
+    peer's unreachable/unconfigured). Not called by the peer machine itself,
+    unlike /peer/status."""
+    from modules.instance_coordinator import check_peer, is_configured
+    if not is_configured():
+        return jsonify({"ok": True, "configured": False, "peer": None})
+    peer = check_peer()
+    return jsonify({"ok": True, "configured": True, "peer": peer, "reachable": peer is not None})
+
+
+@ui_bp.route("/peer/local", methods=["GET"])
+def peer_local():
+    """Local-only — this machine's own current role plus the last-seen
+    /peer/status payload from the peer (platform/hostname/mac_address), for
+    the Cortex UI to show a 'iZACH is already running on <device>' banner
+    when this instance is Secondary Connector. Not called by the peer
+    machine itself, unlike /peer/status."""
+    from modules.instance_coordinator import get_role, get_peer_info, is_configured
+    return jsonify({
+        "ok": True,
+        "configured": is_configured(),
+        "role": get_role(),
+        "peer": get_peer_info(),
+    })
+
+
+@ui_bp.route("/peer/handoff", methods=["POST"])
+def peer_handoff():
+    if not _check_peer_token():
+        return jsonify({"ok": False, "error": "Unauthorized"}), 401
+    data = request.get_json(silent=True) or {}
+    action = data.get("action", "")
+    from modules.instance_coordinator import become_primary, become_secondary
+    if action == "promote":
+        become_primary("promoted via handoff from peer")
+        # This only flips the in-memory role flag — the actual full-brain
+        # command_chain/agents only ever get built once, in start_brain()'s
+        # startup branch. A machine promoted while already running as
+        # Secondary Connector stays in that lightweight mode (no chain_fn)
+        # until restarted, so it must be told that explicitly — without
+        # this, commands here just silently 503 with "Backend not
+        # initialized" and look broken instead of "needs a restart."
+        if _speak_fn:
+            _speak_fn("This device has been promoted to primary. Restart iZACH here to activate full functionality.")
+        return jsonify({"ok": True, "role": "primary"})
+    if action == "demote":
+        become_secondary("demoted via handoff to peer")
+        return jsonify({"ok": True, "role": "secondary"})
+    return jsonify({"ok": False, "error": "action must be 'promote' or 'demote'"}), 400
+
+
+# ─────────────────────────────────────────────────────────────
 # GET  /websites         — list custom websites
 # POST /websites         — add {name, url}
 # DELETE /websites/<key> — remove by key (lowercased name)
@@ -2033,7 +2244,15 @@ def background_mode():
     """Switch the running instance to Background Mode: persist ui=background and
     start the system-tray icon. The caller (UI) then closes its Electron window;
     Electron's window-all-closed handler sees ui=background and keeps the Python
-    backend alive instead of killing it."""
+    backend alive instead of killing it.
+
+    Windows only — Background Mode isn't offered on macOS (removed; may
+    return as its own project later). main.cjs's getUIMode() also hard-forces
+    'scifi' on macOS regardless of what this route would write, but reject it
+    here too so the route itself doesn't silently no-op."""
+    from modules.platform_utils import IS_MAC
+    if IS_MAC:
+        return jsonify({"ok": False, "error": "Background Mode isn't available on macOS."}), 400
     try:
         try:
             with open(SETTINGS_FILE, encoding="utf-8") as f:
@@ -2448,6 +2667,33 @@ def phone_qr():
     return jsonify({"ok": True, "qr": _phone_qr_b64})
 
 
+@ui_bp.route("/phone/unpair", methods=["POST"])
+def phone_unpair():
+    """Settings → Device Connection → Mobile Phone → REMOVE DEVICE.
+
+    iZACH only has one global pairing secret (no per-device identity), so
+    "removing" the connected phone means rotating that secret — the old
+    one stops HMAC-verifying, so the phone's existing pairing silently
+    stops working and it has to re-scan a fresh QR code to reconnect.
+    """
+    global _phone_connected, _phone_device_name, _pairing_secret_cache
+    new_secret = _secrets.token_hex(32)
+    try:
+        with open(_PAIRING_SECRET_FILE, "w", encoding="utf-8") as f:
+            _json.dump({"secret": new_secret}, f)
+    except Exception as e:
+        return jsonify({"ok": False, "error": f"Could not rotate pairing secret: {e}"}), 500
+    _pairing_secret_cache = new_secret
+    _phone_connected = False
+    _phone_device_name = ""
+    try:
+        from modules.ws_bridge import broadcast
+        broadcast({"type": "phone_status", "connected": False, "device_name": "", "qr": None})
+    except Exception:
+        pass
+    return jsonify({"ok": True})
+
+
 @ui_bp.route("/obsidian/sync", methods=["POST"])
 def obsidian_sync():
     try:
@@ -2794,7 +3040,14 @@ def ui_fetch_file():
     safe = _validate_path(path)
     if not safe or not os.path.isfile(safe):
         return jsonify({"ok": False, "error": "Access denied or not found"}), 403
-    return send_from_directory(os.path.dirname(safe), os.path.basename(safe), as_attachment=True)
+    try:
+        return send_from_directory(os.path.dirname(safe), os.path.basename(safe), as_attachment=True)
+    except PermissionError:
+        # macOS TCC (Full Disk Access not granted to this process) raises
+        # here rather than at the isfile() check above — without this,
+        # a real permission denial surfaced as a raw Flask 500 instead of
+        # the clean 403 JSON every sibling route in this file returns.
+        return jsonify({"ok": False, "error": "Permission denied — grant Full Disk Access to iZACH in System Settings."}), 403
 
 
 # ─────────────────────────────────────────────────────────────
@@ -2929,9 +3182,27 @@ def quick_action():
         return jsonify({"ok": False, "error": "action required"}), 400
     try:
         if action == "lock_pc":
-            import ctypes
-            ctypes.windll.user32.LockWorkStation()
-            return jsonify({"ok": True, "msg": "PC locked"})
+            from modules.platform_utils import IS_WINDOWS, IS_MAC
+            if IS_WINDOWS:
+                import ctypes
+                ctypes.windll.user32.LockWorkStation()
+                return jsonify({"ok": True, "msg": "PC locked"})
+            elif IS_MAC:
+                from modules.platform_utils import run_applescript
+                # Ctrl+Cmd+Q is macOS's built-in "Lock Screen" shortcut, works
+                # for the currently-logged-in user without needing root/sudo.
+                # Requires Accessibility permission for whatever runs this
+                # process (System Events can't send synthetic key events
+                # without it) — previously this result was discarded, so a
+                # missing-permission failure silently reported as success.
+                ok, out = run_applescript(
+                    'tell application "System Events" to key code 12 using {control down, command down}'
+                )
+                if ok:
+                    return jsonify({"ok": True, "msg": "Mac locked"})
+                return jsonify({"ok": False, "error": f"Lock failed (check Accessibility permission for iZACH's Python process): {out}"}), 500
+            else:
+                return jsonify({"ok": False, "error": "lock_pc not supported on this platform"}), 501
 
         if action == "screenshot":
             from modules.screenshot_engine import capture_sync
@@ -2940,20 +3211,40 @@ def quick_action():
             if filename:
                 broadcast({"type": "screenshot_ready", "filename": filename, "ts": time.strftime("%H:%M")})
                 return jsonify({"ok": True, "msg": f"Screenshot: {filename}", "filename": filename})
-            return jsonify({"ok": False, "error": "Capture failed"}), 500
+            from modules.platform_utils import IS_MAC as _IS_MAC
+            hint = " (check Screen Recording permission for iZACH's Python process in System Settings)" if _IS_MAC else ""
+            return jsonify({"ok": False, "error": f"Capture failed{hint}"}), 500
 
-        # Media / volume keys via pynput
-        from pynput.keyboard import Key, Controller as _KC
-        _kb = _KC()
-        _KEY_MAP = {
-            "volume_up":    Key.media_volume_up,
-            "volume_down":  Key.media_volume_down,
-            "mute":         Key.media_volume_mute,
-            "play_pause":   Key.media_play_pause,
-            "next_track":   Key.media_next,
-            "prev_track":   Key.media_previous,
-        }
-        if action in _KEY_MAP:
+        if action in ("volume_up", "volume_down", "mute", "play_pause", "next_track", "prev_track"):
+            from modules.platform_utils import IS_MAC
+            if IS_MAC:
+                # Raw media-keys (pynput below) are unreliable on macOS without
+                # Accessibility-gated key-code injection — real system calls
+                # instead: AppleScript volume/mute (no special permission
+                # needed), Spotify/Music-targeted playback control.
+                from modules import system_control_mac as _scm
+                _MAC_ACTIONS = {
+                    "volume_up":   lambda: _scm.adjust_volume(6),
+                    "volume_down": lambda: _scm.adjust_volume(-6),
+                    "mute":        _scm.toggle_mute,
+                    "play_pause":  _scm.media_playpause,
+                    "next_track":  _scm.media_next,
+                    "prev_track":  _scm.media_previous,
+                }
+                ok, msg = _MAC_ACTIONS[action]()
+                return jsonify({"ok": ok, "msg": msg} if ok else {"ok": False, "error": msg}), (200 if ok else 500)
+
+            # Windows — media keys via pynput
+            from pynput.keyboard import Key, Controller as _KC
+            _kb = _KC()
+            _KEY_MAP = {
+                "volume_up":    Key.media_volume_up,
+                "volume_down":  Key.media_volume_down,
+                "mute":         Key.media_volume_mute,
+                "play_pause":   Key.media_play_pause,
+                "next_track":   Key.media_next,
+                "prev_track":   Key.media_previous,
+            }
             k = _KEY_MAP[action]
             _kb.press(k)
             _kb.release(k)
@@ -3057,26 +3348,13 @@ def confirm_command():
 
     try:
         captured = []
-
-        def _capture_speak(msg, **kwargs):
-            if msg and msg.strip():
-                import re as _re
-                clean = _re.sub(r'<[^>]+>', '', msg).strip()
-                clean = _re.sub(r'^\[TONE:[^\]]+\]', '', clean).strip()
-                if clean:
-                    captured.append(clean)
-
         chain_obj = getattr(_chain_fn, '__self__', None)
-        original_speak = None
-        if chain_obj and hasattr(chain_obj, 'speak'):
-            original_speak = chain_obj.speak
-            chain_obj.speak = _capture_speak
+        _patched = _patch_agents_for_text_reply(chain_obj, captured)
 
         if _chain_fn:
             _chain_fn(text)
 
-        if chain_obj and original_speak is not None:
-            chain_obj.speak = original_speak
+        _unpatch_agents(_patched)
 
         response_text = " ".join(captured).strip() or "Done."
         _log_message("iZACH", response_text)
@@ -4350,15 +4628,13 @@ def fitness_auth_start():
 
 @ui_bp.route("/fitness/auth/complete", methods=["POST"])
 def fitness_auth_complete():
-    data = request.get_json(silent=True) or {}
-    code = data.get("code", "").strip()
-    if not code:
-        return jsonify({"error": "code required"}), 400
-    try:
-        from modules.fitness_engine import complete_auth
-        return jsonify(complete_auth(code))
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    # Dead endpoint, kept only so nothing 404s if an old client still calls
+    # it. fitness_engine.start_auth_flow() now runs the whole exchange
+    # itself via run_local_server() — no code to paste back anymore (the
+    # old flow used redirect_uri="urn:ietf:wg:oauth:2.0:oob", which Google
+    # removed support for in 2022, making the old copy-paste step
+    # impossible to complete in the first place).
+    return jsonify({"error": "No longer needed — connect again, it completes automatically now."}), 410
 
 
 @ui_bp.route("/fitness/disconnect", methods=["POST"])
@@ -4571,15 +4847,11 @@ def smarthome_auth_start():
 
 @ui_bp.route("/smarthome/auth/complete", methods=["POST"])
 def smarthome_auth_complete():
-    data = request.get_json(silent=True) or {}
-    code = data.get("code", "").strip()
-    if not code:
-        return jsonify({"error": "code required"}), 400
-    try:
-        from modules.smart_home_engine import complete_auth
-        return jsonify(complete_auth(code))
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    # Dead endpoint, kept only so nothing 404s if an old client still calls
+    # it — see the matching comment on /fitness/auth/complete above.
+    # start_auth_flow() now completes the exchange itself via
+    # run_local_server(), no code to paste back.
+    return jsonify({"error": "No longer needed — connect again, it completes automatically now."}), 410
 
 
 @ui_bp.route("/smarthome/auth/disconnect", methods=["POST"])
@@ -4962,7 +5234,8 @@ def sc_status():
         import psutil as _ps
         bat  = _ps.sensors_battery()
         vm   = _ps.virtual_memory()
-        disk = _ps.disk_usage("C:\\")
+        from modules.platform_utils import IS_WINDOWS
+        disk = _ps.disk_usage("C:\\" if IS_WINDOWS else "/")
         return jsonify({
             "running":       True,
             "pending_count": len(_sc.get_pending()),
@@ -5611,24 +5884,49 @@ p{font-size:12px;color:rgba(168,216,255,0.6);margin:0;}
 .spin{width:28px;height:28px;border-radius:50%;border:2px solid rgba(0,148,255,0.2);border-top-color:#0094ff;
       animation:sp 0.8s linear infinite;margin-bottom:16px;}
 @keyframes sp{to{transform:rotate(360deg);}}
+#cancel-btn{margin-top:20px;background:transparent;border:1px solid rgba(0,148,255,0.25);color:rgba(168,216,255,0.6);
+      font-family:inherit;font-size:11px;letter-spacing:.1em;padding:7px 18px;border-radius:4px;cursor:pointer;}
+#cancel-btn:hover{border-color:rgba(0,148,255,0.5);color:#a8d8ff;}
 </style></head><body>
-<div class="spin"></div>
-<h1 id="status">Waiting for Windows Hello…</h1>
+<div class="spin" id="spin"></div>
+<h1 id="status">Waiting…</h1>
 <p id="detail">Follow the prompt to continue.</p>
+<button id="cancel-btn" type="button">CANCEL</button>
 <script>
 function b64ToBuf(b64){ b64=b64.replace(/-/g,'+').replace(/_/g,'/'); const bin=atob(b64); const buf=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++) buf[i]=bin.charCodeAt(i); return buf.buffer; }
 function bufToB64(buf){ const bytes=new Uint8Array(buf); let bin=''; for(const b of bytes) bin+=String.fromCharCode(b); return btoa(bin).replace(/\\+/g,'-').replace(/\\//g,'_').replace(/=+$/,''); }
 
+const params=new URLSearchParams(location.search);
+// The Python backend serving this page has no way to know what OS the
+// Electron client is on — main.cjs passes it through as a query param so
+// this can say "Touch ID" on macOS instead of always "Windows Hello".
+const AUTH_NAME = params.get('platform')==='darwin' ? 'Touch ID' : 'Windows Hello';
+const report=(payload)=>{ if(window.izachWebAuthnGate) window.izachWebAuthnGate.reportResult(payload); };
+
+// This window has no native titlebar/close button (frame:false, by design,
+// to match the app's own chrome-less style) — without an explicit way out,
+// a hung or unresponsive platform authenticator left the user with a
+// window they could only force-quit the whole app to get rid of.
+let _reported=false;
+function cancel(){
+  if(_reported) return;
+  _reported=true;
+  report({ok:false, error:'cancelled_by_user'});
+}
+document.getElementById('cancel-btn').addEventListener('click', cancel);
+document.addEventListener('keydown', e=>{ if(e.key==='Escape') cancel(); });
+
 async function run(){
-  const params=new URLSearchParams(location.search);
   const mode=params.get('mode');
   const statusEl=document.getElementById('status');
   const detailEl=document.getElementById('detail');
-  const report=(payload)=>{ if(window.izachWebAuthnGate) window.izachWebAuthnGate.reportResult(payload); };
+  statusEl.textContent='Waiting for '+AUTH_NAME+'…';
 
   if(!window.PublicKeyCredential){
     statusEl.textContent='Not supported';
     detailEl.textContent='This machine has no WebAuthn platform authenticator available.';
+    document.getElementById('spin').style.display='none';
+    _reported=true;
     report({ok:false, error:'unsupported'});
     return;
   }
@@ -5645,7 +5943,8 @@ async function run(){
         timeout: 60000, attestation: 'none',
       }});
       statusEl.textContent='Enrolled';
-      detailEl.textContent='Windows Hello is now set up for autofill.';
+      detailEl.textContent=AUTH_NAME+' is now set up for autofill.';
+      _reported=true;
       report({ok:true, credentialId: bufToB64(cred.rawId)});
     } else {
       const credentialId=params.get('credential_id');
@@ -5655,11 +5954,13 @@ async function run(){
       }});
       statusEl.textContent='Verified';
       detailEl.textContent='You may close this window.';
+      _reported=true;
       report({ok:true});
     }
   }catch(e){
     statusEl.textContent='Cancelled or failed';
     detailEl.textContent=String(e.message||e);
+    _reported=true;
     report({ok:false, error:String(e.message||e)});
   }
 }

@@ -218,7 +218,7 @@ class SpotifyController:
             return "Spotify is not active right now."
 
         try:
-            device_id = self.last_device_id or self._get_active_device()
+            device_id = self._get_active_device() or self.last_device_id
             if not device_id:
                 return "No active Spotify device."
 
@@ -324,7 +324,7 @@ class SpotifyController:
 
     def play_specific_playlist_uri(self, uri):
         try:
-            device_id = self.last_device_id or self._get_active_device()
+            device_id = self._get_active_device() or self.last_device_id
             if not device_id:
                 return "No active Spotify device."
 
@@ -454,7 +454,7 @@ class SpotifyController:
             return "Spotify is not active right now."
 
         try:
-            device_id = self.last_device_id or self._get_active_device()
+            device_id = self._get_active_device() or self.last_device_id
             if not device_id:
                 return "No active Spotify device."
 
@@ -486,7 +486,7 @@ class SpotifyController:
             return "Spotify is not connected."
 
         try:
-            device_id = self.last_device_id or self._get_active_device()
+            device_id = self._get_active_device() or self.last_device_id
             if not device_id:
                 return "No active device found to queue tracks."
 
@@ -511,7 +511,7 @@ class SpotifyController:
             return "Spotify is not active right now."
 
         try:
-            device_id = self.last_device_id or self._get_active_device()
+            device_id = self._get_active_device() or self.last_device_id
             if not device_id:
                 return "No active Spotify device."
 
@@ -661,7 +661,7 @@ class SpotifyController:
         if not self.sp:
             return "Spotify is not active right now."
         try:
-            device_id = self.last_device_id or self._get_active_device()
+            device_id = self._get_active_device() or self.last_device_id
             if not device_id:
                 return "No active Spotify device."
             query = _MOOD_MAP.get(mood.lower().strip(), mood)

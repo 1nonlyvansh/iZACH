@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:background="@color/bg_card"
+    android:padding="12dp"
+    android:layout_marginBottom="8dp">
+
+    <LinearLayout android:layout_width="wrap_content" android:layout_height="wrap_content"
+        android:orientation="vertical" android:layout_marginEnd="8dp">
+        <ImageButton android:id="@+id/btnMoveUp"
+            android:layout_width="32dp" android:layout_height="32dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@android:drawable/arrow_up_float" android:contentDescription="Move up"
+            app:tint="@color/text_sec" />
+        <ImageButton android:id="@+id/btnMoveDown"
+            android:layout_width="32dp" android:layout_height="32dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@android:drawable/arrow_down_float" android:contentDescription="Move down"
+            app:tint="@color/text_sec" />
+    </LinearLayout>
+
+    <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content"
+        android:layout_weight="1" android:orientation="vertical">
+        <TextView android:id="@+id/tvCommandText"
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:text="—" android:textColor="@color/text_pri" android:textSize="13sp"
+            android:fontFamily="monospace" android:maxLines="2" android:ellipsize="end" />
+        <TextView android:id="@+id/tvCommandTarget"
+            android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:text="— TARGET" android:textColor="@color/cyan" android:textSize="10sp"
+            android:fontFamily="monospace" android:letterSpacing="0.05"
+            android:layout_marginTop="3dp" />
+    </LinearLayout>
+
+    <ImageButton android:id="@+id/btnDeleteQueued"
+        android:layout_width="36dp" android:layout_height="36dp"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:src="@android:drawable/ic_menu_delete" android:contentDescription="Remove"
+        app:tint="@color/red_neon" />
+
+</LinearLayout>

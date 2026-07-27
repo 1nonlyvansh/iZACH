@@ -67,7 +67,17 @@ class ScreenshotViewerActivity : AppCompatActivity() {
                     val bmp = android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
                     runOnUiThread {
                         binding.progressImage.visibility = View.GONE
-                        binding.ivScreenshot.setImageBitmap(bmp)
+                        if (bmp != null) {
+                            binding.ivScreenshot.setImageBitmap(bmp)
+                        } else {
+                            // decodeByteArray returns null (not an exception) on
+                            // invalid image data — e.g. an error JSON body from
+                            // a rejected request — which used to leave the
+                            // ImageView showing nothing against the dark theme,
+                            // looking like a blank/black screenshot with no
+                            // indication anything had gone wrong.
+                            Toast.makeText(this@ScreenshotViewerActivity, "Couldn't load screenshot — try again", Toast.LENGTH_SHORT).show()
+                        }
                     }
                 } catch (e: Exception) {
                     runOnUiThread {

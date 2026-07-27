@@ -1,5 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react'
 
+// "classic" mode is iZACH's Electron/React dashboard theme — historically labeled
+// "Forge UI" for visual parity with the separate forge_ui.py Tkinter app, which
+// only exists on Windows (WebView2/pythonnet). On macOS that app can't run at all,
+// so the label would be misleading there — use the accurate "Classic" name instead.
+const IS_MAC = typeof window !== 'undefined' && window.electronAPI?.platform === 'darwin'
+const CLASSIC_UI_LABEL = IS_MAC ? 'Classic' : 'Forge UI'
+
 function SectionHeader({ label }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 20px 8px' }}>
@@ -1393,7 +1400,7 @@ function GeneralSection({ settings, onSave }) {
         value={form.ui || 'classic'}
         onChange={v => set('ui', v)}
         options={[
-          { value: 'classic',    label: 'Forge UI' },
+          { value: 'classic',    label: CLASSIC_UI_LABEL },
           { value: 'scifi',      label: 'Cortex UI' },
           { value: 'background', label: 'Background Mode (no window, low RAM)' },
         ]}
@@ -2079,7 +2086,7 @@ function BackgroundModeSection({ settings, onSave }) {
         value={form.ui || 'classic'}
         onChange={v => set('ui', v)}
         options={[
-          { value: 'classic',    label: 'Forge UI' },
+          { value: 'classic',    label: CLASSIC_UI_LABEL },
           { value: 'scifi',      label: 'Cortex UI' },
           { value: 'background', label: 'Background Mode (no window, low RAM)' },
         ]}

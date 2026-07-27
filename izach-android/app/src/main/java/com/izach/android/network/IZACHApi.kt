@@ -12,6 +12,7 @@ import com.izach.android.model.BrowserHistoryEntry
 import com.izach.android.model.BusyStatus
 import com.izach.android.model.CalendarEvent
 import com.izach.android.model.CommandResponse
+import com.izach.android.model.DeviceProfile
 import com.izach.android.model.DndAlert
 import com.izach.android.model.DndStatus
 import com.izach.android.model.FileEntry
@@ -98,7 +99,320 @@ class IZACHApi(context: Context) {
     }
 
     fun pairingSecret(): String = prefs.getString("pairing_secret", "") ?: ""
-    fun savePairingSecret(secret: String) = prefs.edit().putString("pairing_secret", secret).apply()
+    fun savePairingSecret(secret: String) {
+        prefs.edit().putString("pairing_secret", secret).apply()
+        updateActiveProfileFields(pairingSecret = secret)
+    }
+
+    // ── Saved device profiles — Mac and Windows iZACH installs saved as
+    // separate named connections. The flat backend_url/ws_host/pairing_secret
+    // keys above remain the single "currently active connection" that every
+    // existing call site already reads; profiles are a layer on top that lets
+    // the user switch which connection is active without re-scanning a QR
+    // code each time. ──────────────────────────────────────────────
+    private val profilesKey = "device_profiles"
+    private val activeProfileIdKey = "active_profile_id"
+
+    fun getProfiles(): List<DeviceProfile> {
+        val raw = prefs.getString(profilesKey, null) ?: return emptyList()
+        return runCatching {
+            gson.fromJson(raw, Array<DeviceProfile>::class.java).toList()
+        }.getOrDefault(emptyList())
+    }
+
+    private fun saveProfiles(profiles: List<DeviceProfile>) {
+        prefs.edit().putString(profilesKey, gson.toJson(profiles)).apply()
+    }
+
+    fun activeProfileId(): String? = prefs.getString(activeProfileIdKey, null)
+
+    // True when there's a live connection (freshly QR-paired, or from before
+    // saved profiles existed) that no saved profile owns yet — the device
+    // picker uses this to prompt "name this connection" instead of either
+    // silently swallowing it into an unnamed profile or showing an empty
+    // screen after a fresh pairing.
+    fun hasUnnamedActiveConnection(): Boolean =
+        pairingSecret().isNotBlank() && activeProfileId() == null
+
+    // Snapshots the CURRENT active connection (whatever's in the flat keys
+    // right now — freshly QR-paired or otherwise) into a new named saved
+    // profile, and marks it active. This is how "Mac" and "Windows" become
+    // two independently switchable saved connections.
+    fun saveActiveConnectionAsProfile(name: String): DeviceProfile {
+        val profile = DeviceProfile(
+            id = java.util.UUID.randomUUID().toString(),
+            name = name,
+            backendUrl = baseUrl(),
+            wsHost = wsHost(),
+            pairingSecret = pairingSecret()
+        )
+        val updated = getProfiles() + profile
+        saveProfiles(updated)
+        prefs.edit().putString(activeProfileIdKey, profile.id).apply()
+        return profile
+    }
+
+    // Copies a saved profile's connection details into the flat active keys
+    // — every existing screen (Settings, widget, all API calls) picks this up
+    // immediately since they all read the flat keys, not the profile itself.
+    fun switchToProfile(id: String) {
+        val profile = getProfiles().firstOrNull { it.id == id } ?: return
+        prefs.edit()
+            .putString("backend_url", profile.backendUrl)
+            .putString("ws_host", profile.wsHost)
+            .putString("pairing_secret", profile.pairingSecret)
+            .putString(activeProfileIdKey, profile.id)
+            .apply()
+    }
+
+    fun deleteProfile(id: String) {
+        saveProfiles(getProfiles().filterNot { it.id == id })
+        if (activeProfileId() == id) {
+            prefs.edit().remove(activeProfileIdKey).apply()
+        }
+    }
+
+    fun renameProfile(id: String, newName: String) {
+        saveProfiles(getProfiles().map { if (it.id == id) it.copy(name = newName) else it })
+    }
+
+    // Adds a freshly-scanned PC as its own new profile WITHOUT touching the
+    // flat active-connection keys or active_profile_id at all — whatever the
+    // phone is currently connected to (and its chat session) stays completely
+    // undisturbed. This is what the dedicated "Connect Another PC" flow uses,
+    // as opposed to Settings' QR scan (which intentionally replaces the
+    // active connection).
+    fun addProfileFromScan(backendUrl: String, wsHost: String, secret: String, name: String): DeviceProfile {
+        val profile = DeviceProfile(
+            id = java.util.UUID.randomUUID().toString(),
+            name = name,
+            backendUrl = backendUrl,
+            wsHost = wsHost,
+            pairingSecret = secret
+        )
+        saveProfiles(getProfiles() + profile)
+        return profile
+    }
+
+    // Keeps the active saved profile (if any) in sync when its connection
+    // details change from underneath it — e.g. editing the URL in Settings,
+    // or re-pairing with a fresh secret via QR while that profile is active.
+    private fun updateActiveProfileFields(
+        backendUrl: String? = null,
+        wsHost: String? = null,
+        pairingSecret: String? = null,
+        platform: String? = null
+    ) {
+        val id = activeProfileId() ?: return
+        saveProfiles(getProfiles().map {
+            if (it.id != id) it else it.copy(
+                backendUrl = backendUrl ?: it.backendUrl,
+                wsHost = wsHost ?: it.wsHost,
+                pairingSecret = pairingSecret ?: it.pairingSecret,
+                platform = platform ?: it.platform
+            )
+        })
+    }
+
+    // Severs the active-profile link if the host about to become active
+    // doesn't match whatever profile currently holds that link. Without
+    // this, scanning (or manually entering) a DIFFERENT PC's connection
+    // details while a saved profile was active — e.g. re-scanning in
+    // Settings while "Windows" was the active profile, actually pointing
+    // at a Mac — silently overwrote that profile's own backendUrl/wsHost/
+    // pairingSecret via updateActiveProfileFields() (called from
+    // saveBackendUrl/saveWsHost/savePairingSecret below), corrupting it
+    // in place: still named/labeled "Windows" (stale cached platform) but
+    // now actually pointing at the Mac's IP and secret. The launcher then
+    // shows a "Windows" card that's really the Mac (wrong label, and
+    // reachability checks against the WRONG expectations), and if the
+    // user also saves the new connection under its own name via
+    // "Connect Another PC" or "+ SAVE CURRENT CONNECTION", a second,
+    // duplicate entry for the same physical machine appears too.
+    // Clearing the link here instead lets hasUnnamedActiveConnection()
+    // correctly detect "this is an unclaimed connection" and prompt to
+    // name it as a brand-new profile — leaving the old one untouched.
+    // A matching host is treated as "re-pairing the same machine" (new
+    // secret, same box) and keeps syncing that profile as before.
+    fun clearActiveProfileLinkIfDifferentHost(newHost: String) {
+        val activeId = activeProfileId() ?: return
+        val activeProfile = getProfiles().firstOrNull { it.id == activeId } ?: return
+        if (activeProfile.wsHost.isNotBlank() && activeProfile.wsHost != newHost) {
+            prefs.edit().remove(activeProfileIdKey).apply()
+        }
+    }
+
+    // Applies a freshly scanned connection to the flat active-connection
+    // keys, guarding against the corruption described above. Used by
+    // Settings' QR-scan flow. secret is left untouched if blank (the QR
+    // didn't carry one — keep whatever secret is already stored).
+    fun applyConnection(url: String, host: String, secret: String) {
+        clearActiveProfileLinkIfDifferentHost(host)
+        saveBackendUrl(url)
+        saveWsHost(host)
+        if (secret.isNotBlank()) savePairingSecret(secret)
+    }
+
+    // Called after a successful /status fetch to cache which platform this
+    // connection is — lets Devices screen and tile-hiding work without
+    // requiring a fresh round-trip every time.
+    fun cacheActiveProfilePlatform(platform: String) {
+        if (platform.isBlank()) return
+        updateActiveProfileFields(platform = platform)
+    }
+
+    // Best-effort platform of whatever's currently active — empty string if
+    // never successfully connected yet (caller should treat that as "unknown,
+    // assume full feature set" rather than hiding anything).
+    fun activePlatform(): String {
+        val id = activeProfileId() ?: return ""
+        return getProfiles().firstOrNull { it.id == id }?.platform ?: ""
+    }
+
+    // Plain client with no signing interceptor — used only for one-off
+    // per-profile peeks below, where the request must be signed with THAT
+    // profile's own secret rather than whatever's currently active.
+    private val plainClient = OkHttpClient.Builder()
+        .connectTimeout(5, TimeUnit.SECONDS)
+        .readTimeout(8, TimeUnit.SECONDS)
+        .build()
+
+    // Fetches /status for a SAVED profile without switching the active
+    // connection — lets the device-picker screen show live battery% / online
+    // state for every saved PC at once, side by side, none of them becoming
+    // "active" just by being glanced at. /status is exempt from signature
+    // verification server-side (see getSystemStatus's comment above), so no
+    // signing is actually needed here — this mirrors that, deliberately not
+    // reusing the signed `client`.
+    suspend fun getStatusForProfile(profile: DeviceProfile): Result<SystemStatus> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val resp = plainClient.newCall(Request.Builder().url("${profile.backendUrl}/status").build()).execute()
+                val obj = gson.fromJson(resp.body?.string() ?: "{}", JsonObject::class.java)
+                SystemStatus(
+                    cpu = obj.get("cpu")?.asFloat ?: 0f,
+                    ram = obj.get("ram")?.asFloat ?: 0f,
+                    gpu = obj.get("gpu")?.asFloat ?: 0f,
+                    procCpu = obj.get("proc_cpu")?.asFloat ?: 0f,
+                    procMem = obj.get("proc_mem")?.asFloat ?: 0f,
+                    ramUsedGb = obj.get("ram_used_gb")?.asFloat ?: 0f,
+                    ramTotalGb = obj.get("ram_total_gb")?.asFloat ?: 0f,
+                    whatsapp = obj.get("whatsapp")?.asBoolean ?: false,
+                    mma = obj.get("mma")?.asBoolean ?: false,
+                    pcName = obj.get("pc_name")?.asString ?: "",
+                    batteryPct = obj.get("battery_pct")?.takeIf { !it.isJsonNull }?.asInt,
+                    batteryPlugged = obj.get("battery_plugged")?.takeIf { !it.isJsonNull }?.asBoolean,
+                    platform = obj.get("platform")?.takeIf { !it.isJsonNull }?.asString ?: ""
+                )
+            }
+        }
+
+    // Signs and sends a command to a SAVED profile that may not be the
+    // active connection — mirrors the interceptor's exact HMAC scheme above,
+    // built manually here since the interceptor always signs with whatever
+    // pairingSecret() (the active connection's) currently returns.
+    suspend fun sendCommandToProfile(profile: DeviceProfile, text: String): Result<CommandResponse> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val deviceName = Build.MODEL
+                val bodyStr = """{"text":${gson.toJson(text)},"source":"phone","device_name":${gson.toJson(deviceName)}}"""
+                val bodyBytes = bodyStr.toByteArray()
+                val body = bodyStr.toRequestBody("application/json".toMediaType())
+                val path = "/command"
+                val ts = (System.currentTimeMillis() / 1000).toString()
+                var reqBuilder = Request.Builder().url("${profile.backendUrl}$path").post(body)
+                if (profile.pairingSecret.isNotBlank()) {
+                    val message = "POST|$path|$ts".toByteArray() + byteArrayOf('|'.code.toByte()) + bodyBytes
+                    val mac = javax.crypto.Mac.getInstance("HmacSHA256")
+                    mac.init(javax.crypto.spec.SecretKeySpec(profile.pairingSecret.toByteArray(), "HmacSHA256"))
+                    val sig = mac.doFinal(message).joinToString("") { "%02x".format(it) }
+                    reqBuilder = reqBuilder
+                        .addHeader("X-iZACH-Signature", sig)
+                        .addHeader("X-iZACH-Timestamp", ts)
+                }
+                val resp = plainClient.newCall(reqBuilder.build()).execute()
+                val raw = resp.body?.string() ?: ""
+                if (resp.code == 401) throw PairingRejectedException(raw)
+                if (!resp.isSuccessful) error("HTTP ${resp.code}: $raw")
+                val obj = gson.fromJson(raw, JsonObject::class.java)
+                CommandResponse(
+                    text = obj.get("message")?.asString ?: obj.get("response")?.asString ?: "Done.",
+                    action = obj.get("action")?.asString,
+                    requiresConfirmation = obj.get("requires_confirmation")?.asBoolean ?: false,
+                    confirmationToken = obj.get("confirmation_token")?.asString
+                )
+            }
+        }
+
+    // ── Cross-device command queue — add a command targeted at a specific
+    // saved PC (Mac or Windows), independent of whichever is currently the
+    // active connection. Order in the list is execution priority. ──
+    private val commandQueueKey = "cross_device_command_queue"
+
+    fun getCommandQueue(): List<com.izach.android.model.QueuedCommand> {
+        val raw = prefs.getString(commandQueueKey, null) ?: return emptyList()
+        return runCatching {
+            gson.fromJson(raw, Array<com.izach.android.model.QueuedCommand>::class.java).toList()
+        }.getOrDefault(emptyList())
+    }
+
+    private fun saveCommandQueue(queue: List<com.izach.android.model.QueuedCommand>) {
+        prefs.edit().putString(commandQueueKey, gson.toJson(queue)).apply()
+    }
+
+    fun addToCommandQueue(text: String, targetProfile: DeviceProfile) {
+        val entry = com.izach.android.model.QueuedCommand(
+            id = java.util.UUID.randomUUID().toString(),
+            text = text,
+            targetProfileId = targetProfile.id,
+            targetProfileName = targetProfile.name,
+            addedAt = System.currentTimeMillis()
+        )
+        saveCommandQueue(getCommandQueue() + entry)
+    }
+
+    fun removeFromCommandQueue(id: String) {
+        saveCommandQueue(getCommandQueue().filterNot { it.id == id })
+    }
+
+    fun reorderCommandQueue(newOrder: List<com.izach.android.model.QueuedCommand>) {
+        saveCommandQueue(newOrder)
+    }
+
+    // Walks the queue front-to-back once; fires every command whose target
+    // profile answers right now (not just the very first item) so a command
+    // queued for an offline Mac doesn't block a Windows-targeted command
+    // behind it once Windows comes online — each command still only ever
+    // runs after everything queued earlier FOR THE SAME TARGET has already
+    // fired, since removal preserves relative order. Returns how many sent.
+    suspend fun drainCommandQueue(): Int {
+        var sent = 0
+        val remaining = getCommandQueue().toMutableList()
+        var i = 0
+        while (i < remaining.size) {
+            val cmd = remaining[i]
+            val profile = getProfiles().firstOrNull { it.id == cmd.targetProfileId }
+            if (profile == null) {
+                // Target profile was deleted — drop the orphaned command.
+                remaining.removeAt(i)
+                continue
+            }
+            val reachable = getStatusForProfile(profile).isSuccess
+            if (!reachable) {
+                i++
+                continue
+            }
+            val result = sendCommandToProfile(profile, cmd.text)
+            if (result.isSuccess) {
+                remaining.removeAt(i)
+                sent++
+            } else {
+                i++
+            }
+        }
+        if (sent > 0) saveCommandQueue(remaining)
+        return sent
+    }
 
     // ── Offline command queue — persisted so typed commands survive the app
     // being killed while the PC is unreachable; flushed on WS reconnect. ──
@@ -403,9 +717,45 @@ class IZACHApi(context: Context) {
                 mma      = obj.get("mma")?.asBoolean ?: false,
                 pcName   = obj.get("pc_name")?.asString ?: "",
                 batteryPct = obj.get("battery_pct")?.takeIf { !it.isJsonNull }?.asInt,
-                batteryPlugged = obj.get("battery_plugged")?.takeIf { !it.isJsonNull }?.asBoolean
+                batteryPlugged = obj.get("battery_plugged")?.takeIf { !it.isJsonNull }?.asBoolean,
+                platform = obj.get("platform")?.takeIf { !it.isJsonNull }?.asString ?: ""
+            ).also { cacheActiveProfilePlatform(it.platform) }
+        }
+    }
+
+    // ── Dual-instance peer info — this device's own role plus whatever it
+    // last heard from its paired peer machine (platform/hostname/role), for
+    // the phone's Devices screen. Read-only, safe to poll. ──────────
+    data class PeerLocalInfo(
+        val configured: Boolean,
+        val role: String,
+        val peerPlatform: String?,
+        val peerHostname: String?,
+        val peerRole: String?
+    )
+
+    suspend fun getPeerLocal(): Result<PeerLocalInfo> = withContext(Dispatchers.IO) {
+        runCatching {
+            val resp = client.newCall(Request.Builder().url("${baseUrl()}/peer/local").build()).execute()
+            val obj = gson.fromJson(resp.body?.string() ?: "{}", JsonObject::class.java)
+            val peer = obj.getAsJsonObject("peer")
+            PeerLocalInfo(
+                configured = obj.get("configured")?.asBoolean ?: false,
+                role = obj.get("role")?.asString ?: "primary",
+                peerPlatform = peer?.get("platform")?.takeIf { !it.isJsonNull }?.asString,
+                peerHostname = peer?.get("hostname")?.takeIf { !it.isJsonNull }?.asString,
+                peerRole = peer?.get("role")?.takeIf { !it.isJsonNull }?.asString
             )
         }
+    }
+
+    // Sends the handoff as a normal authenticated text command — reuses the
+    // already-built, already-tested command_chain.py parser end to end
+    // instead of a new endpoint (the machine-to-machine /peer/handoff route
+    // uses a different auth scheme the phone isn't signed for).
+    suspend fun triggerHandoff(targetPlatform: String): Result<CommandResponse> {
+        val phrase = if (targetPlatform == "mac") "hands off to mac" else "hands off to windows"
+        return sendCommand(phrase)
     }
 
     // Verifies the stored pairing_secret is actually accepted by the PC —
@@ -609,8 +959,14 @@ class IZACHApi(context: Context) {
         }
     }
 
-    fun saveBackendUrl(url: String) = prefs.edit().putString("backend_url", url).apply()
-    fun saveWsHost(host: String) = prefs.edit().putString("ws_host", host).apply()
+    fun saveBackendUrl(url: String) {
+        prefs.edit().putString("backend_url", url).apply()
+        updateActiveProfileFields(backendUrl = url)
+    }
+    fun saveWsHost(host: String) {
+        prefs.edit().putString("ws_host", host).apply()
+        updateActiveProfileFields(wsHost = host)
+    }
 
     // ── VIP contacts ──────────────────────────────────────────
     suspend fun getVipContacts(): Result<List<String>> = withContext(Dispatchers.IO) {

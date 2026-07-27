@@ -43,7 +43,6 @@ _ACTIVITY_NAMES = {
 
 _creds       = None
 _auth_state  = {"status": "not_connected", "error": ""}
-_pending_flow = None
 
 
 # =============================================================================
@@ -210,10 +209,17 @@ def get_summary() -> dict:
 
 def start_auth_flow() -> dict:
     """
-    Generate auth URL for user to visit. No local HTTP server needed.
-    Returns {"url": "...", "instructions": "..."}
+    Kicks off the OAuth flow in a background thread and opens the user's
+    browser to Google's consent screen. Was previously a copy-paste-code
+    flow using redirect_uri="urn:ietf:wg:oauth:2.0:oob" — Google removed
+    that special value in 2022 (the consent screen refuses to render at
+    all for it now), which made this integration completely unusable
+    regardless of OS. Rewritten to match the already-working run_local_server()
+    pattern used by modules/email_agent.py and modules/calendar_agent.py in
+    this same codebase: no code to copy, /fitness/auth/status is polled
+    until it flips to "connected".
     """
-    global _pending_flow
+    global _auth_state
     if not os.path.exists(_CREDS_FILE):
         return {
             "error": (
@@ -222,42 +228,29 @@ def start_auth_flow() -> dict:
                 "Create OAuth2 Desktop client → Download JSON → save as fitness_credentials.json"
             )
         }
+    if _auth_state.get("status") == "waiting_for_browser":
+        return {"error": "A connect attempt is already in progress."}
+    import threading
+    threading.Thread(target=_run_auth_flow, daemon=True).start()
+    return {"status": "waiting_for_browser"}
+
+
+def _run_auth_flow():
+    global _creds, _auth_state
     try:
+        _auth_state = {"status": "waiting_for_browser", "error": ""}
         from google_auth_oauthlib.flow import InstalledAppFlow
         flow = InstalledAppFlow.from_client_secrets_file(_CREDS_FILE, _SCOPES)
-        flow.redirect_uri = "urn:ietf:wg:oauth:2.0:oob"
-        auth_url, _ = flow.authorization_url(prompt="consent", access_type="offline")
-        _pending_flow = flow
-        return {
-            "url": auth_url,
-            "instructions": (
-                "Open this URL in your browser. Sign in, allow access, "
-                "then copy the code shown and POST to /fitness/auth/complete "
-                "with body: {\"code\": \"<paste_code_here>\"}"
-            ),
-        }
-    except ImportError:
-        return {"error": "Run: pip install google-auth-oauthlib"}
-    except Exception as e:
-        return {"error": str(e)}
-
-
-def complete_auth(code: str) -> dict:
-    """Exchange auth code for token. Call after start_auth_flow()."""
-    global _creds, _pending_flow, _auth_state
-    if not _pending_flow:
-        return {"error": "No pending flow. Call /fitness/auth/start first."}
-    try:
-        _pending_flow.fetch_token(code=code.strip())
-        _creds = _pending_flow.credentials
+        creds = flow.run_local_server(port=0)
+        _creds = creds
         _save_token(_creds)
-        _auth_state["status"] = "connected"
-        _auth_state["error"]  = ""
-        _pending_flow = None
+        _auth_state = {"status": "connected", "error": ""}
         logger.info("[FITNESS] Google Fit connected!")
-        return {"success": True, "message": "Google Fit connected successfully!"}
+    except ImportError:
+        _auth_state = {"status": "error", "error": "Run: pip install google-auth-oauthlib"}
     except Exception as e:
-        return {"error": str(e)}
+        _auth_state = {"status": "error", "error": str(e)}
+        logger.error(f"[FITNESS] Auth flow failed: {e}")
 
 
 def get_auth_status() -> dict:

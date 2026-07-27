@@ -71,7 +71,12 @@ Rules:
 - For add_event: date defaults to today if not specified; time defaults to null (ask)
 - reminder_time: keep as the user's natural language phrase (e.g. "5pm", "in 2 hours", "every morning")
 - alarm_hour/alarm_minute: extract from "7am", "7:30", "7:30 am" etc.
-- window_hours: default 72 (3 days) for view_schedule
+- view_schedule scope — pick ONE of the two:
+  - Single specific day ("today", "tomorrow", "on Friday", a named date): set "date" to
+    that day's YYYY-MM-DD, leave "window_hours" null.
+  - A range ("this week", "next N days", "upcoming", no scope mentioned): leave "date"
+    null, set "window_hours" = N * 24 (e.g. "this week"/"next 7 days" = 168, "next 2
+    days" = 48, "next 3 days" or unspecified/"upcoming" = 72, "next 5 days" = 120).
 - Output ONLY the JSON object
 """
 
@@ -160,12 +165,20 @@ class CalendarAgent:
     # ── Handlers ─────────────────────────────────────────────────
 
     def _view_schedule(self, d: dict, cmd: str) -> bool:
-        hours = int(d.get("window_hours") or 72)
+        date = d.get("date")
         try:
-            from modules.calendar_agent import get_upcoming_events, format_event_for_speech
-            events = get_upcoming_events(hours=hours)
+            from modules.calendar_agent import get_upcoming_events, get_today_events, format_event_for_speech
+            if date:
+                events = get_today_events(date)
+                scope_label = "today" if date == self._today() else self._fmt_date(date)
+            else:
+                hours = int(d.get("window_hours") or 72)
+                events = get_upcoming_events(hours=hours)
+                days = max(1, hours // 24)
+                scope_label = "today" if days == 1 else f"the next {days} days"
+
             if not events:
-                self.speak(f"Nothing on your calendar for the next {hours // 24} days.")
+                self.speak(f"Nothing on your calendar for {scope_label}.")
                 return True
             parts = [format_event_for_speech(e) for e in events[:5]]
             self.speak("Coming up: " + ", then ".join(parts) + ".")

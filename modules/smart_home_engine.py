@@ -117,7 +117,13 @@ def _get_credentials():
 
 
 def start_auth_flow() -> dict:
-    global _pending_flow
+    # Was a copy-paste-code flow via redirect_uri="urn:ietf:wg:oauth:2.0:oob"
+    # — Google removed that special value in 2022 (consent screen refuses
+    # to render for it), making this unusable. Rewritten to match the
+    # already-working run_local_server() pattern in email_agent.py /
+    # calendar_agent.py / fitness_engine.py: no code to copy, poll
+    # /smarthome/auth/status until it flips to "connected".
+    global _auth_state
     if not os.path.exists(_CREDS_FILE):
         return {
             "error": (
@@ -127,41 +133,27 @@ def start_auth_flow() -> dict:
                 "save as smart_home_credentials.json"
             )
         }
+    if _auth_state.get("status") == "waiting_for_browser":
+        return {"error": "A connect attempt is already in progress."}
+    import threading
+    threading.Thread(target=_run_auth_flow, daemon=True).start()
+    return {"status": "waiting_for_browser"}
+
+
+def _run_auth_flow():
+    global _creds, _auth_state
     try:
+        _auth_state = {"status": "waiting_for_browser", "error": ""}
         from google_auth_oauthlib.flow import InstalledAppFlow
         flow = InstalledAppFlow.from_client_secrets_file(_CREDS_FILE, _SCOPES)
-        flow.redirect_uri = "urn:ietf:wg:oauth:2.0:oob"
-        auth_url, _ = flow.authorization_url(
-            prompt="consent",
-            access_type="offline",
-        )
-        _pending_flow = flow
-        return {
-            "url": auth_url,
-            "instructions": (
-                "Open URL in browser → sign in → allow → copy the code. "
-                "Then POST to /smarthome/auth/complete with {\"code\": \"...\"}"
-            ),
-        }
-    except ImportError:
-        return {"error": "Run: pip install google-auth-oauthlib"}
-    except Exception as e:
-        return {"error": str(e)}
-
-
-def complete_auth(code: str) -> dict:
-    global _creds, _pending_flow, _auth_state
-    if not _pending_flow:
-        return {"error": "No pending flow. Call /smarthome/auth/start first."}
-    try:
-        _pending_flow.fetch_token(code=code.strip())
-        _creds = _pending_flow.credentials
+        creds = flow.run_local_server(port=0)
+        _creds = creds
         _save_token(_creds)
         _auth_state = {"status": "connected", "error": ""}
-        _pending_flow = None
-        return {"success": True, "message": "Google Smart Home connected!"}
+    except ImportError:
+        _auth_state = {"status": "error", "error": "Run: pip install google-auth-oauthlib"}
     except Exception as e:
-        return {"error": str(e)}
+        _auth_state = {"status": "error", "error": str(e)}
 
 
 def disconnect() -> dict:
@@ -302,6 +294,7 @@ def set_temperature(device_id: str, temp_c: float, mode: str = "COOL") -> dict:
     mode: "COOL" | "HEAT"
     temp_c: target temperature in Celsius
     """
+    global _cache_ts
     s = get_settings()
     project_id = s.get("project_id", "").strip()
     if not project_id:
@@ -332,6 +325,7 @@ def set_thermostat_mode(device_id: str, mode: str) -> dict:
     Set thermostat operating mode.
     mode: "COOL" | "HEAT" | "HEATCOOL" | "OFF"
     """
+    global _cache_ts
     s = get_settings()
     project_id = s.get("project_id", "").strip()
     if not project_id:
@@ -356,6 +350,7 @@ def set_thermostat_mode(device_id: str, mode: str) -> dict:
 
 def set_fan_timer(device_id: str, duration_sec: int = 900) -> dict:
     """Start fan for given duration (seconds). Default 15 min."""
+    global _cache_ts
     s = get_settings()
     project_id = s.get("project_id", "").strip()
     if not project_id:
@@ -373,6 +368,7 @@ def set_fan_timer(device_id: str, duration_sec: int = 900) -> dict:
 
 
 def stop_fan(device_id: str) -> dict:
+    global _cache_ts
     s = get_settings()
     project_id = s.get("project_id", "").strip()
     if not project_id:

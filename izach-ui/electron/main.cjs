@@ -193,7 +193,10 @@ function _writeWebAuthnEnrollment(data) {
 // user just closing it manually, which resolves as a cancellation).
 function _runWebAuthnCeremony(mode, extraQuery) {
   return new Promise((resolve) => {
-    const query = new URLSearchParams({ mode, ...extraQuery }).toString()
+    // platform lets the gate page (served by the Python backend, which has
+    // no way to know what OS the Electron client is on) show "Touch ID" on
+    // macOS instead of always saying "Windows Hello".
+    const query = new URLSearchParams({ mode, platform: process.platform, ...extraQuery }).toString()
     const gateWin = new BrowserWindow({
       width: 420,
       height: 320,
@@ -242,6 +245,15 @@ function installWebAuthnIpc() {
 }
 
 const isDev = process.env.NODE_ENV !== 'production'
+
+// When packaged, __dirname lives inside the app bundle's Resources — the live
+// iZACH project (main.py, cortex-ui.html, api_keys.json) is a separate
+// location on disk that isn't shipped inside the bundle, so the UI/settings
+// stay editable in place without a rebuild. IZACH_PROJECT_ROOT (set by
+// launch_izach.py when spawning the packaged app) points here; falls back to
+// the existing __dirname-relative resolution for dev mode (`electron .`
+// running directly inside the live project tree).
+const PROJECT_ROOT = process.env.IZACH_PROJECT_ROOT || path.join(__dirname, '../..')
 
 // Chrome-/Brave-like right-click menu for a <webview> guest page. Electron
 // ships no default context menu at all for webContents — without this,
@@ -309,8 +321,13 @@ function installWebviewGuestHandlers(win) {
 }
 
 function getUIMode() {
+  // macOS has no Forge UI ('classic') and no Background Mode — force
+  // 'scifi' regardless of what's on disk, so a stale pre-upgrade config (or
+  // a value written on Windows and synced over) can never put a Mac install
+  // into a mode it doesn't support.
+  if (process.platform === 'darwin') return 'scifi'
   try {
-    const settingsPath = path.join(__dirname, '../../api_keys.json')
+    const settingsPath = path.join(PROJECT_ROOT, 'api_keys.json')
     const data = JSON.parse(fs.readFileSync(settingsPath, 'utf8'))
     return data.ui || 'classic'
   } catch (e) {
@@ -332,12 +349,20 @@ function createWindow() {
 
   const isSciFi = uiMode === 'scifi'
 
+  // macOS: keep the real native traffic lights (titleBarStyle 'hidden' alone,
+  // no frame:false) instead of drawing our own — frame:false suppresses ALL
+  // native chrome including those, which is why the custom Windows-style
+  // (—/□/✕, top-right) bar in cortex-ui.html was showing up as the ONLY
+  // window controls on Mac too. Windows keeps frame:false + the custom bar,
+  // matching that platform's own convention of apps drawing their own chrome.
   const win = new BrowserWindow({
     width: 1440,
     height: 860,
     minWidth: 1200,
     minHeight: 700,
-    frame: false,
+    ...(process.platform === 'darwin'
+      ? { titleBarStyle: 'hidden', trafficLightPosition: { x: 14, y: 14 } }
+      : { frame: false }),
     backgroundColor: isSciFi ? '#010814' : '#050d1a',
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
@@ -352,7 +377,7 @@ function createWindow() {
   installWebviewGuestHandlers(win)
 
   if (isSciFi) {
-    win.loadFile(path.join(__dirname, '../../cortex-ui.html'))
+    win.loadFile(path.join(PROJECT_ROOT, 'cortex-ui.html'))
   } else if (isDev) {
     // Wait for Vite to be ready before loading
     const tryLoad = (attempts) => {
@@ -383,7 +408,9 @@ function createBrowserWindow(startUrl, playback) {
     height: 820,
     minWidth: 800,
     minHeight: 600,
-    frame: false,
+    ...(process.platform === 'darwin'
+      ? { titleBarStyle: 'hidden', trafficLightPosition: { x: 14, y: 14 } }
+      : { frame: false }),
     backgroundColor: '#010814',
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
@@ -452,6 +479,24 @@ app.on('window-all-closed', () => {
     return
   }
   const { exec } = require('child_process')
-  exec('taskkill /F /IM python.exe /T', () => {})
-  if (process.platform !== 'darwin') app.quit()
+  if (process.platform === 'win32') {
+    exec('taskkill /F /IM python.exe /T', () => {})
+  } else if (process.platform === 'darwin') {
+    // main.cjs doesn't spawn these services itself (launch_izach.py does, each
+    // in its own Terminal window), so there are no child PIDs to track directly
+    // here — pkill -f matches each one's full command line, specific enough to
+    // avoid catching unrelated processes on the same machine. Closing the UI is
+    // meant to take the whole iZACH stack offline, not just the Electron window,
+    // so every service launch_izach.py started gets torn down here too.
+    const backendMain = path.join(PROJECT_ROOT, 'main.py')
+    const waBridge = path.join(PROJECT_ROOT, 'whatsapp_bridge.js')
+    exec(`pkill -f "${backendMain}"`, () => {})
+    exec(`pkill -f "${waBridge}"`, () => {})
+    exec('pkill -f "bin/n8n"', () => {})
+    exec('pkill -f "ngrok http"', () => {})
+  }
+  // Mac apps conventionally stay running (in the dock) after the last window
+  // closes — deliberately overridden here since the user wants closing the UI
+  // to mean iZACH is fully offline, not idling in the background.
+  app.quit()
 })

@@ -202,6 +202,9 @@ app.get('/health', (req, res) => {
 
 // Fetch message history for past N hours (used by Phase 3 context engine)
 app.get('/messages/history', async (req, res) => {
+    if (!isReady || !activeClient) {
+        return res.status(503).json({ error: 'WhatsApp not connected — scan the QR code first.', messages: [] });
+    }
     const hours = parseInt(req.query.hours) || 24;
     const since = Date.now() - (hours * 60 * 60 * 1000);
     try {
@@ -238,6 +241,9 @@ app.get('/messages/history', async (req, res) => {
 app.get('/messages/chat', async (req, res) => {
     const { number, limit = 10 } = req.query;
     if (!number) return res.status(400).json({ error: 'number required' });
+    if (!isReady || !activeClient) {
+        return res.status(503).json({ error: 'WhatsApp not connected — scan the QR code first.', messages: [] });
+    }
     try {
         const chats = await activeClient.getChats();
         const chat = chats.find(c => c.id._serialized === number || c.id.user === number.replace('@c.us', ''));

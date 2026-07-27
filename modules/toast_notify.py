@@ -15,9 +15,14 @@ _ICON     = os.path.join(_BASE_DIR, "iZACH logo.png")
 
 
 def notify(title: str, message: str, duration: int = 5):
-    """Show a Windows toast notification. Silent fail on non-Windows or missing library."""
-    if sys.platform != "win32":
-        return
+    """Show a native OS notification. Silent fail on unsupported platforms or missing library."""
+    if sys.platform == "win32":
+        _notify_windows(title, message, duration)
+    elif sys.platform == "darwin":
+        _notify_mac(title, message)
+
+
+def _notify_windows(title: str, message: str, duration: int):
     try:
         from winotify import Notification, audio  # type: ignore
         toast = Notification(
@@ -29,5 +34,18 @@ def notify(title: str, message: str, duration: int = 5):
         )
         toast.set_audio(audio.Default, loop=False)
         toast.show()
+    except Exception:
+        pass
+
+
+def _notify_mac(title: str, message: str):
+    try:
+        from modules.platform_utils import run_applescript
+
+        def _escape(s: str) -> str:
+            return str(s).replace("\\", "\\\\").replace('"', '\\"')
+
+        script = f'display notification "{_escape(message)[:200]}" with title "{_escape(title)[:64]}"'
+        run_applescript(script)
     except Exception:
         pass

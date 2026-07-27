@@ -93,20 +93,77 @@ _bridge_started = False
 _bridge_lock = threading.Lock()
 
 
+def _bridge_already_healthy() -> bool:
+    """True if something on port 3000 is already a live, responding bridge.
+    Checked before ever killing that port — a second, unrelated call to
+    ensure_bridge_running() (e.g. from another main.py process, or a test
+    run exercising WhatsAppAgent) must never collateral-kill an already-
+    connected, real bridge session just because it also wants one running."""
+    try:
+        import requests
+        r = requests.get("http://localhost:3000/health", timeout=2)
+        return r.status_code == 200
+    except Exception:
+        return False
+
+
+def _free_bridge_port():
+    """Kill any leftover process still holding port 3000 — e.g. a Node bridge
+    orphaned by a previous main.py run that didn't shut down cleanly. Without
+    this, a stale process causes a hard EADDRINUSE crash on every subsequent
+    start. Same psutil-based, cross-platform pattern main.py uses for 5051.
+    Skipped entirely if the port already holds a healthy bridge (see
+    _bridge_already_healthy) — only genuinely dead/stale processes get killed."""
+    if _bridge_already_healthy():
+        return
+    try:
+        import psutil
+        for proc in psutil.process_iter(["pid"]):
+            try:
+                for conn in proc.net_connections(kind="inet"):
+                    if conn.laddr and conn.laddr.port == 3000:
+                        proc.kill()
+                        break
+            except (psutil.AccessDenied, psutil.NoSuchProcess, PermissionError):
+                continue
+    except Exception:
+        pass
+
+
 def _start_bridge():
     import subprocess, time
+    from modules.platform_utils import IS_WINDOWS
     time.sleep(3)
+    if _bridge_already_healthy():
+        print("[WHATSAPP] Bridge already running and healthy — reusing it instead of restarting.")
+        return
+    _free_bridge_port()
     try:
         bridge_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "whatsapp_bridge.js")
-        subprocess.Popen(["node", bridge_path],
-                        creationflags=subprocess.CREATE_NEW_CONSOLE)
+        if IS_WINDOWS:
+            subprocess.Popen(["node", bridge_path], creationflags=subprocess.CREATE_NEW_CONSOLE)
+        else:
+            subprocess.Popen(["node", bridge_path], start_new_session=True)
         print("[WHATSAPP] Bridge started")
     except Exception as e:
         print(f"[WHATSAPP] Could not start bridge: {e}")
 
 
 def ensure_bridge_running():
-    """Lazy-start WhatsApp bridge on first WA command. Safe to call many times."""
+    """Lazy-start WhatsApp bridge on first WA command. Safe to call many times.
+
+    In dual-instance Secondary Connector mode, the live bridge only ever runs
+    on whichever machine is currently primary — running two independent
+    whatsapp-web.js sessions under the same account risks QR/session
+    conflicts, and message history/contacts are already shared across
+    machines via the Syncthing-synced JSON files instead. A secondary
+    instance just never starts its own bridge; it relies on the primary's."""
+    from modules.instance_coordinator import get_role
+    if get_role() == "secondary":
+        print("[WHATSAPP] Skipping bridge start — this machine is a Secondary Connector, "
+              "the primary machine's bridge handles WhatsApp.")
+        return
+
     global _bridge_started
     with _bridge_lock:
         if _bridge_started:
@@ -254,7 +311,28 @@ def whatsapp_qr():
 
 @app.route('/whatsapp/status', methods=['GET'])
 def whatsapp_status_get():
-    """Cortex/Forge UI polls this to render the WA widget."""
+    """Cortex/Forge UI polls this to render the WA widget.
+
+    _wa_state["connected"] is normally kept in sync by the bridge itself
+    POSTing to /whatsapp/status on connect/disconnect — but that never fires
+    if the bridge process dies ungracefully (crash, OOM, killed), leaving the
+    widget stuck showing CONNECTED indefinitely. Since this route is already
+    polled every 30s, a cheap live reconciliation here self-heals that case
+    instead of trusting the cached flag blindly."""
+    global _wa_state
+    if _wa_state.get("connected"):
+        try:
+            import requests as _req
+            r = _req.get("http://localhost:3000/health", timeout=2)
+            if r.status_code != 200 or r.json().get("status") != "connected":
+                raise ValueError("bridge reports not connected")
+        except Exception:
+            _wa_state["connected"] = False
+            try:
+                from modules.ws_bridge import broadcast
+                broadcast({"type": "whatsapp_status", "connected": False, "qr": _wa_state.get("qr", "")})
+            except Exception:
+                pass
     return jsonify({
         "ok":         True,
         "connected":  bool(_wa_state.get("connected")),
@@ -510,7 +588,8 @@ def handle_whatsapp_command(cmd, speak):
 
     if any(w in cmd for w in ["pick up", "accept", "answer"]):
         import pyautogui, time
-        pyautogui.hotkey('alt', 'tab')
+        from modules.platform_utils import IS_MAC
+        pyautogui.hotkey('command', 'tab') if IS_MAC else pyautogui.hotkey('alt', 'tab')
         time.sleep(1)
         speak("Picking up the call.")
         _pending_call = None

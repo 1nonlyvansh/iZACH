@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:background="@color/bg_card"
+    android:padding="12dp"
+    android:layout_marginBottom="8dp">
+
+    <TextView android:id="@+id/tvProfileIcon"
+        android:layout_width="wrap_content" android:layout_height="wrap_content"
+        android:text="💻" android:textSize="18sp" android:layout_marginEnd="10dp" />
+
+    <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content"
+        android:layout_weight="1" android:orientation="vertical">
+        <TextView android:id="@+id/tvProfileName"
+            android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:text="—" android:textColor="@color/text_pri" android:textSize="12sp"
+            android:fontFamily="monospace" android:textStyle="bold" />
+        <TextView android:id="@+id/tvProfileUrl"
+            android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:text="—" android:textColor="@color/text_sec" android:textSize="10sp"
+            android:fontFamily="monospace" android:layout_marginTop="2dp" />
+    </LinearLayout>
+
+    <TextView android:id="@+id/tvProfileActive"
+        android:layout_width="wrap_content" android:layout_height="wrap_content"
+        android:text="ACTIVE" android:textColor="@color/green_neon" android:textSize="9sp"
+        android:fontFamily="monospace" android:textStyle="bold"
+        android:layout_marginEnd="10dp" android:visibility="gone" />
+
+    <Button android:id="@+id/btnProfileConnect"
+        android:layout_width="wrap_content" android:layout_height="36dp"
+        android:text="CONNECT" android:textColor="@color/cyan"
+        android:backgroundTint="@color/cyan_dark" android:fontFamily="monospace"
+        android:textSize="10sp" android:minWidth="0dp" android:paddingHorizontal="12dp"
+        android:layout_marginEnd="6dp" />
+
+    <ImageButton android:id="@+id/btnProfileDelete"
+        android:layout_width="36dp" android:layout_height="36dp"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:src="@android:drawable/ic_menu_delete" android:contentDescription="Delete"
+        app:tint="@color/text_sec" />
+
+</LinearLayout>

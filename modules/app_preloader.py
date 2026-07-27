@@ -17,6 +17,8 @@ from collections import defaultdict
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
+from modules.platform_utils import IS_WINDOWS
+
 logger = logging.getLogger(__name__)
 
 IST = ZoneInfo("Asia/Kolkata")
@@ -54,6 +56,25 @@ _APP_LAUNCH_MAP = {
     "cmd":          "start cmd",
     "explorer":     "explorer",
     "file explorer": "explorer",
+}
+
+# `open -a "<App Name>" -g` (-g = don't steal focus, matching the "silent
+# preload" intent) — macOS app names, no shell built-ins like Windows' `start`.
+_APP_LAUNCH_MAP_MAC = {
+    "chrome": "Google Chrome", "google chrome": "Google Chrome",
+    "vscode": "Visual Studio Code", "vs code": "Visual Studio Code",
+    "visual studio code": "Visual Studio Code",
+    "notepad": "TextEdit",
+    "slack": "Slack",
+    "discord": "Discord",
+    "spotify": "Spotify",
+    "whatsapp": "WhatsApp",
+    "telegram": "Telegram",
+    "obs": "OBS",
+    "figma": "Figma",
+    "postman": "Postman",
+    "terminal": "Terminal",
+    "explorer": "Finder", "file explorer": "Finder",
 }
 
 
@@ -147,7 +168,8 @@ def _detect_patterns() -> list[dict]:
 # ── Pre-launch ────────────────────────────────────────────────
 
 def _resolve_launch_cmd(app: str) -> str | None:
-    for key, cmd in _APP_LAUNCH_MAP.items():
+    launch_map = _APP_LAUNCH_MAP if IS_WINDOWS else _APP_LAUNCH_MAP_MAC
+    for key, cmd in launch_map.items():
         if key in app or app in key:
             return cmd
     return None
@@ -159,8 +181,13 @@ def _launch_silently(app: str):
         logger.info(f"[Preloader] No launch command known for '{app}', skipping.")
         return
     try:
-        subprocess.Popen(cmd, shell=True,
-                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        if IS_WINDOWS:
+            subprocess.Popen(cmd, shell=True,
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        else:
+            # cmd here is a macOS app name (see _APP_LAUNCH_MAP_MAC), not a shell string.
+            subprocess.Popen(["open", "-g", "-a", cmd],
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         logger.info(f"[Preloader] Pre-launched: {app} ({cmd})")
     except Exception as e:
         logger.warning(f"[Preloader] Launch failed for {app}: {e}")

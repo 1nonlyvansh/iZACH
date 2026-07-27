@@ -1,0 +1,48 @@
+// Syncthing ignore rules for the iZACH "shared brain" folder sync.
+//
+// Deny-by-default: everything is ignored unless explicitly un-ignored below.
+// This folder is the whole iZACH project root, which also contains real
+// secrets (.env, credentials.json, pairing_secret.json, browser_passwords.json,
+// api_keys.json) and huge/platform-specific junk (node_modules, .venv,
+// izach_rag_db, .wwebjs_auth) — none of that should ever leave this machine,
+// so only the specific memory/history/vault files below are synced.
+*
+
+// Smart memory, personal memory, contacts, WhatsApp history — the actual
+// "shared brain" data: profile facts, instructions, automations, people.
+!/smart_memory.json
+!/memory.json
+!/contacts.json
+!/wa_processed_msgs.json
+
+// Browser custom links (Cortex UI Browser widget's saved-link shortcuts) —
+// no secrets, safe to share so both machines see the same bookmark set.
+!/custom_links.json
+
+// Browser history — decided to sync (Phase 5). No secrets in it, just
+// visited-URL entries; both machines see the same browsing history.
+// Login SESSIONS deliberately stay OUT — and structurally can't be synced
+// through this mechanism even if we wanted to: Electron's session partition
+// (cookies/localStorage for the in-app browser) lives in the OS's own
+// userData directory, not inside this project folder at all, so it was
+// never reachable by Syncthing here regardless of this file.
+!/browser_history.json
+
+// Obsidian vault — iZACH's own long-term notes (Identity/Instructions/
+// Automations/People), the same folder either machine's Obsidian app opens.
+!/iZACH-Brain
+!/iZACH-Brain/**
+
+// Runtime logs — useful to see what the OTHER machine was doing recently.
+!/logs
+!/logs/**
+
+// Explicitly NOT synced (documented here so it's obvious, not just implied
+// by the deny-by-default * above): .env, credentials.json,
+// fitness_credentials.json, smart_home_credentials.json, api_keys.json,
+// pairing_secret.json, browser_passwords.json,
+// token.json, token_gmail.json, keys and ids, .wwebjs_auth/, .wwebjs_cache/
+// (WhatsApp session — machine-specific, never share), izach_rag_db/ (ChromaDB
+// binary index — a future addition, not v1), voice_profiles/, speaker_profiles/,
+// owner_voice.* (biometric data), node_modules/, .venv/, .git/, screenshots/,
+// shared/, izach-android/, izach-ui/node_modules/, izach-ui/dist/.

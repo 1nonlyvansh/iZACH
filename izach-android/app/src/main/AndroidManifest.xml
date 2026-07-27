@@ -29,14 +29,19 @@
             android:resource="@xml/actions" />
 
         <activity
-            android:name=".MainActivity"
-            android:exported="true"
-            android:launchMode="singleTop"
-            android:windowSoftInputMode="adjustNothing">
+            android:name=".DeviceLauncherActivity"
+            android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+        </activity>
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:windowSoftInputMode="adjustNothing">
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
@@ -79,6 +84,29 @@
         <activity
             android:name=".AlliedNodeActivity"
             android:exported="false" />
+
+        <activity
+            android:name=".DevicesActivity"
+            android:exported="false" />
+
+        <activity
+            android:name=".CommandQueueActivity"
+            android:exported="false" />
+
+        <activity
+            android:name=".AddDeviceActivity"
+            android:exported="false" />
+
+        <!-- Custom QR capture layout (bordered square viewfinder, no laser
+             line) used everywhere the app scans a QR code, via
+             ScanOptions().setCaptureActivity(QrCaptureActivity::class.java) -->
+        <activity
+            android:name=".ui.QrCaptureActivity"
+            android:clearTaskOnLaunch="true"
+            android:screenOrientation="portrait"
+            android:stateNotNeeded="true"
+            android:theme="@style/zxing_CaptureTheme"
+            android:windowSoftInputMode="stateAlwaysHidden" />
 
         <activity
             android:name=".TerminalActivity"

@@ -1,8 +1,12 @@
 import time
-import pyautogui
-import pygetwindow as gw
 import logging
 from datetime import datetime
+
+from modules.platform_utils import IS_WINDOWS, IS_MAC
+
+if IS_WINDOWS:
+    import pyautogui
+    import pygetwindow as gw
 
 # Configure logging for debugging window transitions
 logging.basicConfig(level=logging.INFO)
@@ -13,7 +17,12 @@ logger = logging.getLogger(__name__)
 def get_active_window_safe(window_title_keyword, timeout=10):
     """
     Ensures the application window is fully loaded, restored, and focused.
+    Windows-only — relies on pygetwindow, which has no meaningful macOS
+    backend (see modules/context_engine.py's wait_for_window for the same
+    reasoning). macOS callers should never reach this (see open_app below).
     """
+    if not IS_WINDOWS:
+        return False
     start_time = time.time()
     logger.info(f"[SYNC] Waiting for: {window_title_keyword}")
 
@@ -54,12 +63,30 @@ _INSTALLED_APPS_TTL = 300.0  # refresh every 5 min
 
 
 def get_installed_apps() -> list[str]:
-    """Return lowercased list of installed app names from Start menu + registry."""
+    """Return lowercased list of installed app names from Start menu + registry
+    (Windows) or /Applications-style .app bundle scan (macOS)."""
     global _INSTALLED_APPS_CACHE, _INSTALLED_APPS_TS
     if time.time() - _INSTALLED_APPS_TS < _INSTALLED_APPS_TTL and _INSTALLED_APPS_CACHE:
         return _INSTALLED_APPS_CACHE
 
     apps: set[str] = set()
+
+    if IS_MAC:
+        # None of the three Windows-only methods below (Start Menu .lnk scan,
+        # registry App Paths, PowerShell Get-StartApps) do anything on macOS
+        # — this whole function silently returned an empty list here, which
+        # made is_app_installed() return False for every app not on the
+        # hardcoded _APP_DIRECT_LAUNCH bypass list (e.g. WhatsApp), always
+        # reporting a genuinely-installed app as "not installed".
+        import glob as _glob, os as _os
+        for _root in ("/Applications", _os.path.expanduser("~/Applications"), "/System/Applications"):
+            for _app in _glob.glob(_os.path.join(_root, "*.app")):
+                _name = _os.path.splitext(_os.path.basename(_app))[0].lower()
+                if _name:
+                    apps.add(_name)
+        _INSTALLED_APPS_CACHE = sorted(apps)
+        _INSTALLED_APPS_TS = time.time()
+        return _INSTALLED_APPS_CACHE
 
     # 1. Scan Start Menu .lnk shortcuts (most reliable — includes pinned/installed apps)
     import glob as _glob, os as _os
@@ -151,7 +178,17 @@ def open_app(app_name: str):
     Launches app via Windows Search (Win + Name + Enter).
     Validates app_name against installed apps before typing — prevents
     random words (e.g. 'play', 'open') from triggering Windows Search.
+
+    macOS: delegates to context_engine's `open -a`-based launcher instead —
+    there's no "Windows Search" equivalent to simulate, and blindly typing
+    into whatever window has OS focus is exactly what caused app names to
+    get typed into unrelated foreground windows (e.g. a chat app) on Mac.
     """
+    if IS_MAC:
+        from modules.context_engine import handle_open_with_position
+        handle_open_with_position(app_name, None)
+        return None
+
     import logging as _log
     _logger = _log.getLogger("iZACH.automation")
 
@@ -180,7 +217,12 @@ def snap_window(direction: str, app_name: str = None):
     direction: 'left' | 'right' | 'maximize' | 'minimize'
     app_name:  optional — if given, tries to focus that window before snapping.
     Waits for the window to be fully launched and focused.
+
+    Windows-only — no native pre-Sequoia macOS snap API (see
+    context_engine.py's snap_window docstring for the same reasoning).
     """
+    if not IS_WINDOWS:
+        return
     d = direction.lower().strip()
     if d in ("left", "left half", "at left", "on the left", "snap left"):
         key = "left"
@@ -228,12 +270,24 @@ def snap_window(direction: str, app_name: str = None):
 def navigate_to_url(url, browser_name="chrome"):
     """
     Ensures browser focus and types URL into address bar.
+
+    macOS: `open <url>` hands the URL straight to the default (or named)
+    browser via LaunchServices — no window-focus guessing or keystroke
+    injection needed, so it can't land in the wrong app's input field.
     """
+    if IS_MAC:
+        import subprocess as _sp
+        try:
+            _sp.run(["open", url], capture_output=True, text=True, timeout=8)
+            return True
+        except Exception:
+            return False
+
     if not get_active_window_safe(browser_name, timeout=2):
         open_app(browser_name)
-    
+
     if get_active_window_safe(browser_name):
-        pyautogui.hotkey('ctrl', 'l') 
+        pyautogui.hotkey('ctrl', 'l')
         time.sleep(0.3)
         pyautogui.write(url, interval=0.05)
         pyautogui.press('enter')
@@ -264,7 +318,11 @@ def get_realtime_coordinates():
     return "GPS coordinates synchronized."
 
 def system_media_control(command):
-    """Hardware-level media key simulation."""
+    """Hardware-level media key simulation. Windows-only — macOS has no
+    pyautogui media-key backend; use the Spotify agent's own play/pause/
+    next/previous controls instead."""
+    if not IS_WINDOWS:
+        return
     if any(word in command for word in ["pause", "stop", "resume"]):
         pyautogui.press("playpause")
     elif "next" in command:

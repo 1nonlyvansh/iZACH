@@ -647,7 +647,15 @@ Output format:
 
             # ── Orchestrator: classify intent before routing ───────
             if self.agent_orch:
-                self._domain_ctx = self.agent_orch.classify(resolved_cmd)
+                # Don't let the LLM classifier override a fast-path that
+                # already pinned a domain with high confidence (e.g. the
+                # Spotify "play X on spotify" regex above) — it was silently
+                # discarding that every time, so an unusual song title could
+                # get misclassified as "chat" and fall through to a generic
+                # conversational reply that sounds like it played something
+                # but never touches the real Spotify API at all.
+                if self._domain_ctx.get("confidence", 0.0) < 0.9:
+                    self._domain_ctx = self.agent_orch.classify(resolved_cmd)
                 # If orchestrator is unsure (chat / low confidence) but synonym
                 # learner has seen this phrasing succeed before, trust the synonym.
                 if _synonym_domain and (
@@ -3062,6 +3070,18 @@ Return ONLY JSON."""
         if any(w in cmd for w in ["dark mode", "light mode", "switch to dark", "switch to light"]):
             mode = "dark" if "dark" in cmd else "light"
             _, msg = system_control.set_theme(mode)
+            self.speak(msg)
+            return
+
+        # \bhands?\s+off\s+to\b tolerates "hands off to" (typo/mishear for
+        # "hand off to") alongside the exact phrase and the other triggers.
+        if re.search(r'\bhands?\s+off\s+to\b', cmd) or any(w in cmd for w in ["handoff to", "move izach to", "move to windows", "move to mac"]):
+            target = "windows" if "windows" in cmd else ("mac" if "mac" in cmd else None)
+            if not target:
+                self.speak("Hand off to which device — Mac or Windows?")
+                return
+            from modules.instance_coordinator import initiate_handoff
+            ok, msg = initiate_handoff(target)
             self.speak(msg)
             return
 

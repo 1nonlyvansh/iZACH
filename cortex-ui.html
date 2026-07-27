@@ -164,6 +164,8 @@ body.cam-mode #chud { opacity:1; }
 .ph-dot { width:4px; height:4px; border-radius:50%; background:var(--c); box-shadow:0 0 5px var(--c); animation:dblink 2s infinite; }
 .ph-min { font-size:9px; color:rgba(0,148,255,0.3); margin-left:8px; cursor:pointer; padding:0 3px; }
 .ph-min:hover { color:var(--c); }
+.ph-max { font-size:9px; color:rgba(0,148,255,0.3); margin-left:8px; cursor:pointer; padding:0 3px; }
+.ph-max:hover { color:var(--c); }
 
 /* Corner brackets */
 .cb { position:absolute; border-color:rgba(0,148,255,0.5); border-style:solid; width:8px; height:8px; pointer-events:none; z-index:1; }
@@ -559,8 +561,10 @@ body.cam-mode #chud { opacity:1; }
 #sp-title { flex:1; font-size:9px; letter-spacing:.55em; color:rgba(0,148,255,0.55); }
 #sp-close { -webkit-app-region:no-drag; background:none; border:1px solid rgba(0,148,255,0.13); color:rgba(0,148,255,0.38); font-family:'Courier New',monospace; font-size:8.5px; letter-spacing:.22em; padding:5px 14px; cursor:pointer; transition:all .12s; }
 #sp-close:hover { border-color:rgba(255,80,80,0.4); color:#ff5050; background:rgba(255,80,80,0.05); }
-.sp-tabs { display:flex; border-bottom:1px solid rgba(0,148,255,0.07); flex-shrink:0; -webkit-app-region:no-drag; }
-.sp-tab { padding:11px 26px; font-size:8px; letter-spacing:.38em; color:rgba(0,148,255,0.65); cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-1px; transition:all .15s; background:none; border-left:none; border-right:none; border-top:none; font-family:'Courier New',monospace; }
+.sp-tabs { display:flex; border-bottom:1px solid rgba(0,148,255,0.07); flex-shrink:0; -webkit-app-region:no-drag; overflow-x:auto; overflow-y:hidden; scrollbar-width:thin; }
+.sp-tabs::-webkit-scrollbar { height:4px; }
+.sp-tabs::-webkit-scrollbar-thumb { background:rgba(0,148,255,0.2); border-radius:2px; }
+.sp-tab { padding:11px 26px; font-size:8px; letter-spacing:.38em; color:rgba(0,148,255,0.65); cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-1px; transition:all .15s; background:none; border-left:none; border-right:none; border-top:none; font-family:'Courier New',monospace; flex-shrink:0; white-space:nowrap; }
 .sp-tab:hover { color:rgba(0,148,255,0.65); background:rgba(0,148,255,0.03); }
 .sp-tab.active { color:var(--c); border-bottom-color:var(--c); }
 .sp-body { flex:1; overflow:hidden; display:flex; -webkit-app-region:no-drag; }
@@ -1224,7 +1228,7 @@ body.spotlight-mode .pnl:not(.spotlighted) {
   <div class="cb cb-tl"></div><div class="cb cb-tr"></div><div class="cb cb-bl"></div><div class="cb cb-br"></div>
   <div class="ph">
     <span class="ph-id">01 · COMM</span>
-    <span class="ph-cat"><div class="ph-dot"></div>CHAT<span class="ph-min" title="minimise">—</span></span>
+    <span class="ph-cat"><div class="ph-dot"></div>CHAT<span class="ph-max" title="Maximize">□</span><span class="ph-min" title="minimise">—</span></span>
   </div>
   <div id="p-comm-msgs">
     <div class="cm a" style="color:rgba(0,148,255,0.35);">Connecting to iZACH backend...</div>
@@ -1239,7 +1243,7 @@ body.spotlight-mode .pnl:not(.spotlighted) {
 
 <div id="p-audio" class="pnl">
   <div class="cb cb-tl"></div><div class="cb cb-tr"></div><div class="cb cb-bl"></div><div class="cb cb-br"></div>
-  <div class="ph"><span class="ph-id">02 · AUDIO</span><span class="ph-cat"><div class="ph-dot"></div>SPOTIFY<span class="ph-min">—</span></span></div>
+  <div class="ph"><span class="ph-id">02 · AUDIO</span><span class="ph-cat"><div class="ph-dot"></div>SPOTIFY<span class="ph-max" title="Maximize">□</span><span class="ph-min">—</span></span></div>
   <div class="pnl-body">
     <div class="alb-wrap"><div class="alb" id="alb"><div class="alb-i"><div class="alb-hole"></div></div></div></div>
     <div class="minfo"><div class="mt-t">BLINDING LIGHTS</div><div class="mt-a">THE WEEKND · 2019</div></div>
@@ -1256,7 +1260,7 @@ body.spotlight-mode .pnl:not(.spotlighted) {
 
 <div id="p-sched" class="pnl">
   <div class="cb cb-tl"></div><div class="cb cb-tr"></div><div class="cb cb-bl"></div><div class="cb cb-br"></div>
-  <div class="ph"><span class="ph-id">03 · SCHED</span><span class="ph-cat"><div class="ph-dot" id="cal-dot"></div>CALENDAR<span class="ph-min">—</span></span></div>
+  <div class="ph"><span class="ph-id">03 · SCHED</span><span class="ph-cat"><div class="ph-dot" id="cal-dot"></div>CALENDAR<span class="ph-max" title="Maximize">□</span><span class="ph-min">—</span></span></div>
   <div class="pnl-body">
     <!-- Auth status + connect button -->
     <div style="padding:10px 14px 8px;">
@@ -1291,7 +1295,7 @@ body.spotlight-mode .pnl:not(.spotlighted) {
 
 <div id="p-sys" class="pnl">
   <div class="cb cb-tl"></div><div class="cb cb-tr"></div><div class="cb cb-bl"></div><div class="cb cb-br"></div>
-  <div class="ph"><span class="ph-id">04 · SYSMON</span><span class="ph-cat"><div class="ph-dot"></div>SYSTEM<span class="ph-min">—</span></span></div>
+  <div class="ph"><span class="ph-id">04 · SYSMON</span><span class="ph-cat"><div class="ph-dot"></div>SYSTEM<span class="ph-max" title="Maximize">□</span><span class="ph-min">—</span></span></div>
   <div class="pnl-body">
     <div class="sm-row"><div class="sm-label"><span>CPU USAGE</span><span id="sv-cpu">12%</span></div><div class="sm-bar"><div class="sm-bar-f" id="sb-cpu" style="width:12%"></div></div></div>
     <div class="sm-row"><div class="sm-label"><span>MEMORY</span><span id="sv-ram">4.2 / 16 GB</span></div><div class="sm-bar"><div class="sm-bar-f" id="sb-ram" style="width:26%"></div></div></div>
@@ -1305,7 +1309,7 @@ body.spotlight-mode .pnl:not(.spotlighted) {
 
 <div id="p-intel" class="pnl">
   <div class="cb cb-tl"></div><div class="cb cb-tr"></div><div class="cb cb-bl"></div><div class="cb cb-br"></div>
-  <div class="ph"><span class="ph-id">05 · INTEL</span><span class="ph-cat"><div class="ph-dot"></div>RESEARCH<span class="ph-min">—</span></span></div>
+  <div class="ph"><span class="ph-id">05 · INTEL</span><span class="ph-cat"><div class="ph-dot"></div>RESEARCH<span class="ph-max" title="Maximize">□</span><span class="ph-min">—</span></span></div>
   <div class="pnl-body" id="p-intel-body">
     <div style="padding:20px 14px;color:rgba(0,148,255,0.3);font-size:9px;letter-spacing:.2em;line-height:2;">ASK iZACH TO SEARCH<br>FOR LATEST NEWS</div>
   </div>
@@ -1314,7 +1318,7 @@ body.spotlight-mode .pnl:not(.spotlighted) {
 
 <div id="p-mem" class="pnl">
   <div class="cb cb-tl"></div><div class="cb cb-tr"></div><div class="cb cb-bl"></div><div class="cb cb-br"></div>
-  <div class="ph"><span class="ph-id">06 · RECALL</span><span class="ph-cat"><div class="ph-dot"></div>MEMORY<span class="ph-min">—</span></span></div>
+  <div class="ph"><span class="ph-id">06 · RECALL</span><span class="ph-cat"><div class="ph-dot"></div>MEMORY<span class="ph-max" title="Maximize">□</span><span class="ph-min">—</span></span></div>
   <div class="pnl-body" id="p-mem-body">
     <div style="padding:12px 14px;color:rgba(0,148,255,0.3);font-size:9px;letter-spacing:.2em;">LOADING MEMORY...</div>
   </div>
@@ -1323,7 +1327,7 @@ body.spotlight-mode .pnl:not(.spotlighted) {
 
 <div id="p-msg" class="pnl">
   <div class="cb cb-tl"></div><div class="cb cb-tr"></div><div class="cb cb-bl"></div><div class="cb cb-br"></div>
-  <div class="ph"><span class="ph-id">07 · MSG</span><span class="ph-cat"><div class="ph-dot"></div>WHATSAPP<span class="ph-min">—</span></span></div>
+  <div class="ph"><span class="ph-id">07 · MSG</span><span class="ph-cat"><div class="ph-dot"></div>WHATSAPP<span class="ph-max" title="Maximize">□</span><span class="ph-min">—</span></span></div>
 
   <!-- WA status header -->
   <div id="wa-status-bar" style="display:flex;align-items:center;gap:8px;padding:6px 12px;border-bottom:1px solid rgba(0,148,255,0.08);">
@@ -1367,7 +1371,7 @@ body.spotlight-mode .pnl:not(.spotlighted) {
 
 <div id="p-wx" class="pnl">
   <div class="cb cb-tl"></div><div class="cb cb-tr"></div><div class="cb cb-bl"></div><div class="cb cb-br"></div>
-  <div class="ph"><span class="ph-id">08 · WEATHER</span><span class="ph-cat"><div class="ph-dot"></div>REALTIME<span class="ph-min">—</span></span></div>
+  <div class="ph"><span class="ph-id">08 · WEATHER</span><span class="ph-cat"><div class="ph-dot"></div>REALTIME<span class="ph-max" title="Maximize">□</span><span class="ph-min">—</span></span></div>
   <div class="pnl-body">
     <div class="wx-main"><div class="wx-tw"><div class="wx-tmp" id="wx-temp">--</div><div class="wx-unit">°C</div></div><div><div class="wx-desc" id="wx-desc">Loading…</div><div class="wx-city" id="wx-city">— · —</div></div></div>
     <div class="wx-div"></div>
@@ -1384,7 +1388,7 @@ body.spotlight-mode .pnl:not(.spotlighted) {
 <!-- RELATIONSHIP GRAPH -->
 <div id="p-rel" class="pnl">
   <div class="cb cb-tl"></div><div class="cb cb-tr"></div><div class="cb cb-bl"></div><div class="cb cb-br"></div>
-  <div class="ph"><span class="ph-id">09 · REL</span><span class="ph-cat"><div class="ph-dot"></div>PEOPLE GRAPH<span class="ph-min">—</span></span></div>
+  <div class="ph"><span class="ph-id">09 · REL</span><span class="ph-cat"><div class="ph-dot"></div>PEOPLE GRAPH<span class="ph-max" title="Maximize">□</span><span class="ph-min">—</span></span></div>
   <canvas id="rel-canvas"></canvas>
   <div class="rh"></div>
 </div>
@@ -1392,7 +1396,7 @@ body.spotlight-mode .pnl:not(.spotlighted) {
 <!-- ACTIVITY FEED -->
 <div id="p-feed" class="pnl">
   <div class="cb cb-tl"></div><div class="cb cb-tr"></div><div class="cb cb-bl"></div><div class="cb cb-br"></div>
-  <div class="ph"><span class="ph-id">10 · FEED</span><span class="ph-cat"><div class="ph-dot"></div>ACTIVITY<span class="ph-min">—</span></span></div>
+  <div class="ph"><span class="ph-id">10 · FEED</span><span class="ph-cat"><div class="ph-dot"></div>ACTIVITY<span class="ph-max" title="Maximize">□</span><span class="ph-min">—</span></span></div>
   <div id="feed-list" class="pnl-body">
   </div>
   <div class="rh"></div>
@@ -1401,7 +1405,7 @@ body.spotlight-mode .pnl:not(.spotlighted) {
 <!-- COMMAND HISTORY -->
 <div id="p-hist" class="pnl">
   <div class="cb cb-tl"></div><div class="cb cb-tr"></div><div class="cb cb-bl"></div><div class="cb cb-br"></div>
-  <div class="ph"><span class="ph-id">11 · HIST</span><span class="ph-cat"><div class="ph-dot"></div>CMD HISTORY<span class="ph-min">—</span></span></div>
+  <div class="ph"><span class="ph-id">11 · HIST</span><span class="ph-cat"><div class="ph-dot"></div>CMD HISTORY<span class="ph-max" title="Maximize">□</span><span class="ph-min">—</span></span></div>
   <div id="p-hist-list">
   </div>
   <div class="rh"></div>
@@ -1429,6 +1433,17 @@ body.spotlight-mode .pnl:not(.spotlighted) {
   <span id="dnd-bar-reason"></span>
   &nbsp;·&nbsp; <span id="dnd-bar-count">0</span> queued alert(s)
   &nbsp;·&nbsp; <span style="cursor:pointer;text-decoration:underline;" onclick="toggleDND()">TURN OFF</span>
+</div>
+
+<!-- SECONDARY CONNECTOR BANNER — shown when another iZACH install (Mac or
+     Windows) is already primary and this machine is running as its
+     secondary/remote-control connector. Same visual pattern as dnd-bar. -->
+<div id="peer-bar" style="display:none;position:fixed;top:0;left:0;right:0;z-index:4000;
+  background:rgba(0,90,180,0.92);color:#fff;font-size:10px;letter-spacing:0.12em;
+  text-align:center;padding:4px 8px;font-family:'JetBrains Mono',monospace;
+  border-bottom:1px solid rgba(80,180,255,0.5);">
+  🔗 &nbsp;SECONDARY CONNECTOR — iZACH ALREADY RUNNING ON <span id="peer-bar-device"></span>
+  &nbsp;·&nbsp; MAC <span id="peer-bar-mac"></span>
 </div>
 
 <!-- DND ALERT OVERLAY — shown when new alert arrives during DND -->
@@ -1513,7 +1528,7 @@ body.spotlight-mode .pnl:not(.spotlighted) {
       <span class="tb-ic">⊟</span><span class="tb-lbl">BG</span>
     </button>
     <div class="tb-sep"></div>
-    <button class="tb-btn" id="tb-settings" onclick="openSettings('settings')"   title="SETTINGS">
+    <button class="tb-btn" id="tb-settings" onclick="openSettings('personalisation')"   title="SETTINGS">
       <span class="tb-ic">⚙</span><span class="tb-lbl">SETTINGS</span>
     </button>
   </div>
@@ -1620,14 +1635,20 @@ body.spotlight-mode .pnl:not(.spotlighted) {
   </div>
   <div class="sp-tabs">
     <button class="sp-tab active" data-tab="memory" onclick="switchSettingsTab('memory')">MEMORY</button>
-    <button class="sp-tab" data-tab="settings" onclick="switchSettingsTab('settings')">SETTINGS</button>
+    <button class="sp-tab" data-tab="personalisation" onclick="switchSettingsTab('personalisation')">PERSONALISATION</button>
+    <button class="sp-tab" data-tab="appearance" onclick="switchSettingsTab('appearance')">APPEARANCE</button>
+    <button class="sp-tab" data-tab="deviceconn" onclick="switchSettingsTab('deviceconn')">DEVICE CONNECTION</button>
+    <button class="sp-tab" data-tab="notifannounce" onclick="switchSettingsTab('notifannounce')">NOTIFICATIONS AND ANNOUNCEMENTS</button>
+    <button class="sp-tab" data-tab="connservices" onclick="switchSettingsTab('connservices')">CONNECTED SERVICES</button>
+    <button class="sp-tab" data-tab="boot"     onclick="switchSettingsTab('boot')">BOOT SETTINGS</button>
     <button class="sp-tab" data-tab="keys"     onclick="switchSettingsTab('keys')">KEYS &amp; ID</button>
     <button class="sp-tab" data-tab="contacts" onclick="switchSettingsTab('contacts')">CONTACTS</button>
     <button class="sp-tab" data-tab="security" onclick="switchSettingsTab('security')">SECURITY</button>
     <button class="sp-tab" data-tab="commands" onclick="switchSettingsTab('commands')">COMMANDS</button>
     <button class="sp-tab" data-tab="links"    onclick="switchSettingsTab('links')">CUSTOM LINKS</button>
     <button class="sp-tab" data-tab="browser"  onclick="switchSettingsTab('browser')">BROWSER SETTINGS</button>
-    <button class="sp-tab" data-tab="bgmode"   onclick="switchSettingsTab('bgmode')">BG MODE</button>
+    <button class="sp-tab" data-tab="others"   onclick="switchSettingsTab('others')">OTHERS</button>
+    <button class="sp-tab" data-tab="bgmode"   onclick="switchSettingsTab('bgmode')">ADVANCED</button>
   </div>
   <div class="sp-body">
 
@@ -1793,7 +1814,7 @@ body.spotlight-mode .pnl:not(.spotlighted) {
     </div>
 
     <!-- ── SETTINGS TAB ── -->
-    <div class="sp-panel" id="sptab-settings">
+    <div class="sp-panel" id="sptab-personalisation">
       <div class="sp-scroll">
         <div class="sp-sec">
           <div class="sp-sec-title">VOICE &amp; AUDIO</div>
@@ -1822,64 +1843,8 @@ body.spotlight-mode .pnl:not(.spotlighted) {
           </div>
           <div class="cfg-label" style="margin-top:10px;">NICKNAME (restart required)</div>
           <input class="cfg-inp" id="cfg-nickname" placeholder="e.g. Neo — also works as a wake word" autocomplete="off">
-        </div>
-        <div class="sp-divider"></div>
-        <div class="sp-sec">
-          <div class="sp-sec-title">INTERFACE</div>
-          <div class="cfg-label">UI STYLE (restart to apply)</div>
-          <label class="cfg-opt"><input type="radio" name="ui-mode" value="classic"><span>Classic — React dashboard (Forge UI)</span></label>
-          <label class="cfg-opt"><input type="radio" name="ui-mode" value="scifi" checked><span>Sci-Fi — JARVIS holographic (Cortex UI)</span></label>
-          <label class="cfg-opt"><input type="radio" name="ui-mode" value="background"><span>Background — no window, voice/tray only, low RAM</span></label>
-          <label class="cfg-opt" style="margin-top:8px;"><input type="checkbox" id="cfg-ask-boot"><span>Ask Every Time During Boot</span></label>
-          <div class="cfg-label" style="margin-top:10px;">FONT SIZE</div>
-          <select class="cfg-sel" id="cfg-font-size" onchange="applyFontSize(this.value)">
-            <option value="11">Small (11px)</option>
-            <option value="13" selected>Normal (13px)</option>
-            <option value="15">Large (15px)</option>
-            <option value="17">X-Large (17px)</option>
-          </select>
-          <div class="cfg-divider" style="margin:12px 0;border-top:1px solid rgba(0,148,255,0.07);"></div>
-          <div class="sp-sec-title" style="margin-bottom:8px;">IDLE SCREEN</div>
-          <div class="cfg-label">WALLPAPER</div>
-          <div style="display:flex;gap:6px;margin-bottom:8px;">
-            <button class="sp-action-btn" onclick="document.getElementById('idle-wp-picker').click()">BROWSE FILE</button>
-            <button class="sp-action-btn" onclick="clearIdleWallpaper()">CLEAR</button>
-          </div>
-          <input type="file" id="idle-wp-picker" accept="image/*" style="display:none" onchange="idleWpPicked(this)">
-          <div id="idle-wp-preview" style="display:none;margin-bottom:8px;">
-            <img id="idle-wp-thumb" style="width:100%;max-height:72px;object-fit:cover;border:1px solid rgba(0,148,255,0.2);border-radius:2px;">
-          </div>
-          <div class="cfg-toggle-row">
-            <span>Show Orb on Idle Screen</span>
-            <div class="cfg-tog on" id="tog-idle-orb" onclick="cfgToggleIdleOrb()"></div>
-          </div>
-          <div class="cfg-divider" style="margin:12px 0;border-top:1px solid rgba(0,148,255,0.07);"></div>
-          <div class="cfg-label">SCREENSAVER TIMEOUT</div>
-          <select class="cfg-sel" id="cfg-ss">
-            <option value="0">OFF — stay on SPEAK</option>
-            <option value="2">2 minutes</option>
-            <option value="5" selected>5 minutes</option>
-            <option value="10">10 minutes</option>
-          </select>
           <div class="cfg-label" style="margin-top:10px;">WEATHER CITY</div>
           <input class="cfg-inp" id="cfg-city" placeholder="e.g. New Delhi" autocomplete="off">
-        </div>
-        <div class="sp-divider"></div>
-        <div class="sp-sec">
-          <div class="sp-sec-title">TASKBAR</div>
-          <div class="cfg-toggle-row">
-            <span>Auto-Hide (hover to reveal)</span>
-            <div class="cfg-tog" id="tog-tb-autohide" onclick="cfgToggleTbAutoHide()"></div>
-          </div>
-          <div class="cfg-toggle-row">
-            <span>Show Labels</span>
-            <div class="cfg-tog" id="tog-tb-labels" onclick="cfgToggleTbLabels()"></div>
-          </div>
-          <div class="cfg-label" style="margin-top:10px;">OPACITY</div>
-          <input type="range" min="20" max="100" value="88" id="cfg-tb-opacity" style="width:100%;accent-color:#0094ff;"
-            oninput="document.getElementById('tb-inner').style.opacity=this.value/100">
-          <div class="cfg-label" style="margin-top:10px;">RESET POSITION &amp; SIZE</div>
-          <button class="sp-action-btn" onclick="resetTaskbar()">RESET TASKBAR</button>
         </div>
         <div class="sp-divider"></div>
         <div class="sp-sec">
@@ -1903,22 +1868,6 @@ body.spotlight-mode .pnl:not(.spotlighted) {
         </div>
         <div class="sp-divider"></div>
         <div class="sp-sec">
-          <div class="sp-sec-title">NOTIFICATIONS</div>
-          <div class="cfg-toggle-row">
-            <span>Performance Alerts</span>
-            <div class="cfg-tog on" id="tog-notif-perf" onclick="cfgToggle('tog-notif-perf','notif_performance')"></div>
-          </div>
-          <div class="cfg-toggle-row">
-            <span>WhatsApp Notifications</span>
-            <div class="cfg-tog on" id="tog-notif-wa" onclick="cfgToggle('tog-notif-wa','notif_whatsapp')"></div>
-          </div>
-          <div class="cfg-toggle-row">
-            <span>Download Notifications</span>
-            <div class="cfg-tog on" id="tog-notif-dl" onclick="cfgToggle('tog-notif-dl','notif_downloads')"></div>
-          </div>
-        </div>
-        <div class="sp-divider"></div>
-        <div class="sp-sec">
           <div class="sp-sec-title">MEETINGS</div>
           <div class="cfg-toggle-row">
             <span>Auto-DND Before Calendar Meetings</span>
@@ -1926,21 +1875,6 @@ body.spotlight-mode .pnl:not(.spotlighted) {
           </div>
           <div class="cfg-label" style="margin-top:10px;">LEAD TIME (MINUTES)</div>
           <input class="cfg-inp" id="cfg-auto-dnd-lead" type="number" min="0" max="60" placeholder="5" style="width:80px;">
-        </div>
-        <div class="sp-divider"></div>
-        <div class="sp-sec">
-          <div class="sp-sec-title">PRIVACY</div>
-          <div class="cfg-toggle-row">
-            <span>Save Command History</span>
-            <div class="cfg-tog on" id="tog-cmd-hist" onclick="cfgToggle('tog-cmd-hist','command_history_enabled')"></div>
-          </div>
-          <div class="cfg-label" style="margin-top:10px;">LOG RETENTION (DAYS)</div>
-          <select class="cfg-sel" id="cfg-log-ret">
-            <option value="7">7 days</option>
-            <option value="14">14 days</option>
-            <option value="30">30 days</option>
-            <option value="90">90 days</option>
-          </select>
         </div>
         <div class="sp-divider"></div>
         <div class="sp-sec">
@@ -1961,6 +1895,205 @@ body.spotlight-mode .pnl:not(.spotlighted) {
           <input class="cfg-inp" id="cfg-screen-aware-excl" placeholder="keepass, 1password, bitwarden, lastpass" autocomplete="off">
         </div>
         <div class="sp-divider"></div>
+        <div class="sp-sec">
+          <div class="sp-sec-title">VOICE ALIASES</div>
+          <div style="font-size:7px;color:rgba(0,148,255,0.4);letter-spacing:.12em;margin-bottom:8px;">SAY TRIGGER → iZACH RUNS THE ALIASED COMMAND</div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">
+            <input class="sp-add-inp" id="alias-trigger" placeholder="Trigger (e.g. fire it up)" style="flex:1;min-width:120px;">
+            <input class="sp-add-inp" id="alias-command" placeholder="Command (e.g. play my gym playlist)" style="flex:2;min-width:180px;">
+            <button class="sp-add-btn" onclick="addAlias()">+ ADD</button>
+          </div>
+          <div style="font-size:8px;color:rgba(0,148,255,0.5);letter-spacing:.1em;margin-bottom:6px;" id="alias-msg"></div>
+          <div id="alias-list" style="max-height:180px;overflow-y:auto;">
+            <div class="sp-empty" id="alias-empty">No aliases yet.</div>
+          </div>
+        </div>
+      </div>
+      <div class="sp-save-row">
+        <button class="sp-save-btn" onclick="saveConfig('cfg-msg-pers')">SAVE SETTINGS</button>
+        <span class="sp-save-msg" id="cfg-msg-pers"></span>
+      </div>
+    </div>
+
+    <!-- ── APPEARANCE TAB ── -->
+    <div class="sp-panel" id="sptab-appearance">
+      <div class="sp-scroll">
+        <div class="sp-sec">
+          <div class="sp-sec-title">INTERFACE</div>
+          <div class="cfg-label" style="margin-top:0;">FONT SIZE</div>
+          <select class="cfg-sel" id="cfg-font-size" onchange="applyFontSize(this.value)">
+            <option value="11">Small (11px)</option>
+            <option value="13" selected>Normal (13px)</option>
+            <option value="15">Large (15px)</option>
+            <option value="17">X-Large (17px)</option>
+          </select>
+        </div>
+        <div class="sp-divider"></div>
+        <div class="sp-sec">
+          <div class="sp-sec-title">IDLE SCREEN</div>
+          <div class="cfg-label">WALLPAPER</div>
+          <div style="display:flex;gap:6px;margin-bottom:8px;">
+            <button class="sp-action-btn" onclick="document.getElementById('idle-wp-picker').click()">BROWSE FILE</button>
+            <button class="sp-action-btn" onclick="clearIdleWallpaper()">CLEAR</button>
+          </div>
+          <input type="file" id="idle-wp-picker" accept="image/*" style="display:none" onchange="idleWpPicked(this)">
+          <div id="idle-wp-preview" style="display:none;margin-bottom:8px;">
+            <img id="idle-wp-thumb" style="width:100%;max-height:72px;object-fit:cover;border:1px solid rgba(0,148,255,0.2);border-radius:2px;">
+          </div>
+          <div class="cfg-toggle-row">
+            <span>Show Orb on Idle Screen</span>
+            <div class="cfg-tog on" id="tog-idle-orb" onclick="cfgToggleIdleOrb()"></div>
+          </div>
+          <div class="cfg-divider" style="margin:12px 0;border-top:1px solid rgba(0,148,255,0.07);"></div>
+          <div class="cfg-label">SCREENSAVER TIMEOUT</div>
+          <select class="cfg-sel" id="cfg-ss">
+            <option value="0">OFF — stay on SPEAK</option>
+            <option value="2">2 minutes</option>
+            <option value="5" selected>5 minutes</option>
+            <option value="10">10 minutes</option>
+          </select>
+        </div>
+        <div class="sp-divider"></div>
+        <div class="sp-sec">
+          <div class="sp-sec-title">TASKBAR</div>
+          <div class="cfg-toggle-row">
+            <span>Auto-Hide (hover to reveal)</span>
+            <div class="cfg-tog" id="tog-tb-autohide" onclick="cfgToggleTbAutoHide()"></div>
+          </div>
+          <div class="cfg-toggle-row">
+            <span>Show Labels</span>
+            <div class="cfg-tog" id="tog-tb-labels" onclick="cfgToggleTbLabels()"></div>
+          </div>
+          <div class="cfg-label" style="margin-top:10px;">OPACITY</div>
+          <input type="range" min="20" max="100" value="88" id="cfg-tb-opacity" style="width:100%;accent-color:#0094ff;"
+            oninput="document.getElementById('tb-inner').style.opacity=this.value/100">
+          <div class="cfg-label" style="margin-top:10px;">RESET POSITION &amp; SIZE</div>
+          <button class="sp-action-btn" onclick="resetTaskbar()">RESET TASKBAR</button>
+        </div>
+      </div>
+      <div class="sp-save-row">
+        <button class="sp-save-btn" onclick="saveConfig('cfg-msg-appear')">SAVE SETTINGS</button>
+        <span class="sp-save-msg" id="cfg-msg-appear"></span>
+      </div>
+    </div>
+
+    <!-- ── DEVICE CONNECTION TAB ── -->
+    <div class="sp-panel" id="sptab-deviceconn">
+      <div class="sp-scroll">
+        <div class="sp-sec">
+          <div class="sp-sec-title">MULTI-DEVICE (WINDOWS + MAC)</div>
+          <div style="font-size:7px;color:rgba(0,148,255,0.55);margin-bottom:8px;letter-spacing:.05em;">Run iZACH on two machines — whichever starts second detects the other and offers Secondary Connector mode instead of a duplicate brain.</div>
+          <div class="cfg-toggle-row">
+            <span>Enable Dual-Instance Coordination</span>
+            <div class="cfg-tog" id="tog-dual-enabled" onclick="cfgToggle('tog-dual-enabled','dual_enabled')"></div>
+          </div>
+          <div class="cfg-label" style="margin-top:10px;">PEER HOST (the other machine's LAN IP)</div>
+          <input class="cfg-inp" id="cfg-peer-host" placeholder="e.g. 192.168.0.50" autocomplete="off">
+          <div class="cfg-label" style="margin-top:8px;">PEER PORT</div>
+          <input class="cfg-inp" id="cfg-peer-port" placeholder="5050" autocomplete="off">
+          <div style="font-size:7px;color:rgba(0,148,255,0.60);margin-top:3px;letter-spacing:.06em;">Shared secret token: Settings → Keys &amp; ID → DUAL-INSTANCE PEER TOKEN — must match on both machines.</div>
+          <div class="cfg-label" style="margin-top:10px;">PRIMARY PIN</div>
+          <select class="cfg-sel" id="cfg-primary-pin">
+            <option value="auto">Auto — whichever starts first wins</option>
+            <option value="always_mac">Always prefer this Mac</option>
+            <option value="always_windows">Always prefer Windows</option>
+          </select>
+          <div class="cfg-toggle-row" style="margin-top:10px;">
+            <span>Auto-Promote if Primary Goes Offline</span>
+            <div class="cfg-tog" id="tog-auto-promote" onclick="cfgToggle('tog-auto-promote','auto_promote_enabled')"></div>
+          </div>
+          <div class="cfg-label" style="margin-top:8px;">AUTO-PROMOTE TIMEOUT (minutes)</div>
+          <input class="cfg-inp" id="cfg-auto-promote-timeout" placeholder="5" autocomplete="off">
+          <div style="font-size:7px;color:rgba(0,148,255,0.60);margin-top:3px;letter-spacing:.06em;">Requires this machine to auto-restart on exit (e.g. a login item with keep-alive) to actually self-heal — otherwise it just stops instead of hanging in a broken state.</div>
+          <div class="cfg-divider" style="margin:12px 0;border-top:1px solid rgba(0,148,255,0.07);"></div>
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+            <div id="dual-status-dot" style="width:7px;height:7px;border-radius:50%;background:rgba(0,148,255,0.2);flex-shrink:0;"></div>
+            <span id="dual-status-lbl" style="font-size:8px;letter-spacing:.2em;color:rgba(0,148,255,0.4);">NOT CONFIGURED</span>
+          </div>
+          <button class="sp-action-btn" onclick="checkPeerConnection()">TEST CONNECTION</button>
+          <span class="sp-save-msg" id="dual-check-msg" style="margin-left:8px;"></span>
+        </div>
+        <div class="sp-divider"></div>
+        <div class="sp-sec">
+          <div class="sp-sec-title">MOBILE PHONE</div>
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+            <div class="ph-cdot" id="dc-phone-status-dot"></div>
+            <span id="dc-phone-status-lbl" style="font-size:8px;letter-spacing:.2em;color:rgba(0,148,255,0.4);">DISCONNECTED</span>
+          </div>
+          <div id="dc-phone-name-row" style="display:none;font-size:9px;letter-spacing:.1em;color:#00e5ff;margin-bottom:10px;">DEVICE: <span id="dc-phone-dev-name">—</span></div>
+          <button class="sec-btn" onclick="removePhoneDevice()" style="border-color:rgba(255,60,60,.4);color:rgba(255,60,60,.7);">REMOVE DEVICE</button>
+          <div style="font-size:7px;color:rgba(0,148,255,0.4);letter-spacing:.06em;margin-top:6px;">Rotates the pairing secret — the connected phone will need to re-scan the QR code (Phone widget) to reconnect.</div>
+          <div class="sp-save-msg" id="dc-phone-msg" style="margin-top:8px;"></div>
+        </div>
+      </div>
+      <div class="sp-save-row">
+        <button class="sp-save-btn" onclick="saveConfig('cfg-msg-dc')">SAVE SETTINGS</button>
+        <span class="sp-save-msg" id="cfg-msg-dc"></span>
+      </div>
+    </div>
+
+    <!-- ── NOTIFICATIONS AND ANNOUNCEMENTS TAB ── -->
+    <div class="sp-panel" id="sptab-notifannounce">
+      <div class="sp-scroll">
+        <div class="sp-sec">
+          <div class="sp-sec-title">DAILY BRIEFING</div>
+          <div class="cfg-toggle-row">
+            <span>Enable Daily Briefing</span>
+            <div class="cfg-tog" id="tog-briefing" onclick="cfgToggle('tog-briefing','briefing_enabled')"></div>
+          </div>
+          <div class="cfg-label" style="margin-top:10px;">BRIEFING TIME</div>
+          <input class="cfg-inp" id="cfg-brief-time" type="time" value="08:00" style="width:120px;">
+          <div class="cfg-label" style="margin-top:10px;">INCLUDE IN BRIEFING</div>
+          <div class="brief-item"><label><input type="checkbox" id="brief-weather" checked><span>Weather</span></label></div>
+          <div class="brief-item"><label><input type="checkbox" id="brief-news" checked><span>Top News</span></label></div>
+          <div class="brief-item"><label><input type="checkbox" id="brief-calendar"><span>Calendar Events</span></label></div>
+          <div class="brief-item"><label><input type="checkbox" id="brief-reminders"><span>Reminders</span></label></div>
+          <div class="brief-item"><label><input type="checkbox" id="brief-tasks"><span>Pending Tasks</span></label></div>
+          <div class="brief-item"><label><input type="checkbox" id="brief-stocks"><span>Stocks</span></label></div>
+          <div class="brief-item"><label><input type="checkbox" id="brief-sports"><span>Sports Scores</span></label></div>
+          <div class="brief-item"><label><input type="checkbox" id="brief-commute"><span>Commute Time</span></label></div>
+          <div class="brief-item"><label><input type="checkbox" id="brief-whatsapp"><span>WhatsApp Summary</span></label></div>
+          <div class="brief-item"><label><input type="checkbox" id="brief-system"><span>System Health</span></label></div>
+        </div>
+        <div class="sp-divider"></div>
+        <div class="sp-sec">
+          <div class="sp-sec-title">NOTIFICATIONS</div>
+          <div class="cfg-toggle-row">
+            <span>Performance Alerts</span>
+            <div class="cfg-tog on" id="tog-notif-perf" onclick="cfgToggle('tog-notif-perf','notif_performance')"></div>
+          </div>
+          <div class="cfg-toggle-row">
+            <span>WhatsApp Notifications</span>
+            <div class="cfg-tog on" id="tog-notif-wa" onclick="cfgToggle('tog-notif-wa','notif_whatsapp')"></div>
+          </div>
+          <div class="cfg-toggle-row">
+            <span>Download Notifications</span>
+            <div class="cfg-tog on" id="tog-notif-dl" onclick="cfgToggle('tog-notif-dl','notif_downloads')"></div>
+          </div>
+          <div class="cfg-toggle-row" style="margin-top:6px;">
+            <span>Mac Toast Notifications</span>
+            <div class="cfg-tog" id="tog-toast" onclick="cfgToggle('tog-toast','toast_enabled')"></div>
+          </div>
+        </div>
+        <div class="sp-divider"></div>
+        <div class="sp-sec">
+          <div class="sp-sec-title">NOTIFICATIONS <span style="font-size:8px;opacity:.6;">(WhatsApp + Calendar + System + Email, ranked)</span></div>
+          <div id="notif-feed-list" style="font-size:10px;color:rgba(0,148,255,0.5);font-family:'Share Tech Mono';">Loading…</div>
+          <button onclick="loadNotificationFeed()"
+            style="margin-top:8px;padding:4px 10px;background:rgba(0,148,255,0.1);border:1px solid rgba(0,148,255,0.3);
+                   border-radius:3px;color:rgba(0,200,255,0.8);font-family:'Share Tech Mono';font-size:8px;
+                   letter-spacing:.1em;cursor:pointer;">↻ REFRESH</button>
+        </div>
+      </div>
+      <div class="sp-save-row">
+        <button class="sp-save-btn" onclick="saveConfig('cfg-msg-notif');saveBgConfig('cfg-msg-notif');">SAVE SETTINGS</button>
+        <span class="sp-save-msg" id="cfg-msg-notif"></span>
+      </div>
+    </div>
+
+    <!-- ── CONNECTED SERVICES TAB ── -->
+    <div class="sp-panel" id="sptab-connservices">
+      <div class="sp-scroll">
         <div class="sp-sec">
           <div class="sp-sec-title">EMAIL AGENT</div>
           <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
@@ -2014,33 +2147,74 @@ body.spotlight-mode .pnl:not(.spotlighted) {
         </div>
         <div class="sp-divider"></div>
         <div class="sp-sec">
-          <div class="sp-sec-title">NOTIFICATIONS <span style="font-size:8px;opacity:.6;">(WhatsApp + Calendar + System + Email, ranked)</span></div>
-          <div id="notif-feed-list" style="font-size:10px;color:rgba(0,148,255,0.5);font-family:'Share Tech Mono';">Loading…</div>
-          <button onclick="loadNotificationFeed()"
-            style="margin-top:8px;padding:4px 10px;background:rgba(0,148,255,0.1);border:1px solid rgba(0,148,255,0.3);
-                   border-radius:3px;color:rgba(0,200,255,0.8);font-family:'Share Tech Mono';font-size:8px;
-                   letter-spacing:.1em;cursor:pointer;">↻ REFRESH</button>
+          <div class="sp-sec-title">GOOGLE CALENDAR</div>
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+            <div id="cal-auth-status-dot" style="width:7px;height:7px;border-radius:50%;background:rgba(0,148,255,0.2);flex-shrink:0;transition:background .3s;"></div>
+            <span id="cal-auth-status-lbl" style="font-size:8px;letter-spacing:.2em;color:rgba(0,148,255,0.4);">NOT CONNECTED</span>
+          </div>
+          <div id="cal-auth-connect-row">
+            <button onclick="calendarConnect()"
+              style="width:100%;padding:5px 0;background:rgba(0,148,255,0.1);border:1px solid rgba(0,148,255,0.3);
+                     border-radius:3px;color:rgba(0,200,255,0.8);font-family:'Share Tech Mono';font-size:8px;
+                     letter-spacing:.15em;cursor:pointer;">⊕ CONNECT GOOGLE CALENDAR</button>
+          </div>
+          <div id="cal-auth-disconnect-row" style="display:none;">
+            <button onclick="calendarDisconnect()"
+              style="width:100%;padding:5px 0;background:rgba(255,61,61,0.08);border:1px solid rgba(255,61,61,0.25);
+                     border-radius:3px;color:rgba(255,100,100,0.8);font-family:'Share Tech Mono';font-size:8px;
+                     letter-spacing:.15em;cursor:pointer;">DISCONNECT</button>
+          </div>
         </div>
         <div class="sp-divider"></div>
         <div class="sp-sec">
-          <div class="sp-sec-title">DAILY BRIEFING</div>
-          <div class="cfg-toggle-row">
-            <span>Enable Daily Briefing</span>
-            <div class="cfg-tog" id="tog-briefing" onclick="cfgToggle('tog-briefing','briefing_enabled')"></div>
+          <div class="sp-sec-title">SPOTIFY</div>
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+            <div id="sp-auth-status-dot" style="width:7px;height:7px;border-radius:50%;background:rgba(0,148,255,0.2);flex-shrink:0;transition:background .3s;"></div>
+            <span id="sp-auth-status-lbl" style="font-size:8px;letter-spacing:.2em;color:rgba(0,148,255,0.4);">NOT CONNECTED</span>
           </div>
-          <div class="cfg-label" style="margin-top:10px;">BRIEFING TIME</div>
-          <input class="cfg-inp" id="cfg-brief-time" type="time" value="08:00" style="width:120px;">
-          <div class="cfg-label" style="margin-top:10px;">INCLUDE IN BRIEFING</div>
-          <div class="brief-item"><label><input type="checkbox" id="brief-weather" checked><span>Weather</span></label></div>
-          <div class="brief-item"><label><input type="checkbox" id="brief-news" checked><span>Top News</span></label></div>
-          <div class="brief-item"><label><input type="checkbox" id="brief-calendar"><span>Calendar Events</span></label></div>
-          <div class="brief-item"><label><input type="checkbox" id="brief-reminders"><span>Reminders</span></label></div>
-          <div class="brief-item"><label><input type="checkbox" id="brief-tasks"><span>Pending Tasks</span></label></div>
-          <div class="brief-item"><label><input type="checkbox" id="brief-stocks"><span>Stocks</span></label></div>
-          <div class="brief-item"><label><input type="checkbox" id="brief-sports"><span>Sports Scores</span></label></div>
-          <div class="brief-item"><label><input type="checkbox" id="brief-commute"><span>Commute Time</span></label></div>
-          <div class="brief-item"><label><input type="checkbox" id="brief-whatsapp"><span>WhatsApp Summary</span></label></div>
-          <div class="brief-item"><label><input type="checkbox" id="brief-system"><span>System Health</span></label></div>
+          <div id="sp-auth-connect-row">
+            <button onclick="spotifyConnect()"
+              style="width:100%;padding:5px 0;background:rgba(0,148,255,0.1);border:1px solid rgba(0,148,255,0.3);
+                     border-radius:3px;color:rgba(0,200,255,0.8);font-family:'Share Tech Mono';font-size:8px;
+                     letter-spacing:.15em;cursor:pointer;">⊕ CONNECT SPOTIFY</button>
+          </div>
+          <div id="sp-auth-disconnect-row" style="display:none;">
+            <button onclick="spotifyDisconnect()"
+              style="width:100%;padding:5px 0;background:rgba(255,61,61,0.08);border:1px solid rgba(255,61,61,0.25);
+                     border-radius:3px;color:rgba(255,100,100,0.8);font-family:'Share Tech Mono';font-size:8px;
+                     letter-spacing:.15em;cursor:pointer;">DISCONNECT</button>
+          </div>
+        </div>
+        <div class="sp-divider"></div>
+        <div class="sp-sec">
+          <div class="sp-sec-title">WHATSAPP</div>
+          <button class="sec-btn" onclick="whatsappRestartBridge()">RESTART WHATSAPP BRIDGE</button>
+          <button class="sec-btn" onclick="logoutWhatsApp()" style="border-color:rgba(255,60,60,.4);color:rgba(255,60,60,.7);margin-top:8px;">LOGOUT WHATSAPP</button>
+          <div class="sp-save-msg" id="wa-msg" style="margin-top:8px;"></div>
+        </div>
+      </div>
+      <div class="sp-save-row">
+        <button class="sp-save-btn" onclick="saveConfig('cfg-msg-conn')">SAVE SETTINGS</button>
+        <span class="sp-save-msg" id="cfg-msg-conn"></span>
+      </div>
+    </div>
+
+    <!-- ── OTHERS TAB ── -->
+    <div class="sp-panel" id="sptab-others">
+      <div class="sp-scroll">
+        <div class="sp-sec">
+          <div class="sp-sec-title">PRIVACY</div>
+          <div class="cfg-toggle-row">
+            <span>Save Command History</span>
+            <div class="cfg-tog on" id="tog-cmd-hist" onclick="cfgToggle('tog-cmd-hist','command_history_enabled')"></div>
+          </div>
+          <div class="cfg-label" style="margin-top:10px;">LOG RETENTION (DAYS)</div>
+          <select class="cfg-sel" id="cfg-log-ret">
+            <option value="7">7 days</option>
+            <option value="14">14 days</option>
+            <option value="30">30 days</option>
+            <option value="90">90 days</option>
+          </select>
         </div>
         <div class="sp-divider"></div>
         <div class="sp-sec">
@@ -2054,8 +2228,38 @@ body.spotlight-mode .pnl:not(.spotlighted) {
         </div>
       </div>
       <div class="sp-save-row">
-        <button class="sp-save-btn" onclick="saveConfig()">SAVE SETTINGS</button>
-        <span class="sp-save-msg" id="cfg-msg"></span>
+        <button class="sp-save-btn" onclick="saveConfig('cfg-msg-others')">SAVE SETTINGS</button>
+        <span class="sp-save-msg" id="cfg-msg-others"></span>
+      </div>
+    </div>
+
+    <!-- ── BOOT SETTINGS TAB ── -->
+    <div class="sp-panel" id="sptab-boot">
+      <div class="sp-scroll">
+        <div class="sp-sec" id="boot-ui-style-sec">
+          <div class="sp-sec-title">UI STYLE</div>
+          <div class="cfg-label">restart to apply</div>
+          <label class="cfg-opt"><input type="radio" name="ui-mode" value="classic"><span class="classic-ui-label">Classic — React dashboard (Forge UI)</span></label>
+          <label class="cfg-opt"><input type="radio" name="ui-mode" value="scifi" checked><span>Sci-Fi — JARVIS holographic (Cortex UI)</span></label>
+          <label class="cfg-opt"><input type="radio" name="ui-mode" value="background"><span>Background — no window, voice/tray only, low RAM</span></label>
+          <label class="cfg-opt" style="margin-top:8px;"><input type="checkbox" id="cfg-ask-boot"><span>Ask Every Time During Boot</span></label>
+          <div class="cfg-label" id="boot-ui-style-mac-note" style="display:none;margin-top:4px;">Sci-Fi (Cortex UI) is the only interface on macOS.</div>
+        </div>
+        <div class="sp-divider"></div>
+        <div class="sp-sec">
+          <div class="sp-sec-title">BOOT TERMINALS</div>
+          <div class="cfg-label">Pick which service windows are visible when iZACH boots — restart required. Everything still runs either way; unchecking a service just keeps its terminal window from opening (logs to logs/*.log instead), so your screen doesn't get crowded with windows.</div>
+          <label class="cfg-opt"><input type="checkbox" id="boot-term-interface" checked><span>Boot Interface Terminal — the orchestrator's own progress window</span></label>
+          <label class="cfg-opt"><input type="checkbox" id="boot-term-backend" checked><span>Python Backend Terminal</span></label>
+          <label class="cfg-opt"><input type="checkbox" id="boot-term-ngrok" checked><span>Ngrok Terminal</span></label>
+          <label class="cfg-opt"><input type="checkbox" id="boot-term-whatsapp" checked><span>WhatsApp Bridge Terminal</span></label>
+          <label class="cfg-opt"><input type="checkbox" id="boot-term-n8n" checked><span>n8n Terminal</span></label>
+          <div class="cfg-label" style="margin-top:8px;">Note: leave WhatsApp Bridge checked for your very first pairing — the QR code only prints to a visible terminal, not the log file. Safe to uncheck afterward, the paired session persists.</div>
+        </div>
+      </div>
+      <div class="sp-save-row">
+        <button class="sp-save-btn" onclick="saveBootConfig()">SAVE BOOT SETTINGS</button>
+        <span class="sp-save-msg" id="bootcfg-msg"></span>
       </div>
     </div>
 
@@ -2140,6 +2344,14 @@ body.spotlight-mode .pnl:not(.spotlighted) {
           <div style="font-size:7px;color:rgba(0,148,255,0.60);margin-top:3px;letter-spacing:.06em;">developer.edamam.com → Food Database API</div>
         </div>
 
+        <div class="sp-divider"></div>
+        <div class="sp-sec">
+          <div class="sp-sec-title">DUAL-INSTANCE PEER TOKEN</div>
+          <div class="cfg-label">SHARED SECRET</div>
+          <input class="cfg-inp" id="kf-peer-token" type="password" placeholder="Not set" autocomplete="off">
+          <div style="font-size:7px;color:rgba(0,148,255,0.60);margin-top:3px;letter-spacing:.06em;">Must be the exact same value on both your Windows and Mac installs — set once, copy to the other machine's .env. Used by the Settings → MULTI-DEVICE section.</div>
+        </div>
+
       </div>
       <div class="sp-save-row">
         <button class="sp-save-btn" id="keys-save-btn" onclick="saveAllKeys()">SAVE ALL KEYS</button>
@@ -2195,9 +2407,11 @@ body.spotlight-mode .pnl:not(.spotlighted) {
           <div class="sp-save-msg" id="face-msg" style="margin-top:8px;"></div>
         </div>
         <div class="sec-card" style="margin-top:14px;">
-          <div class="sec-card-title">WHATSAPP SESSION</div>
-          <button class="sec-btn" onclick="logoutWhatsApp()" style="border-color:rgba(255,60,60,.4);color:rgba(255,60,60,.7);">LOGOUT WHATSAPP</button>
-          <div class="sp-save-msg" id="wa-msg" style="margin-top:8px;"></div>
+          <div class="sec-card-title">EXPORT</div>
+          <div class="sp-action-grid">
+            <button class="sp-action-btn" onclick="exportChat('txt')">EXPORT CHAT (TXT)</button>
+            <button class="sp-action-btn" onclick="exportChat('pdf')">EXPORT CHAT (PDF)</button>
+          </div>
         </div>
       </div>
     </div>
@@ -2290,17 +2504,17 @@ body.spotlight-mode .pnl:not(.spotlighted) {
           <div class="sp-empty" id="bp-empty">No saved passwords yet.</div>
         </div>
 
-        <!-- AUTOFILL / WINDOWS HELLO -->
+        <!-- AUTOFILL / WINDOWS HELLO (macOS: TOUCH ID) — text set per-platform by _applyAuthMethodName() -->
         <div style="padding:14px 28px 20px;border-top:1px solid rgba(0,148,255,0.07);margin-top:6px;">
-          <div style="font-size:7px;letter-spacing:.4em;color:rgba(0,148,255,0.32);margin-bottom:8px;">AUTOFILL — VERIFIED BY WINDOWS HELLO</div>
+          <div id="wh-title" style="font-size:7px;letter-spacing:.4em;color:rgba(0,148,255,0.32);margin-bottom:8px;">AUTOFILL — VERIFIED BY <span id="wh-name-1">WINDOWS HELLO</span></div>
           <div style="font-size:8px;color:rgba(0,148,255,0.4);margin-bottom:10px;line-height:1.6;">
             The 🔑 button in the browser toolbar fills a saved login into the page. Every use re-verifies with your
-            PIN, fingerprint, or face via Windows Hello first — the password is never decrypted without it.
+            PIN, fingerprint, or face via <span id="wh-name-2">Windows Hello</span> first — the password is never decrypted without it.
           </div>
           <div style="display:flex;align-items:center;gap:10px;">
             <span id="wh-status-dot" style="width:8px;height:8px;border-radius:50%;background:rgba(255,80,80,0.5);flex-shrink:0;"></span>
             <span id="wh-status-txt" style="font-size:9px;letter-spacing:.1em;color:rgba(0,148,255,0.5);">Checking…</span>
-            <button class="sp-add-btn" id="wh-enroll-btn" onclick="whEnroll()">SET UP WINDOWS HELLO</button>
+            <button class="sp-add-btn" id="wh-enroll-btn" onclick="whEnroll()">SET UP <span id="wh-name-3">WINDOWS HELLO</span></button>
             <span style="font-size:8px;letter-spacing:.1em;color:rgba(0,148,255,0.4);" id="wh-msg"></span>
           </div>
         </div>
@@ -2311,17 +2525,6 @@ body.spotlight-mode .pnl:not(.spotlighted) {
     <!-- ── BG MODE TAB ── -->
     <div class="sp-panel" id="sptab-bgmode">
       <div class="sp-scroll">
-
-        <!-- INTERFACE MODE -->
-        <div class="sp-sec">
-          <div class="sp-sec-title">INTERFACE MODE</div>
-          <div class="cfg-label">UI STYLE (restart to apply)</div>
-          <label class="cfg-opt"><input type="radio" name="ui-mode" value="classic"><span>Classic — React dashboard (Forge UI)</span></label>
-          <label class="cfg-opt"><input type="radio" name="ui-mode" value="scifi" checked><span>Sci-Fi — JARVIS holographic (Cortex UI)</span></label>
-          <label class="cfg-opt"><input type="radio" name="ui-mode" value="background"><span>Background — no window, voice/tray only, low RAM</span></label>
-          <label class="cfg-opt" style="margin-top:8px;"><input type="checkbox" id="cfg-ask-boot-bg"><span>Ask Every Time During Boot</span></label>
-        </div>
-        <div class="sp-divider"></div>
 
         <!-- OVERLAYS -->
         <div class="sp-sec">
@@ -2347,8 +2550,8 @@ body.spotlight-mode .pnl:not(.spotlighted) {
         </div>
         <div class="sp-divider"></div>
 
-        <!-- POWER SETTINGS -->
-        <div class="sp-sec">
+        <!-- POWER SETTINGS — Background Mode isn't offered on macOS (see boot-ui-style-mac-note); JS hides this whole block there -->
+        <div class="sp-sec" id="boot-power-sec">
           <div class="sp-sec-title">POWER SETTINGS</div>
           <div class="cfg-toggle-row">
             <span>Auto Background on Battery</span>
@@ -2359,46 +2562,7 @@ body.spotlight-mode .pnl:not(.spotlighted) {
             <div class="cfg-tog" id="tog-lid" onclick="cfgToggle('tog-lid','lid_close_trigger')"></div>
           </div>
         </div>
-        <div class="sp-divider"></div>
-
-        <!-- NOTIFICATIONS -->
-        <div class="sp-sec">
-          <div class="sp-sec-title">NOTIFICATIONS</div>
-          <div class="cfg-toggle-row">
-            <span>Windows Toast Notifications</span>
-            <div class="cfg-tog" id="tog-toast" onclick="cfgToggle('tog-toast','toast_enabled')"></div>
-          </div>
-          <div class="cfg-toggle-row">
-            <span>Toast in Background Mode Only</span>
-            <div class="cfg-tog" id="tog-toast-bg" onclick="cfgToggle('tog-toast-bg','toast_bg_only')"></div>
-          </div>
-        </div>
-        <div class="sp-divider"></div>
-
-        <!-- EXPORT -->
-        <div class="sp-sec">
-          <div class="sp-sec-title">EXPORT</div>
-          <div class="sp-action-grid">
-            <button class="sp-action-btn" onclick="exportChat('txt')">EXPORT CHAT (TXT)</button>
-            <button class="sp-action-btn" onclick="exportChat('pdf')">EXPORT CHAT (PDF)</button>
-          </div>
-        </div>
-        <div class="sp-divider"></div>
-
-        <!-- VOICE ALIASES -->
-        <div class="sp-sec">
-          <div class="sp-sec-title">VOICE ALIASES</div>
-          <div style="font-size:7px;color:rgba(0,148,255,0.4);letter-spacing:.12em;margin-bottom:8px;">SAY TRIGGER → iZACH RUNS THE ALIASED COMMAND</div>
-          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">
-            <input class="sp-add-inp" id="alias-trigger" placeholder="Trigger (e.g. fire it up)" style="flex:1;min-width:120px;">
-            <input class="sp-add-inp" id="alias-command" placeholder="Command (e.g. play my gym playlist)" style="flex:2;min-width:180px;">
-            <button class="sp-add-btn" onclick="addAlias()">+ ADD</button>
-          </div>
-          <div style="font-size:8px;color:rgba(0,148,255,0.5);letter-spacing:.1em;margin-bottom:6px;" id="alias-msg"></div>
-          <div id="alias-list" style="max-height:180px;overflow-y:auto;">
-            <div class="sp-empty" id="alias-empty">No aliases yet.</div>
-          </div>
-        </div>
+        <div class="sp-divider" id="boot-power-divider"></div>
 
       </div>
       <div class="sp-save-row">
@@ -2430,7 +2594,7 @@ body.spotlight-mode .pnl:not(.spotlighted) {
 <!-- WORLD CLOCK PANEL -->
 <div id="p-clock" class="pnl">
   <div class="cb cb-tl"></div><div class="cb cb-tr"></div><div class="cb cb-bl"></div><div class="cb cb-br"></div>
-  <div class="ph"><span class="ph-id">12 · CLOCK</span><span class="ph-cat"><div class="ph-dot"></div>WORLD TIME<span class="ph-min">—</span></span></div>
+  <div class="ph"><span class="ph-id">12 · CLOCK</span><span class="ph-cat"><div class="ph-dot"></div>WORLD TIME<span class="ph-max" title="Maximize">□</span><span class="ph-min">—</span></span></div>
   <div class="tz-grid">
     <div class="tz-cell"><div class="tz-city">NEW DELHI</div><div class="tz-time" id="tz-ist">--:--</div><div class="tz-zone">IST +5:30</div></div>
     <div class="tz-cell"><div class="tz-city">NEW YORK</div><div class="tz-time" id="tz-est">--:--</div><div class="tz-zone">EDT -4:00</div></div>
@@ -2443,7 +2607,7 @@ body.spotlight-mode .pnl:not(.spotlighted) {
 <!-- PHONE CONNECTION PANEL -->
 <div id="p-phone" class="pnl">
   <div class="cb cb-tl"></div><div class="cb cb-tr"></div><div class="cb cb-bl"></div><div class="cb cb-br"></div>
-  <div class="ph"><span class="ph-id">13 · PHONE</span><span class="ph-cat"><div class="ph-dot"></div>ANDROID<span class="ph-min">—</span></span></div>
+  <div class="ph"><span class="ph-id">13 · PHONE</span><span class="ph-cat"><div class="ph-dot"></div>ANDROID<span class="ph-max" title="Maximize">□</span><span class="ph-min">—</span></span></div>
   <div class="ph-conn" id="phone-conn-body">
     <div id="phone-qr-state">
       <div class="ph-qr-box">
@@ -2481,7 +2645,7 @@ body.spotlight-mode .pnl:not(.spotlighted) {
 <!-- DEVICES PANEL -->
 <div id="p-devices" class="pnl">
   <div class="cb cb-tl"></div><div class="cb cb-tr"></div><div class="cb cb-bl"></div><div class="cb cb-br"></div>
-  <div class="ph"><span class="ph-id">14 · DEVICES</span><span class="ph-cat"><div class="ph-dot"></div>NODES<span class="ph-min">—</span></span></div>
+  <div class="ph"><span class="ph-id">14 · DEVICES</span><span class="ph-cat"><div class="ph-dot"></div>NODES<span class="ph-max" title="Maximize">□</span><span class="ph-min">—</span></span></div>
   <!-- AlliedNode 2 row -->
   <div class="dev-node-row" onclick="toggleNodeExpand('an2')">
     <div class="dev-node-dot" id="dev-dot-an2"></div>
@@ -2600,7 +2764,7 @@ body.spotlight-mode .pnl:not(.spotlighted) {
   <div class="cb cb-tl"></div><div class="cb cb-tr"></div><div class="cb cb-bl"></div><div class="cb cb-br"></div>
   <div class="ph">
     <span class="ph-id">16 · CALLS</span>
-    <span class="ph-cat"><div class="ph-dot" id="calls-dot" style="background:#00e5ff;box-shadow:0 0 5px #00e5ff;"></div>WHATSAPP<span class="ph-min">—</span></span>
+    <span class="ph-cat"><div class="ph-dot" id="calls-dot" style="background:#00e5ff;box-shadow:0 0 5px #00e5ff;"></div>WHATSAPP<span class="ph-max" title="Maximize">□</span><span class="ph-min">—</span></span>
   </div>
 
   <!-- Busy mode toggle bar -->
@@ -2638,7 +2802,7 @@ body.spotlight-mode .pnl:not(.spotlighted) {
 <!-- SKILLS PANEL -->
 <div id="p-skills" class="pnl">
   <div class="cb cb-tl"></div><div class="cb cb-tr"></div><div class="cb cb-bl"></div><div class="cb cb-br"></div>
-  <div class="ph"><span class="ph-id">SK · SKILLS</span><span class="ph-cat"><div class="ph-dot"></div>SKILL ENGINE<span class="ph-min">—</span></span></div>
+  <div class="ph"><span class="ph-id">SK · SKILLS</span><span class="ph-cat"><div class="ph-dot"></div>SKILL ENGINE<span class="ph-max" title="Maximize">□</span><span class="ph-min">—</span></span></div>
   <div class="pnl-body" id="p-skills-body" style="overflow-y:auto;">
     <!-- header row -->
     <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px 4px;">
@@ -2662,7 +2826,7 @@ body.spotlight-mode .pnl:not(.spotlighted) {
     <span class="ph-id">AM · API MONITOR</span>
     <span class="ph-cat">
       <div class="ph-dot"></div>KEY USAGE
-      <span class="ph-min">—</span>
+      <span class="ph-max" title="Maximize">□</span><span class="ph-min">—</span>
     </span>
   </div>
   <div class="pnl-body" id="p-apimon-body" style="overflow-y:auto;">
@@ -2684,7 +2848,7 @@ body.spotlight-mode .pnl:not(.spotlighted) {
     <span class="ph-id">SD · WHAT'S RUNNING</span>
     <span class="ph-cat">
       <div class="ph-dot"></div>STATUS
-      <span class="ph-min">—</span>
+      <span class="ph-max" title="Maximize">□</span><span class="ph-min">—</span>
     </span>
   </div>
   <div class="pnl-body" id="p-dashboard-body" style="overflow-y:auto;">
@@ -2702,7 +2866,7 @@ body.spotlight-mode .pnl:not(.spotlighted) {
 <!-- BROWSER PANEL -->
 <div id="p-browser" class="pnl">
   <div class="cb cb-tl"></div><div class="cb cb-tr"></div><div class="cb cb-bl"></div><div class="cb cb-br"></div>
-  <div class="ph"><span class="ph-id">25 · BROWSER</span><span class="ph-cat"><div class="ph-dot"></div>WEB<span class="ph-min">—</span></span></div>
+  <div class="ph"><span class="ph-id">25 · BROWSER</span><span class="ph-cat"><div class="ph-dot"></div>WEB<span class="ph-max" title="Maximize">□</span><span class="ph-min">—</span></span></div>
   <div class="pnl-body" style="display:flex;flex-direction:column;padding:0;">
     <div id="browser-tabstrip" style="display:flex;align-items:center;gap:2px;padding:6px 6px 0;overflow-x:auto;flex-shrink:0;"></div>
     <div style="display:flex;align-items:center;gap:6px;padding:6px 10px 8px;border-bottom:1px solid rgba(0,148,255,0.10);flex-shrink:0;flex-wrap:wrap;">
@@ -2879,7 +3043,7 @@ body.spotlight-mode .pnl:not(.spotlighted) {
 <!-- AGENTS PANEL -->
 <div id="p-agents" class="pnl">
   <div class="cb cb-tl"></div><div class="cb cb-tr"></div><div class="cb cb-bl"></div><div class="cb cb-br"></div>
-  <div class="ph"><span class="ph-id">15 · AGENTS</span><span class="ph-cat"><div class="ph-dot"></div>AI AGENTS<span class="ph-min">—</span></span></div>
+  <div class="ph"><span class="ph-id">15 · AGENTS</span><span class="ph-cat"><div class="ph-dot"></div>AI AGENTS<span class="ph-max" title="Maximize">□</span><span class="ph-min">—</span></span></div>
   <div class="pnl-body" id="p-agents-body">
     <div style="padding:8px 14px 4px;font-size:7px;letter-spacing:.3em;color:rgba(0,148,255,0.32);">AGENT ROSTER</div>
     <div id="agents-list"></div>
@@ -2895,7 +3059,7 @@ body.spotlight-mode .pnl:not(.spotlighted) {
   <div class="cb cb-tl"></div><div class="cb cb-tr"></div><div class="cb cb-bl"></div><div class="cb cb-br"></div>
   <div class="ph">
     <span class="ph-id">17 · OCR</span>
-    <span class="ph-cat"><div class="ph-dot" id="ocr-dot"></div>DOCUMENT SCAN<span class="ph-min">—</span></span>
+    <span class="ph-cat"><div class="ph-dot" id="ocr-dot"></div>DOCUMENT SCAN<span class="ph-max" title="Maximize">□</span><span class="ph-min">—</span></span>
   </div>
   <div class="pnl-body">
 
@@ -2978,7 +3142,7 @@ body.spotlight-mode .pnl:not(.spotlighted) {
   <div class="cb cb-tl"></div><div class="cb cb-tr"></div><div class="cb cb-bl"></div><div class="cb cb-br"></div>
   <div class="ph">
     <span class="ph-id">18 · PRINT</span>
-    <span class="ph-cat"><div class="ph-dot" id="print-dot"></div>PRINTER<span class="ph-min">—</span></span>
+    <span class="ph-cat"><div class="ph-dot" id="print-dot"></div>PRINTER<span class="ph-max" title="Maximize">□</span><span class="ph-min">—</span></span>
   </div>
   <div class="pnl-body">
 
@@ -3120,7 +3284,7 @@ body.spotlight-mode .pnl:not(.spotlighted) {
   <div class="cb cb-tl"></div><div class="cb cb-tr"></div><div class="cb cb-bl"></div><div class="cb cb-br"></div>
   <div class="ph">
     <span class="ph-id">19 · FITNESS</span>
-    <span class="ph-cat"><div class="ph-dot" id="fit-dot"></div>GOOGLE FIT<span class="ph-min">—</span></span>
+    <span class="ph-cat"><div class="ph-dot" id="fit-dot"></div>GOOGLE FIT<span class="ph-max" title="Maximize">□</span><span class="ph-min">—</span></span>
   </div>
   <div class="pnl-body">
 
@@ -3219,7 +3383,7 @@ body.spotlight-mode .pnl:not(.spotlighted) {
   <div class="cb cb-tl"></div><div class="cb cb-tr"></div><div class="cb cb-bl"></div><div class="cb cb-br"></div>
   <div class="ph">
     <span class="ph-id">20 · LOCATION</span>
-    <span class="ph-cat"><div class="ph-dot" id="loc-dot"></div>WHEREAMI<span class="ph-min">—</span></span>
+    <span class="ph-cat"><div class="ph-dot" id="loc-dot"></div>WHEREAMI<span class="ph-max" title="Maximize">□</span><span class="ph-min">—</span></span>
   </div>
   <div class="pnl-body">
 
@@ -3294,7 +3458,7 @@ body.spotlight-mode .pnl:not(.spotlighted) {
   <div class="cb cb-tl"></div><div class="cb cb-tr"></div><div class="cb cb-bl"></div><div class="cb cb-br"></div>
   <div class="ph">
     <span class="ph-id">21 · SMART HOME</span>
-    <span class="ph-cat"><div class="ph-dot" id="sh-dot"></div>DEVICES<span class="ph-min">—</span></span>
+    <span class="ph-cat"><div class="ph-dot" id="sh-dot"></div>DEVICES<span class="ph-max" title="Maximize">□</span><span class="ph-min">—</span></span>
   </div>
   <div class="pnl-body" id="sh-body">
 
@@ -3411,15 +3575,6 @@ body.spotlight-mode .pnl:not(.spotlighted) {
           <button class="sh-ctrl-btn" onclick="shAuthStart()">CONNECT</button>
           <button class="sh-ctrl-btn danger" onclick="shDisconnect()">DISCONNECT</button>
         </div>
-        <div id="sh-auth-code-row" style="display:none;margin-top:5px;">
-          <div class="sh-auth-url" id="sh-auth-url-lbl"></div>
-          <input class="sh-auth-code" id="sh-auth-code-inp" type="text" placeholder="Paste auth code…" />
-          <div style="display:flex;gap:4px;margin-top:4px;">
-            <button class="sh-ctrl-btn" onclick="shAuthComplete()">SUBMIT</button>
-            <button class="sh-ctrl-btn" onclick="window.open(document.getElementById('sh-auth-url').href)">OPEN URL</button>
-          </div>
-          <a id="sh-auth-url" href="#" target="_blank" style="display:none;"></a>
-        </div>
         <div id="sh-nest-list" style="margin-top:5px;">
           <div style="font-size:8px;color:rgba(0,148,255,0.2);text-align:center;padding:4px;">NO NEST DEVICES</div>
         </div>
@@ -3469,7 +3624,7 @@ body.spotlight-mode .pnl:not(.spotlighted) {
   <div class="cb cb-tl"></div><div class="cb cb-tr"></div><div class="cb cb-bl"></div><div class="cb cb-br"></div>
   <div class="ph">
     <span class="ph-id">24 · NEWS</span>
-    <span class="ph-cat"><div class="ph-dot"></div>LIVE FEED<span class="ph-min">—</span></span>
+    <span class="ph-cat"><div class="ph-dot"></div>LIVE FEED<span class="ph-max" title="Maximize">□</span><span class="ph-min">—</span></span>
   </div>
   <div class="pb" style="position:relative;">
 
@@ -3584,7 +3739,7 @@ body.spotlight-mode .pnl:not(.spotlighted) {
   <div class="cb cb-tl"></div><div class="cb cb-tr"></div><div class="cb cb-bl"></div><div class="cb cb-br"></div>
   <div class="ph">
     <span class="ph-id">23 · INSTAGRAM</span>
-    <span class="ph-cat"><div class="ph-dot" id="ig-dot"></div><span id="ig-ph-sub">NOT CONNECTED</span><span class="ph-min">—</span></span>
+    <span class="ph-cat"><div class="ph-dot" id="ig-dot"></div><span id="ig-ph-sub">NOT CONNECTED</span><span class="ph-max" title="Maximize">□</span><span class="ph-min">—</span></span>
   </div>
   <div class="pb">
 
@@ -3755,7 +3910,7 @@ body.spotlight-mode .pnl:not(.spotlighted) {
   <div class="cb cb-tl"></div><div class="cb cb-tr"></div><div class="cb cb-bl"></div><div class="cb cb-br"></div>
   <div class="ph">
     <span class="ph-id">22 · SUBCONSCIOUSNESS</span>
-    <span class="ph-cat"><div class="ph-dot sc-status-dot" id="sc-status-dot"></div>BACKGROUND AGENT<span class="ph-min">—</span></span>
+    <span class="ph-cat"><div class="ph-dot sc-status-dot" id="sc-status-dot"></div>BACKGROUND AGENT<span class="ph-max" title="Maximize">□</span><span class="ph-min">—</span></span>
   </div>
   <div class="pb">
 
@@ -3968,7 +4123,7 @@ tick(); setInterval(tick,1000);
 // STATE MACHINE
 // ════════════════════════════════════════════════════
 let camStream=null;
-const allWgts=['p-comm','p-audio','p-sched','p-sys','p-intel','p-mem','p-msg','p-wx','p-feed','p-hist','p-clock','p-phone','p-devices','p-agents','p-ocr','p-print','p-fit','p-loc','p-sh','p-sc','p-ig','p-skills','p-apimon','p-browser','p-dashboard'];
+const allWgts=['p-comm','p-audio','p-sched','p-sys','p-intel','p-mem','p-msg','p-wx','p-feed','p-hist','p-clock','p-phone','p-devices','p-agents','p-ocr','p-print','p-fit','p-loc','p-sh','p-sc','p-ig','p-skills','p-apimon','p-browser','p-dashboard','p-news','p-rel','p-calls'];
 const dkMap={'p-comm':'dk-comm','p-audio':'dk-aud','p-sched':'dk-sch','p-sys':'dk-sys','p-intel':'dk-int','p-mem':'dk-mem','p-msg':'dk-msg','p-wx':'dk-wx','p-rel':'dk-rel','p-feed':'dk-feed','p-hist':'dk-hist','p-clock':'dk-clk','p-phone':'dk-phone','p-devices':'dk-devices','p-agents':'dk-agents'};
 
 function slideScreens(show){
@@ -5138,15 +5293,15 @@ async function whLoadStatus(){
   }
   const enrolled=await window.izachWebAuthn.isEnrolled();
   dot.style.background=enrolled ? '#1db954' : 'rgba(255,80,80,0.5)';
-  txt.textContent=enrolled ? 'Windows Hello is set up.' : 'Not set up yet.';
-  btn.textContent=enrolled ? 'RE-ENROLL' : 'SET UP WINDOWS HELLO';
+  txt.textContent=enrolled ? _authMethodName()+' is set up.' : 'Not set up yet.';
+  btn.textContent=enrolled ? 'RE-ENROLL' : 'SET UP '+_authMethodName().toUpperCase();
   btn.style.display='';
 }
 
 async function whEnroll(){
   const msg=document.getElementById('wh-msg');
   if(!window.izachWebAuthn){ if(msg) msg.textContent='Only available in the desktop app.'; return; }
-  if(msg){ msg.textContent='Follow the Windows Hello prompt…'; }
+  if(msg){ msg.textContent='Follow the '+_authMethodName()+' prompt…'; }
   try{
     const result=await window.izachWebAuthn.enroll();
     if(result.ok){ if(msg) msg.textContent='Enrolled.'; }
@@ -5403,10 +5558,10 @@ async function browserAutofill(){
   }
   const enrolled=await window.izachWebAuthn.isEnrolled();
   if(!enrolled){
-    showToast('Set up Windows Hello for autofill in Settings → Browser Settings first.', 'warn', 'BROWSER');
+    showToast('Set up '+_authMethodName()+' for autofill in Settings → Browser Settings first.', 'warn', 'BROWSER');
     return;
   }
-  showToast('Waiting for Windows Hello…', 'info', 'BROWSER');
+  showToast('Waiting for '+_authMethodName()+'…', 'info', 'BROWSER');
   const result=await window.izachPasswords.autofillReveal(id);
   if(!result.ok){
     const msg=result.error==='cancelled' ? 'Autofill cancelled.' : `Autofill failed: ${result.error||'verification failed'}`;
@@ -5445,10 +5600,10 @@ async function _browserAutofillForIncomingRequest(url){
     }
     const enrolled=await window.izachWebAuthn.isEnrolled();
     if(!enrolled){
-      showToast('Set up Windows Hello for autofill in Settings → Browser Settings first.', 'warn', 'BROWSER');
+      showToast('Set up '+_authMethodName()+' for autofill in Settings → Browser Settings first.', 'warn', 'BROWSER');
       return;
     }
-    showToast(`📱 Phone requested autofill for ${match.site} — confirm with Windows Hello…`, 'info', 'BROWSER');
+    showToast(`📱 Phone requested autofill for ${match.site} — confirm with ${_authMethodName()}…`, 'info', 'BROWSER');
     const result=await window.izachPasswords.autofillReveal(match.id);
     if(!result.ok){
       const msg=result.error==='cancelled' ? 'Autofill cancelled.' : `Autofill failed: ${result.error||'verification failed'}`;
@@ -6619,22 +6774,30 @@ function addHistory(cmd){
 // ════════════════════════════════════════════════════
 let zTop=20;
 const SNAP=16;
+// #titlebar is 30px tall with -webkit-app-region:drag and z-index:10002 —
+// higher than any widget. A widget whose header lands inside that strip
+// gets its clicks swallowed by the OS as "drag the whole app window"
+// instead of reaching the widget's own drag/minimize/maximize — it looks
+// broken because the click never arrives at all. Every place that sets a
+// widget's top position (drag, restore, resize-clamp, maximize) must keep
+// it at or below this line.
+const TITLEBAR_H=30;
 const wCfg={
-  'p-comm' :{aspect:298/400,minW:200,maxW:500,minH:270,maxH:600},
-  'p-audio':{aspect:265/295,minW:190,maxW:400,minH:210,maxH:440},
-  'p-sched':{aspect:298/235,minW:200,maxW:460,minH:158,maxH:360},
-  'p-sys'  :{aspect:265/235,minW:200,maxW:440,minH:178,maxH:380},
-  'p-intel':{aspect:280/262,minW:200,maxW:460,minH:188,maxH:420},
-  'p-mem'  :{aspect:280/200,minW:190,maxW:440,minH:136,maxH:320},
-  'p-msg'  :{aspect:262/284,minW:190,maxW:420,minH:206,maxH:460},
-  'p-wx'   :{aspect:262/200,minW:190,maxW:420,minH:144,maxH:320},
-  'p-rel'  :{aspect:300/300,minW:200,maxW:500,minH:200,maxH:500},
-  'p-feed' :{aspect:300/240,minW:200,maxW:480,minH:160,maxH:400},
-  'p-hist'  :{aspect:240/260,minW:180,maxW:420,minH:180,maxH:460},
-  'p-skills':{aspect:280/360,minW:220,maxW:480,minH:200,maxH:540},
-  'p-apimon':{aspect:300/480,minW:240,maxW:500,minH:300,maxH:600},
-  'p-browser':{aspect:520/440,minW:360,maxW:900,minH:320,maxH:760},
-  'p-dashboard':{aspect:300/480,minW:260,maxW:520,minH:320,maxH:640},
+  'p-comm' :{aspect:298/400,minW:200,maxW:2400,minH:270,maxH:1400},
+  'p-audio':{aspect:265/295,minW:190,maxW:2400,minH:210,maxH:1400},
+  'p-sched':{aspect:298/235,minW:200,maxW:2400,minH:158,maxH:1400},
+  'p-sys'  :{aspect:265/235,minW:200,maxW:2400,minH:178,maxH:1400},
+  'p-intel':{aspect:280/262,minW:200,maxW:2400,minH:188,maxH:1400},
+  'p-mem'  :{aspect:280/200,minW:190,maxW:2400,minH:136,maxH:1400},
+  'p-msg'  :{aspect:262/284,minW:190,maxW:2400,minH:206,maxH:1400},
+  'p-wx'   :{aspect:262/200,minW:190,maxW:2400,minH:144,maxH:1400},
+  'p-rel'  :{aspect:300/300,minW:200,maxW:2400,minH:200,maxH:1400},
+  'p-feed' :{aspect:300/240,minW:200,maxW:2400,minH:160,maxH:1400},
+  'p-hist'  :{aspect:240/260,minW:180,maxW:2400,minH:180,maxH:1400},
+  'p-skills':{aspect:280/360,minW:220,maxW:2400,minH:200,maxH:1400},
+  'p-apimon':{aspect:300/480,minW:240,maxW:2400,minH:300,maxH:1400},
+  'p-browser':{aspect:520/440,minW:360,maxW:2400,minH:320,maxH:1400},
+  'p-dashboard':{aspect:300/480,minW:260,maxW:2400,minH:320,maxH:1400},
 };
 
 const sgEl=document.getElementById('snap-grid');
@@ -6642,12 +6805,29 @@ const dragHandlers={};
 
 function snapV(v){ return Math.round(v/SNAP)*SNAP; }
 
+// Keep a widget's on-screen rect inside the current viewport. Used during
+// active drag (already worked), and ALSO on restore-from-localStorage and
+// window resize — those two never re-validated a saved/stale position
+// against the CURRENT viewport, which is how a widget ended up sitting
+// outside iZACH's window (e.g. positioned on a larger window, then the app
+// window shrunk, or a saved position from a previous screen size).
+function clampWidgetToViewport(el){
+  const w = el.offsetWidth, h = el.offsetHeight;
+  const curLeft = parseFloat(el.style.left) || 0;
+  const curTop  = parseFloat(el.style.top)  || 0;
+  const nx = Math.max(0, Math.min(innerWidth - w, curLeft));
+  const ny = Math.max(TITLEBAR_H, Math.min(innerHeight - h, curTop));
+  if(nx !== curLeft) el.style.left = nx + 'px';
+  if(ny !== curTop)  el.style.top  = ny + 'px';
+}
+
 function initWidget(id){
   const el=document.getElementById(id);
-  const cfg=wCfg[id]||{aspect:1,minW:180,maxW:500,minH:150,maxH:500};
+  const cfg=wCfg[id]||{aspect:1,minW:180,maxW:2400,minH:150,maxH:1400};
   const header=el.querySelector('.ph');
   const rh=el.querySelector('.rh');
   const minBtn=el.querySelector('.ph-min');
+  const maxBtn=el.querySelector('.ph-max');
 
   // Minimize toggle
   const HEADER_H=32;
@@ -6667,6 +6847,38 @@ function initWidget(id){
     });
   }
 
+  // Maximize/restore toggle — fills the viewport (minus a small margin),
+  // bypassing wCfg's normal drag-resize min/max caps entirely since this
+  // sets dimensions directly rather than going through the resize-drag
+  // mousemove handler below (that's the actual bug: panels were capped at
+  // a fixed maxW/maxH and had no way to fill a maximized app window).
+  if(maxBtn){
+    maxBtn.addEventListener('click',e=>{
+      e.stopPropagation();
+      if(el.classList.contains('minimized')){
+        el.classList.remove('minimized');
+        if(minBtn) minBtn.textContent='—';
+      }
+      if(el.classList.contains('maximized')){
+        el.classList.remove('maximized');
+        const g=el._prevMax;
+        if(g){ el.style.left=g.left; el.style.top=g.top; el.style.width=g.w; el.style.height=g.h; }
+        maxBtn.textContent='□';
+      } else {
+        el._prevMax={left:el.style.left||'', top:el.style.top||'', w:el.style.width||'', h:el.style.height||''};
+        el.classList.add('maximized');
+        const margin=20;
+        const top=Math.max(margin, TITLEBAR_H);
+        el.style.left=margin+'px'; el.style.top=top+'px'; el.style.right='auto'; el.style.bottom='auto';
+        el.style.width=(innerWidth-margin*2)+'px';
+        el.style.height=(innerHeight-top-margin)+'px';
+        el.style.zIndex=++zTop;
+        maxBtn.textContent='❐';
+      }
+      _saveWidgetGeom(id, el);
+    });
+  }
+
   // Drag
   let dragging=false,ox=0,oy=0;
   function _startDrag(cx,cy){
@@ -6677,14 +6889,21 @@ function initWidget(id){
   }
   dragHandlers[id]=_startDrag;
   header.addEventListener('mousedown',e=>{
-    if(e.button!==0||e.target===minBtn)return;
+    // Exclude every header button, not just minBtn — maxBtn (and the ×
+    // close button appended later below) were missing here, so clicking
+    // them ALSO started a drag. Any mouse jitter during that click shifts
+    // the widget mid-press, the mouseup lands off-target, no click event
+    // synthesizes on the button, and its own toggle logic never runs —
+    // while the drag's side effects (z-index bump, position snap) still
+    // apply. That's what made buttons feel broken after maximizing.
+    if(e.button!==0||e.target===minBtn||e.target===maxBtn||e.target.classList.contains('ph-close'))return;
     _startDrag(e.clientX,e.clientY); e.preventDefault();
   });
   document.addEventListener('mousemove',e=>{
     if(!dragging)return;
     let nx=snapV(e.clientX-ox), ny=snapV(e.clientY-oy);
     nx=Math.max(0,Math.min(innerWidth-el.offsetWidth,nx));
-    ny=Math.max(0,Math.min(innerHeight-el.offsetHeight,ny));
+    ny=Math.max(TITLEBAR_H,Math.min(innerHeight-el.offsetHeight,ny));
     el.style.left=nx+'px'; el.style.top=ny+'px';
   });
   document.addEventListener('mouseup',()=>{ if(dragging){dragging=false;el.classList.remove('dragging');sgEl.classList.remove('show');} });
@@ -6751,9 +6970,22 @@ function _restoreWidgets(){
         const bId=wpMap[id]; if(bId){const b=document.getElementById(bId);if(b)b.classList.add('on');}
         const dk=dkMap[id];  if(dk){ const b=document.getElementById(dk); if(b)b.classList.add('on');}
       }
+      if(g) clampWidgetToViewport(el);
     }
   }catch(e){console.warn('[iZACH] Widget restore error:',e);}
 }
+
+// Re-clamp every open widget whenever the app window itself is resized —
+// a position that was valid at the old window size can end up outside the
+// new, smaller one otherwise.
+window.addEventListener('resize', function(){
+  allWgts.forEach(function(id){
+    const el=document.getElementById(id);
+    if(el && el.classList.contains('show') && el.style.left && el.style.top){
+      clampWidgetToViewport(el);
+    }
+  });
+});
 
 // After every drag/resize mouseup, persist open widget geometries
 document.addEventListener('mouseup',function(){
@@ -7366,6 +7598,15 @@ function handleWS(d){
       const dn=document.getElementById('phone-dev-name');
       if(dn) dn.textContent=d.device_name.toUpperCase();
     }
+    // Device Connection tab — Mobile Phone section (Settings page)
+    const dcDot=document.getElementById('dc-phone-status-dot');
+    const dcLbl=document.getElementById('dc-phone-status-lbl');
+    const dcNameRow=document.getElementById('dc-phone-name-row');
+    const dcName=document.getElementById('dc-phone-dev-name');
+    if(dcDot) dcDot.classList.toggle('on',on);
+    if(dcLbl) dcLbl.textContent=on?'CONNECTED':'DISCONNECTED';
+    if(dcNameRow) dcNameRow.style.display=(on&&d.device_name)?'block':'none';
+    if(dcName&&d.device_name) dcName.textContent=d.device_name.toUpperCase();
     return;
   }
   // Agent activation broadcast
@@ -7803,28 +8044,30 @@ async function fitRefresh() {
   } catch(e) { console.warn('[FIT] refresh:', e); }
 }
 
+let _fitPollTimer=null, _fitPollTries=0;
 async function fitConnectStart() {
   try {
     const r = await fetch(`${API}/fitness/auth/start`);
     const d = await r.json();
     if (d.error) { alert('Fitness: ' + d.error); return; }
-    window.open(d.url, '_blank');
-    document.getElementById('fit-code-row').style.display = 'block';
-  } catch(e) { alert('Cannot reach backend'); }
-}
-
-async function fitConnectComplete() {
-  const code = (document.getElementById('fit-code-input').value || '').trim();
-  if (!code) return;
-  try {
-    const r = await fetch(`${API}/fitness/auth/complete`, {
-      method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({code}),
-    });
-    const d = await r.json();
-    if (d.error) { alert('Auth error: ' + d.error); return; }
-    document.getElementById('fit-code-row').style.display = 'none';
-    fitRefresh();
+    // fitness_engine.start_auth_flow() now runs the whole OAuth exchange
+    // itself (opens the browser, listens on a local port, no code to
+    // paste back) — same fix pattern as Calendar/Spotify's connect flow.
+    // The old code-paste row (fit-code-row/fit-code-input) is unused now.
+    const row = document.getElementById('fit-code-row'); if (row) row.style.display = 'none';
+    if (_fitPollTimer) clearInterval(_fitPollTimer);
+    _fitPollTries = 0;
+    _fitPollTimer = setInterval(async () => {
+      _fitPollTries++;
+      try {
+        const s = await fetch(`${API}/fitness/status`).then(r => r.json());
+        const connected = s.status === 'connected';
+        if (connected || _fitPollTries >= 40) {
+          clearInterval(_fitPollTimer); _fitPollTimer = null;
+          if (connected) fitRefresh();
+        }
+      } catch (e) {}
+    }, 3000);
   } catch(e) { alert('Cannot reach backend'); }
 }
 
@@ -8355,37 +8598,31 @@ function shToggleNest() {
   if (arrow) arrow.textContent = open ? '▼' : '▶';
 }
 
+let _shPollTimer=null, _shPollTries=0;
 async function shAuthStart() {
   try {
     const r = await fetch(`${API}/smarthome/auth/start`);
     const d = await r.json();
     if (d.error) { _shMsg(d.error, false); return; }
-    const row  = document.getElementById('sh-auth-code-row');
-    const lbl  = document.getElementById('sh-auth-url-lbl');
-    const link = document.getElementById('sh-auth-url');
-    if (row)  row.style.display = 'block';
-    if (lbl)  lbl.textContent  = d.url;
-    if (link) link.href = d.url;
-    _shMsg('Open URL in browser → paste code', true);
-  } catch(e) { _shMsg('Backend error', false); }
-}
-
-async function shAuthComplete() {
-  const inp  = document.getElementById('sh-auth-code-inp');
-  const code = (inp?.value || '').trim();
-  if (!code) { _shMsg('Paste auth code first', false); return; }
-  try {
-    const r = await fetch(`${API}/smarthome/auth/complete`, {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({code}),
-    });
-    const d = await r.json();
-    if (d.success) {
-      _shMsg('Nest connected!');
-      document.getElementById('sh-auth-code-row').style.display = 'none';
-      if (inp) inp.value = '';
-      shRefresh(true);
-    } else { _shMsg(d.error || 'Auth failed', false); }
+    // smart_home_engine.start_auth_flow() now runs the whole OAuth
+    // exchange itself (opens the browser, listens on a local port) — same
+    // fix as Fitness/Calendar/Spotify. The old code-paste row
+    // (sh-auth-code-row/sh-auth-code-inp) is unused now.
+    const row = document.getElementById('sh-auth-code-row'); if (row) row.style.display = 'none';
+    _shMsg('Open the browser window to finish connecting.', true);
+    if (_shPollTimer) clearInterval(_shPollTimer);
+    _shPollTries = 0;
+    _shPollTimer = setInterval(async () => {
+      _shPollTries++;
+      try {
+        const s = await fetch(`${API}/smarthome/status`).then(r => r.json());
+        const connected = !!(s.sdm && s.sdm.connected);
+        if (connected || _shPollTries >= 40) {
+          clearInterval(_shPollTimer); _shPollTimer = null;
+          if (connected) { _shMsg('Nest connected!'); shRefresh(true); }
+        }
+      } catch (e) {}
+    }, 3000);
   } catch(e) { _shMsg('Backend error', false); }
 }
 
@@ -9303,6 +9540,38 @@ async function pollStatus(){
 }
 setInterval(pollStatus,5000); pollStatus();
 
+// ── Dual-instance peer banner — GET /peer/local every 15s ───
+// Shows "iZACH already running on <device>" with the peer's MAC address
+// whenever this machine is a Secondary Connector. Independent of dnd-bar
+// (peeks at its current visibility to stack rather than overlap, without
+// touching applyDNDState's own logic).
+function applyPeerBanner(role, peer){
+  const bar    = document.getElementById('peer-bar');
+  const dev    = document.getElementById('peer-bar-device');
+  const mac    = document.getElementById('peer-bar-mac');
+  const screens = document.getElementById('screens');
+  const dndBar = document.getElementById('dnd-bar');
+  const dndOn  = !!(dndBar && dndBar.style.display !== 'none');
+
+  if(role === 'secondary' && peer){
+    if(bar){ bar.style.display = 'block'; bar.style.top = dndOn ? '26px' : '0'; }
+    if(dev) dev.textContent = `${(peer.platform||'UNKNOWN').toUpperCase()} (${peer.hostname||'unknown'})`;
+    if(mac) mac.textContent = (peer.mac_address||'unknown').toUpperCase();
+    if(screens) screens.style.marginTop = dndOn ? '52px' : '26px';
+  } else {
+    if(bar) bar.style.display = 'none';
+    if(screens) screens.style.marginTop = dndOn ? '26px' : '';
+  }
+}
+async function pollPeerStatus(){
+  try{
+    const r=await fetch(API+'/peer/local'); const d=await r.json();
+    if(!d.ok || !d.configured){ applyPeerBanner('primary', null); return; }
+    applyPeerBanner(d.role, d.peer);
+  }catch(e){}
+}
+setInterval(pollPeerStatus,15000); pollPeerStatus();
+
 // ── Spotify poll — GET /spotify every 4s ────────────
 async function pollSpotify(){
   try{
@@ -9507,9 +9776,68 @@ document.getElementById('p-sched').addEventListener('transitionend',function(){
 function winCtrl(action){
   if(window.electronAPI && window.electronAPI[action]) window.electronAPI[action]();
 }
+// On macOS the BrowserWindow now uses titleBarStyle:'hidden' (real native
+// traffic lights, top-left) instead of frame:false — so this custom —/□/✕
+// bar would be a redundant, wrong-styled duplicate. Windows still uses
+// frame:false and needs this bar as its only window controls.
+if(window.electronAPI && window.electronAPI.platform === 'darwin'){
+  const tbCtrls = document.getElementById('titlebar-ctrls');
+  if(tbCtrls) tbCtrls.style.display = 'none';
+}
+
+// macOS has no Forge UI and no Background Mode (removed — may come back
+// later as its own project) — hide every control that offers them instead
+// of leaving dead options a Mac user could pick and have nothing happen.
+if(window.electronAPI && window.electronAPI.platform === 'darwin'){
+  document.querySelectorAll('input[name="ui-mode"][value="classic"], input[name="ui-mode"][value="background"]')
+    .forEach(el => { const lbl = el.closest('label.cfg-opt'); if(lbl) lbl.style.display = 'none'; });
+  const askBoot = document.getElementById('cfg-ask-boot');
+  if(askBoot){ const lbl = askBoot.closest('label.cfg-opt'); if(lbl) lbl.style.display = 'none'; }
+  const macNote = document.getElementById('boot-ui-style-mac-note');
+  if(macNote) macNote.style.display = 'block';
+  const powerSec = document.getElementById('boot-power-sec');
+  if(powerSec) powerSec.style.display = 'none';
+  const powerDiv = document.getElementById('boot-power-divider');
+  if(powerDiv) powerDiv.style.display = 'none';
+  const toastBgRow = document.getElementById('boot-toast-bg-row');
+  if(toastBgRow) toastBgRow.style.display = 'none';
+  // The main toolbar's own BACKGROUND MODE button was missed by the sweep
+  // above (it's not part of the Settings panel this block otherwise covers)
+  // — left live, it silently failed the /background-mode POST on Mac (400,
+  // "not available on macOS") but its close-the-window timer fired 400ms
+  // later regardless, closing the window and triggering window-all-closed's
+  // normal (non-background) cleanup — killing backend/WhatsApp/n8n/ngrok
+  // together with no visible error, which is exactly what looked like a
+  // random crash.
+  const tbBg = document.getElementById('tb-bg');
+  if(tbBg) tbBg.style.display = 'none';
+}
+
+// The autofill verification prompt (webauthn-gate) is a standard WebAuthn
+// ceremony under the hood — Chromium resolves it to the OS's own platform
+// authenticator automatically (Touch ID on macOS, Windows Hello on
+// Windows), no platform-specific code needed there. Only the UI copy was
+// hardcoded to "Windows Hello" everywhere; this makes it match the OS.
+function _authMethodName(){
+  return (window.electronAPI && window.electronAPI.platform === 'darwin') ? 'Touch ID' : 'Windows Hello';
+}
+function _applyAuthMethodName(){
+  const name = _authMethodName();
+  ['wh-name-1','wh-name-2','wh-name-3'].forEach(id=>{
+    const el = document.getElementById(id);
+    if(el) el.textContent = id==='wh-name-2' ? name : name.toUpperCase();
+  });
+}
+_applyAuthMethodName();
 
 // ── Config toggle state ───────────────────────────────
 const _cfgBools={};
+// True only once the dual-instance fields have actually been populated from
+// a loaded settings payload — saveConfig() must not send a fabricated/empty
+// dual_instance block built from unpopulated DOM fields (e.g. if this ran
+// before settings finished loading), since that would silently clobber the
+// real peer/enabled config on every unrelated save (nickname, theme, etc).
+let _dualInstanceLoaded=false;
 function cfgToggle(togId,key){
   _cfgBools[key]=!_cfgBools[key];
   const el=document.getElementById(togId);
@@ -9612,6 +9940,13 @@ async function loadConfig(){
     // UI mode
     document.querySelectorAll('input[name="ui-mode"]').forEach(el=>{ el.checked=(el.value===(s.ui||'scifi')); });
     const askBoot=document.getElementById('cfg-ask-boot'); if(askBoot) askBoot.checked=!!s.ask_ui_on_boot;
+    // Boot terminals — default every toggle to true (on) when the key is
+    // absent entirely, matching a fresh install / pre-upgrade settings file.
+    const bootTerm=s.boot_terminals||{};
+    const bootTermMap={'boot-term-interface':'boot_interface','boot-term-backend':'backend','boot-term-ngrok':'ngrok','boot-term-whatsapp':'whatsapp_bridge','boot-term-n8n':'n8n'};
+    Object.entries(bootTermMap).forEach(([elId,key])=>{
+      const el=document.getElementById(elId); if(el) el.checked=(bootTerm[key]!=null ? !!bootTerm[key] : true);
+    });
     // Voice & audio
     const voice=document.getElementById('cfg-voice'); if(voice && s.voice) voice.value=s.voice;
     const speed=document.getElementById('cfg-speed'); if(speed && s.tts_speed!=null) speed.value=s.tts_speed;
@@ -9622,6 +9957,17 @@ async function loadConfig(){
     const city=document.getElementById('cfg-city'); if(city && s.weather_city) city.value=s.weather_city;
     const nickname=document.getElementById('cfg-nickname'); if(nickname && s.nickname) nickname.value=s.nickname;
     if(s.screensaver_timeout!=null){ _ssMinutes=Number(s.screensaver_timeout); const ss=document.getElementById('cfg-ss'); if(ss) ss.value=_ssMinutes; resetActivity(); }
+    // Dual-instance (Windows+macOS) coordination
+    const di=s.dual_instance||{};
+    _cfgBools['dual_enabled']=!!di.enabled;
+    const togDual=document.getElementById('tog-dual-enabled'); if(togDual) togDual.classList.toggle('on',!!di.enabled);
+    _cfgBools['auto_promote_enabled']=!!di.auto_promote_enabled;
+    const togAP=document.getElementById('tog-auto-promote'); if(togAP) togAP.classList.toggle('on',!!di.auto_promote_enabled);
+    const peerHost=document.getElementById('cfg-peer-host'); if(peerHost && di.peer_host) peerHost.value=di.peer_host;
+    const peerPort=document.getElementById('cfg-peer-port'); if(peerPort) peerPort.value=di.peer_port||5050;
+    const primaryPin=document.getElementById('cfg-primary-pin'); if(primaryPin && di.primary_pin) primaryPin.value=di.primary_pin;
+    const apTimeout=document.getElementById('cfg-auto-promote-timeout'); if(apTimeout) apTimeout.value=di.auto_promote_timeout_minutes||5;
+    _dualInstanceLoaded=true;
     // Toggles
     const togMap={
       'wake_word_enabled':['tog-wake', !!(s.wake_word_enabled)],
@@ -9817,6 +10163,7 @@ const _KEY_FIELD_MAP = {
   OPENROUTER_API_KEY:  'kf-or',
   EDAMAM_APP_ID:       'kf-ed-id',
   EDAMAM_APP_KEY:      'kf-ed-key',
+  IZACH_PEER_TOKEN:    'kf-peer-token',
 };
 async function loadKeysTab(){
   try{
@@ -9853,11 +10200,11 @@ async function saveAllKeys(){
   setTimeout(()=>{ if(msg) msg.textContent=''; },5000);
 }
 
-async function saveConfig(){
-  const msg=document.getElementById('cfg-msg');
+async function saveConfig(msgId){
+  const msg=document.getElementById(msgId||'cfg-msg');
   const payload={};
-  const sel=document.querySelector('input[name="ui-mode"]:checked'); if(sel) payload.ui=sel.value;
-  const askBoot=document.getElementById('cfg-ask-boot'); if(askBoot) payload.ask_ui_on_boot=askBoot.checked;
+  // UI style + boot terminals live in the BOOT SETTINGS tab's own save
+  // (saveBootConfig) now — not duplicated here.
   const voice=document.getElementById('cfg-voice'); if(voice) payload.voice=voice.value;
   const speed=document.getElementById('cfg-speed'); if(speed) payload.tts_speed=Number(speed.value);
   const style=document.getElementById('cfg-style'); if(style) payload.response_style=style.value;
@@ -9884,6 +10231,24 @@ async function saveConfig(){
   for(const [id,key] of Object.entries(briefItems)){
     const el=document.getElementById(id); if(el) payload[key]=el.checked;
   }
+  // Dual-instance (Windows+macOS) coordination — only send this block once
+  // it's been genuinely populated from a loaded settings payload (see
+  // _dualInstanceLoaded), so an unrelated save (nickname, theme, etc.) can
+  // never clobber it with empty/default DOM values.
+  if(_dualInstanceLoaded){
+    const peerHostEl=document.getElementById('cfg-peer-host');
+    const peerPortEl=document.getElementById('cfg-peer-port');
+    const primaryPinEl=document.getElementById('cfg-primary-pin');
+    const apTimeoutEl=document.getElementById('cfg-auto-promote-timeout');
+    payload.dual_instance={
+      enabled: !!_cfgBools['dual_enabled'],
+      peer_host: peerHostEl ? peerHostEl.value.trim() : '',
+      peer_port: peerPortEl && peerPortEl.value ? Number(peerPortEl.value) : 5050,
+      primary_pin: primaryPinEl ? primaryPinEl.value : 'auto',
+      auto_promote_enabled: !!_cfgBools['auto_promote_enabled'],
+      auto_promote_timeout_minutes: apTimeoutEl && apTimeoutEl.value ? Number(apTimeoutEl.value) : 5,
+    };
+  }
   try{
     const r=await fetch(API+'/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
     const d=await r.json();
@@ -9893,6 +10258,34 @@ async function saveConfig(){
     } else { msg.style.color='rgba(255,80,80,0.7)'; msg.textContent='Error: '+(d.error||'save failed'); }
   }catch(e){ msg.style.color='rgba(255,80,80,0.7)'; msg.textContent='Backend offline.'; }
   setTimeout(()=>{ if(msg) msg.textContent=''; },5000);
+}
+
+async function checkPeerConnection(){
+  const dot=document.getElementById('dual-status-dot');
+  const lbl=document.getElementById('dual-status-lbl');
+  const msg=document.getElementById('dual-check-msg');
+  if(msg) msg.textContent='Checking...';
+  try{
+    const r=await fetch(API+'/peer/check');
+    const d=await r.json();
+    if(!d.ok){ if(msg) msg.textContent='Error checking connection.'; return; }
+    if(!d.configured){
+      if(lbl) lbl.textContent='NOT CONFIGURED';
+      if(dot) dot.style.background='rgba(0,148,255,0.2)';
+      if(msg) msg.textContent='Enable it and set a peer host above, then save first.';
+    } else if(d.reachable && d.peer){
+      if(lbl) lbl.textContent='PEER REACHABLE';
+      if(dot) dot.style.background='rgba(29,185,84,0.9)';
+      if(msg) msg.textContent=`${d.peer.platform} (${d.peer.hostname}) — role: ${d.peer.role}`;
+    } else {
+      if(lbl) lbl.textContent='PEER UNREACHABLE';
+      if(dot) dot.style.background='rgba(255,61,61,0.9)';
+      if(msg) msg.textContent="Could not reach the other machine — check host/port and that it's running.";
+    }
+  }catch(e){
+    if(msg) msg.textContent='Connection error.';
+  }
+  setTimeout(()=>{ if(msg) msg.textContent=''; },8000);
 }
 
 // ════════════════════════════════════════════════════
@@ -9910,17 +10303,23 @@ function switchSettingsTab(tab){
   document.querySelectorAll('.sp-panel').forEach(p=>p.classList.remove('active'));
   const btn=document.querySelector(`.sp-tab[data-tab="${tab}"]`);
   const panel=document.getElementById('sptab-'+tab);
-  if(btn) btn.classList.add('active');
+  if(btn) { btn.classList.add('active'); btn.scrollIntoView({inline:'nearest', block:'nearest'}); }
   if(panel) panel.classList.add('active');
   if(tab==='memory') loadMemoryTab();
-  else if(tab==='settings'){ loadConfig(); }
+  else if(tab==='personalisation'){ loadConfig(); loadAliases(); }
+  else if(tab==='appearance'){ loadConfig(); }
+  else if(tab==='deviceconn'){ loadConfig(); loadPhoneDeviceStatus(); }
+  else if(tab==='notifannounce'){ loadConfig(); loadBgConfig(); loadNotificationFeed(); }
+  else if(tab==='connservices'){ loadConfig(); calendarCheckAuthStatus(); spotifyCheckAuthStatus(); }
+  else if(tab==='others'){ loadConfig(); }
+  else if(tab==='boot'){ loadConfig(); }
   else if(tab==='keys') loadKeysTab();
   else if(tab==='contacts') loadContactsTab();
   else if(tab==='security') loadSecurityTab();
   else if(tab==='commands') buildCommandsAccordion();
   else if(tab==='links') clLoad();
   else if(tab==='browser') { bhLoad(); bpLoad(); whLoadStatus(); }
-  else if(tab==='bgmode') { loadBgConfig(); loadAliases(); }
+  else if(tab==='bgmode') { loadBgConfig(); }
 }
 
 // ════════════════════════════════════════════════════════════
@@ -9996,8 +10395,6 @@ async function loadBgConfig(){
   try{
     const r=await fetch(API+'/settings'); const d=await r.json(); if(!d.ok) return;
     const s=d.settings||{};
-    // UI mode radios (shared with settings tab — same name, different tab)
-    const askBg=document.getElementById('cfg-ask-boot-bg'); if(askBg) askBg.checked=!!s.ask_ui_on_boot;
     const hkBarBg=document.getElementById('cfg-hotkey-bar-bg'); if(hkBarBg) hkBarBg.value=s.hotkey_bar||'ctrl+shift+space';
     const hkMicBg=document.getElementById('cfg-hotkey-mic-bg'); if(hkMicBg) hkMicBg.value=s.hotkey_mic||'ctrl+shift+m';
     // Toggles
@@ -10018,11 +10415,9 @@ async function loadBgConfig(){
   }catch(e){}
 }
 
-async function saveBgConfig(){
-  const msg=document.getElementById('bgcfg-msg');
+async function saveBgConfig(msgId){
+  const msg=document.getElementById(msgId||'bgcfg-msg');
   const payload={};
-  const sel=document.querySelector('input[name="ui-mode"]:checked'); if(sel) payload.ui=sel.value;
-  const askBg=document.getElementById('cfg-ask-boot-bg'); if(askBg) payload.ask_ui_on_boot=askBg.checked;
   const hkBarBg=document.getElementById('cfg-hotkey-bar-bg'); if(hkBarBg&&hkBarBg.value.trim()) payload.hotkey_bar=hkBarBg.value.trim().toLowerCase();
   const hkMicBg=document.getElementById('cfg-hotkey-mic-bg'); if(hkMicBg&&hkMicBg.value.trim()) payload.hotkey_mic=hkMicBg.value.trim().toLowerCase();
   const fs=document.getElementById('cfg-font-size'); if(fs) payload.font_size=Number(fs.value);
@@ -10032,6 +10427,157 @@ async function saveBgConfig(){
     const r=await fetch(API+'/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
     const d=await r.json();
     if(d.ok){ msg.style.color='rgba(0,148,255,0.7)'; msg.textContent='BG mode settings saved.'; }
+    else { msg.style.color='rgba(255,80,80,0.7)'; msg.textContent='Error: '+(d.error||'save failed'); }
+  }catch(e){ msg.style.color='rgba(255,80,80,0.7)'; msg.textContent='Backend offline.'; }
+  setTimeout(()=>{ if(msg) msg.textContent=''; },5000);
+}
+
+// ── Device Connection tab — Mobile Phone status + remove ──────────────
+async function loadPhoneDeviceStatus(){
+  try{
+    const r=await fetch(API+'/phone/status'); const d=await r.json();
+    handleWS({type:'phone_status', connected:!!d.connected, device_name:d.device_name||''});
+  }catch(e){}
+}
+
+async function removePhoneDevice(){
+  const msg=document.getElementById('dc-phone-msg');
+  if(!confirm('Remove the connected phone? It will need to re-scan the QR code to reconnect.')) return;
+  try{
+    const r=await fetch(API+'/phone/unpair', {method:'POST'});
+    const d=await r.json();
+    if(d.ok){
+      if(msg){ msg.style.color='rgba(0,148,255,0.7)'; msg.textContent='Device removed — re-scan QR to reconnect.'; }
+      handleWS({type:'phone_status', connected:false, device_name:''});
+      loadPhoneQR();
+    } else if(msg){ msg.style.color='rgba(255,80,80,0.7)'; msg.textContent='Error: '+(d.error||'unpair failed'); }
+  }catch(e){ if(msg){ msg.style.color='rgba(255,80,80,0.7)'; msg.textContent='Backend offline.'; } }
+  setTimeout(()=>{ if(msg) msg.textContent=''; },6000);
+}
+
+// ── Connected Services tab — Google Calendar connect/disconnect ───────
+async function calendarCheckAuthStatus(){
+  const dot=document.getElementById('cal-auth-status-dot');
+  const lbl=document.getElementById('cal-auth-status-lbl');
+  const connRow=document.getElementById('cal-auth-connect-row');
+  const disRow=document.getElementById('cal-auth-disconnect-row');
+  try{
+    const r=await fetch(API+'/calendar/auth/status'); const d=await r.json();
+    const on=!!d.connected;
+    if(dot){ dot.style.background=on?'#1db954':'rgba(0,148,255,0.2)'; dot.style.boxShadow=on?'0 0 6px #1db954':'none'; }
+    if(lbl) lbl.textContent = on ? `CONNECTED${d.user?' — '+d.user:''}` : 'NOT CONNECTED';
+    if(connRow) connRow.style.display = on ? 'none' : 'block';
+    if(disRow) disRow.style.display = on ? 'block' : 'none';
+    return d;
+  }catch(e){ return null; }
+}
+let _calSvcPollTimer=null, _calSvcPollTries=0;
+async function calendarConnect(){
+  try{
+    const r=await fetch(API+'/calendar/auth/connect', {method:'POST'});
+    const d=await r.json();
+    if(d.error){ showToast(d.error, 'error', 'CALENDAR'); return; }
+    showToast('Follow the browser window to finish connecting.', 'info', 'CALENDAR');
+    if(_calSvcPollTimer) clearInterval(_calSvcPollTimer);
+    _calSvcPollTries=0;
+    // OAuth in the browser can take a while (choosing an account, consent
+    // screen) — a single delayed check fires before the user's done and
+    // never looks again, leaving the UI stuck on "Not Connected" even
+    // after they finish. Poll like email's working reconnect flow instead.
+    // (Named _calSvc* — not _cal* — since the Calendar WIDGET above
+    // already declares its own _calPollTimer; reusing that name here was
+    // a `let` redeclaration, a hard SyntaxError that silently broke the
+    // entire inline script and left the whole UI blank on load.)
+    _calSvcPollTimer=setInterval(async ()=>{
+      _calSvcPollTries++;
+      const s=await calendarCheckAuthStatus();
+      if((s&&s.connected) || _calSvcPollTries>=40){ clearInterval(_calSvcPollTimer); _calSvcPollTimer=null; }
+    }, 3000);
+  }catch(e){ showToast(`Cannot reach backend: ${e.message}`, 'error', 'CALENDAR'); }
+}
+async function calendarDisconnect(){
+  try{
+    await fetch(API+'/calendar/auth/disconnect', {method:'POST'});
+    await calendarCheckAuthStatus();
+    showToast('Google Calendar disconnected.', 'info', 'CALENDAR');
+  }catch(e){ showToast(`Disconnect failed: ${e.message}`, 'error', 'CALENDAR'); }
+}
+
+// ── Connected Services tab — Spotify connect/disconnect ───────────────
+async function spotifyCheckAuthStatus(){
+  const dot=document.getElementById('sp-auth-status-dot');
+  const lbl=document.getElementById('sp-auth-status-lbl');
+  const connRow=document.getElementById('sp-auth-connect-row');
+  const disRow=document.getElementById('sp-auth-disconnect-row');
+  try{
+    const r=await fetch(API+'/spotify/auth/status'); const d=await r.json();
+    const on=!!d.connected;
+    if(dot){ dot.style.background=on?'#1db954':'rgba(0,148,255,0.2)'; dot.style.boxShadow=on?'0 0 6px #1db954':'none'; }
+    if(lbl) lbl.textContent = on ? `CONNECTED${d.user?' — '+d.user:''}` : 'NOT CONNECTED';
+    if(connRow) connRow.style.display = on ? 'none' : 'block';
+    if(disRow) disRow.style.display = on ? 'block' : 'none';
+    return d;
+  }catch(e){ return null; }
+}
+let _spSvcPollTimer=null, _spSvcPollTries=0;
+async function spotifyConnect(){
+  try{
+    const r=await fetch(API+'/spotify/auth/connect', {method:'POST'});
+    const d=await r.json();
+    if(d.ok===false){ showToast(d.error||'Could not start connect flow.', 'error', 'SPOTIFY'); return; }
+    showToast('Follow the browser window to finish connecting.', 'info', 'SPOTIFY');
+    if(_spSvcPollTimer) clearInterval(_spSvcPollTimer);
+    _spSvcPollTries=0;
+    // Same reasoning as calendarConnect() — OAuth in the browser takes
+    // longer than a single delayed check, poll repeatedly instead.
+    // Named _spSvc* for consistency with _calSvc* above, though this one
+    // didn't actually collide with anything.
+    _spSvcPollTimer=setInterval(async ()=>{
+      _spSvcPollTries++;
+      const s=await spotifyCheckAuthStatus();
+      if((s&&s.connected) || _spSvcPollTries>=40){ clearInterval(_spSvcPollTimer); _spSvcPollTimer=null; }
+    }, 3000);
+  }catch(e){ showToast(`Cannot reach backend: ${e.message}`, 'error', 'SPOTIFY'); }
+}
+async function spotifyDisconnect(){
+  try{
+    await fetch(API+'/spotify/auth/disconnect', {method:'POST'});
+    await spotifyCheckAuthStatus();
+    showToast('Spotify disconnected.', 'info', 'SPOTIFY');
+  }catch(e){ showToast(`Disconnect failed: ${e.message}`, 'error', 'SPOTIFY'); }
+}
+
+// ── Connected Services tab — WhatsApp bridge restart ───────────────────
+async function whatsappRestartBridge(){
+  const msg=document.getElementById('wa-msg');
+  if(msg){ msg.style.color='rgba(0,148,255,0.7)'; msg.textContent='Restarting bridge...'; }
+  try{
+    const r=await fetch(API+'/whatsapp/restart-bridge', {method:'POST'});
+    const d=await r.json();
+    if(msg){
+      msg.style.color = d.ok ? 'rgba(0,148,255,0.7)' : 'rgba(255,80,80,0.7)';
+      msg.textContent = d.ok ? 'WhatsApp bridge restarted.' : ('Error: '+(d.error||'restart failed'));
+    }
+  }catch(e){ if(msg){ msg.style.color='rgba(255,80,80,0.7)'; msg.textContent='Backend offline.'; } }
+  setTimeout(()=>{ if(msg) msg.textContent=''; },6000);
+}
+
+async function saveBootConfig(){
+  const msg=document.getElementById('bootcfg-msg');
+  const payload={};
+  const sel=document.querySelector('input[name="ui-mode"]:checked'); if(sel) payload.ui=sel.value;
+  const askBoot=document.getElementById('cfg-ask-boot'); if(askBoot) payload.ask_ui_on_boot=askBoot.checked;
+  payload.boot_terminals={
+    boot_interface: !!document.getElementById('boot-term-interface')?.checked,
+    backend:        !!document.getElementById('boot-term-backend')?.checked,
+    ngrok:          !!document.getElementById('boot-term-ngrok')?.checked,
+    whatsapp_bridge:!!document.getElementById('boot-term-whatsapp')?.checked,
+    n8n:            !!document.getElementById('boot-term-n8n')?.checked,
+  };
+  try{
+    const r=await fetch(API+'/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    const d=await r.json();
+    if(d.ok){ msg.style.color='rgba(0,148,255,0.7)'; msg.textContent='Boot settings saved — restart to apply.'; }
     else { msg.style.color='rgba(255,80,80,0.7)'; msg.textContent='Error: '+(d.error||'save failed'); }
   }catch(e){ msg.style.color='rgba(255,80,80,0.7)'; msg.textContent='Backend offline.'; }
   setTimeout(()=>{ if(msg) msg.textContent=''; },5000);
@@ -11459,7 +12005,24 @@ async function toggleDND(){
 // ── Switch to Background Mode — close window, keep backend + tray running ──
 async function goBackgroundMode(){
   try{ showToast('Switching to Background Mode…','info','BG'); }catch(e){}
-  try{ await fetch(API + '/background-mode', {method:'POST'}); }catch(e){}
+  // Only close the window if the backend actually confirmed the switch —
+  // fetch() doesn't throw on a non-2xx response (e.g. Mac's 400 "not
+  // available on macOS"), so a bare try/catch here previously let the
+  // window-close timer fire unconditionally regardless of whether Background
+  // Mode was really active. Since window-all-closed's "skip the pkill
+  // cascade" check depends on ui_mode genuinely being 'background' on the
+  // backend, closing on a failed request killed the whole stack (backend,
+  // WhatsApp, n8n, ngrok) with no visible error — looked like a random crash.
+  let ok = false;
+  try{
+    const r = await fetch(API + '/background-mode', {method:'POST'});
+    const d = await r.json().catch(()=>({}));
+    ok = r.ok && d.ok !== false;
+  }catch(e){}
+  if(!ok){
+    showToast('Background Mode unavailable — window not closed','error','BG');
+    return;
+  }
   // Backend now has ui=background + tray running; closing the window won't kill it.
   setTimeout(()=>{ if(window.electronAPI?.close) window.electronAPI.close(); }, 400);
 }
@@ -11903,6 +12466,15 @@ function showUrgentAlert(d){
   }
   document.body.appendChild(overlay);
   setTimeout(()=>{const el=document.getElementById('urgent-overlay');if(el)el.remove();},45000);
+}
+
+// "Classic" UI mode is historically labeled "(Forge UI)" for visual parity with
+// forge_ui.py, a separate Tkinter/WebView2 app that only exists on Windows — on
+// macOS that app can't run at all, so drop the misleading suffix there.
+if (window.electronAPI?.platform === 'darwin') {
+  document.querySelectorAll('.classic-ui-label').forEach(el => {
+    el.textContent = el.textContent.replace(' (Forge UI)', '');
+  });
 }
 
 </script>

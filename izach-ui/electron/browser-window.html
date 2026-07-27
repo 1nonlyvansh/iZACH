@@ -126,6 +126,14 @@ webview.bw-active { opacity:1; pointer-events:auto; z-index:1; }
 const API = 'http://localhost:5050';
 const HOME_URL = null; // null => build the branded home page
 
+// On macOS this window now uses titleBarStyle:'hidden' (real native traffic
+// lights) instead of frame:false — hide the redundant custom —/□/✕ bar.
+// Windows still uses frame:false and needs it as its only window controls.
+if(window.electronAPI && window.electronAPI.platform === 'darwin'){
+  const tbCtrls = document.getElementById('titlebar-ctrls');
+  if(tbCtrls) tbCtrls.style.display = 'none';
+}
+
 let tabs = [];
 let activeId = null;
 let tabSeq = 0;

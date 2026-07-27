@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@color/bg_deep">
+
+    <LinearLayout android:id="@+id/topBar"
+        android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:minHeight="56dp" android:background="@color/bg_panel"
+        android:orientation="horizontal" android:gravity="center_vertical"
+        android:paddingHorizontal="8dp">
+        <ImageButton android:id="@+id/btnBack"
+            android:layout_width="48dp" android:layout_height="48dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@drawable/ic_back" android:contentDescription="Back" />
+        <TextView android:layout_width="0dp" android:layout_height="wrap_content"
+            android:layout_weight="1" android:gravity="center"
+            android:text="COMMAND QUEUE" android:textColor="@color/cyan" android:textSize="14sp"
+            android:fontFamily="monospace" android:letterSpacing="0.2" android:textStyle="bold" />
+        <ImageButton android:id="@+id/btnAddQueued"
+            android:layout_width="48dp" android:layout_height="48dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@android:drawable/ic_input_add" android:contentDescription="Add command" />
+    </LinearLayout>
+
+    <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:padding="16dp"
+        android:text="Runs FCFS whenever the targeted PC is reachable — checked every ~20s, even with the app closed. Drag order with ▲▼."
+        android:textColor="@color/text_sec" android:textSize="11sp"
+        android:fontFamily="monospace" android:letterSpacing="0.02" />
+
+    <ScrollView android:layout_width="match_parent" android:layout_height="0dp"
+        android:layout_weight="1" android:padding="16dp">
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <TextView android:id="@+id/tvEmptyQueue"
+                android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:text="Queue is empty.\nTap + above to add a command for a specific PC."
+                android:textColor="@color/text_sec" android:textSize="12sp"
+                android:fontFamily="monospace" android:gravity="center"
+                android:layout_marginTop="32dp" android:visibility="gone" />
+
+            <LinearLayout android:id="@+id/queueContainer"
+                android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:orientation="vertical" />
+
+        </LinearLayout>
+    </ScrollView>
+</LinearLayout>

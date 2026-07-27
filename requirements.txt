@@ -13,7 +13,7 @@ cffi==2.0.0
 charset-normalizer==3.4.6
 click==8.3.1
 colorama==0.4.6
-comtypes==1.4.15
+comtypes==1.4.15; sys_platform == "win32"
 contourpy==1.3.3
 cryptography==46.0.5
 cycler==0.12.1
@@ -22,6 +22,9 @@ decorator==5.2.1
 distro==1.9.0
 dlib==20.0.1
 dlib-bin==20.0.1
+# face_recognition_models still imports pkg_resources (removed from setuptools 81+) —
+# pin below the removal so `import face_recognition` doesn't break on fresh installs.
+setuptools<81
 docopt==0.6.2
 edge-tts==7.2.7
 face-recognition==1.3.0
@@ -53,7 +56,10 @@ itsdangerous==2.2.0
 Jinja2==3.1.6
 kiwisolver==1.5.0
 MarkupSafe==3.0.3
-mediapipe==0.10.9
+# mediapipe: confirmed unused (no import anywhere in the codebase) and its protobuf<5
+# constraint conflicts with google-ai-generativelanguage/grpcio-status's protobuf>=5
+# requirement on macOS resolution — kept Windows-only where it was already working.
+mediapipe==0.10.9; sys_platform == "win32"
 MouseInfo==0.1.3
 multidict==6.7.1
 numpy==2.4.3
@@ -65,7 +71,7 @@ pipreqs==0.5.0
 platformdirs==4.9.4
 propcache==0.4.1
 proto-plus==1.27.1
-protobuf==7.34.1
+protobuf>=4.25.8,<7.0.0
 psutil==7.2.2
 pyasn1==0.6.3
 pyasn1_modules==0.4.2
@@ -75,13 +81,15 @@ pycparser==3.0
 pydantic==2.12.5
 pydantic_core==2.41.5
 pygame==2.6.1
-PyGetWindow==0.0.9
+PyGetWindow==0.0.9; sys_platform == "win32"
 Pygments==2.19.2
 PyMsgBox==2.0.1
+chromadb==1.5.9
+pymongo==4.10.1
 pynput==1.8.1
 pyparsing==3.3.2
 pyperclip==1.11.0
-pypiwin32==223
+pypiwin32==223; sys_platform == "win32"
 PyRect==0.2.0
 PyScreeze==1.0.1
 pytesseract==0.3.13
@@ -90,15 +98,16 @@ python-dotenv==1.2.2
 pyttsx3==2.99
 pytweening==1.2.0
 pytz==2026.1.post1
-pywin32==311
+pywin32==311; sys_platform == "win32"
 pyzmq==27.1.0
 qrcode>=8,<9
 RapidFuzz==3.14.3
 redis==7.3.0
 regex==2026.2.28
 requests==2.32.5
+resemblyzer==0.1.4
 playwright>=1.45,<2
-pycaw==20251023
+pycaw==20251023; sys_platform == "win32"
 screen_brightness_control==0.27.1
 screeninfo==0.8.1
 six==1.17.0
@@ -111,8 +120,9 @@ tabulate==0.10.0
 tenacity==9.1.4
 # pywebview is pinned below tkwebview2's expected API (newer pywebview
 # renamed EdgeChrome internals and broke tkwebview2's WebView2 wrapper).
-tkwebview2==3.5.0
-pywebview==4.4.1
+# Both are Forge UI's WebView2 browser only — Forge doesn't run on macOS.
+tkwebview2==3.5.0; sys_platform == "win32"
+pywebview==4.4.1; sys_platform == "win32"
 tornado==6.5.5
 tqdm==4.67.3
 traitlets==5.14.3
@@ -123,8 +133,10 @@ tzlocal==5.3.1
 uritemplate==4.2.0
 urllib3==2.6.3
 webencodings==0.5.1
+ddgs==9.14.4
+scrapling[fetchers]==0.4.11
 websockets==16.0
 Werkzeug==3.1.7
-WMI==1.5.1
+WMI==1.5.1; sys_platform == "win32"
 yarg==0.1.9
 yarl==1.23.0

@@ -226,19 +226,26 @@ def find_event_by_title_time(title_hint: str, date_str: str = None) -> dict | No
     ]
     if not candidates:
         return None
-    # return closest upcoming
+    # Return the closest UPCOMING match — `now` was computed but never
+    # actually used to filter, so a title match on a past event could win
+    # over the real next occurrence just by sorting first alphabetically
+    # by ISO timestamp (i.e. by being earlier, not by being soonest-future).
     now = datetime.now(tz=IST).isoformat()
     candidates.sort(key=lambda x: x.get("datetime_iso", ""))
-    return candidates[0]
+    upcoming = [c for c in candidates if c.get("datetime_iso", "") >= now]
+    return upcoming[0] if upcoming else candidates[-1]
 
 
-def get_today_events() -> list[dict]:
-    """Return today's Google Calendar events sorted by start time."""
+def get_today_events(date_str: str | None = None) -> list[dict]:
+    """Return the given date's Google Calendar events sorted by start time.
+    Defaults to today when date_str (YYYY-MM-DD) is omitted."""
     try:
         service = _get_service()
-        now = datetime.now(tz=IST)
-        day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-        day_end = now.replace(hour=23, minute=59, second=59, microsecond=0)
+        if date_str:
+            day_start = datetime.strptime(date_str, "%Y-%m-%d").replace(tzinfo=IST)
+        else:
+            day_start = datetime.now(tz=IST).replace(hour=0, minute=0, second=0, microsecond=0)
+        day_end = day_start.replace(hour=23, minute=59, second=59, microsecond=0)
 
         result = service.events().list(
             calendarId="primary",

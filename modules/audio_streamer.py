@@ -17,9 +17,12 @@ Android AudioTrack config:
 """
 
 import logging
+import re
 import subprocess
 import threading
 from typing import Generator
+
+from modules.platform_utils import IS_MAC
 
 logger = logging.getLogger(__name__)
 
@@ -38,8 +41,44 @@ def _ffmpeg_in_path() -> bool:
     return shutil.which("ffmpeg") is not None
 
 
-def _get_ffmpeg_cmd() -> list[str]:
-    """Build ffmpeg command for WASAPI loopback capture."""
+def _find_blackhole_audio_index() -> int | None:
+    """macOS has no built-in loopback capture — BlackHole (a free virtual audio
+    driver, `brew install blackhole-2ch`) must be installed, and set as part of
+    a Multi-Output Device in Audio MIDI Setup alongside real speakers so audio
+    is both heard and captured. Returns ffmpeg's avfoundation audio device
+    index for BlackHole, or None if it's not installed/found."""
+    try:
+        result = subprocess.run(
+            ["ffmpeg", "-f", "avfoundation", "-list_devices", "true", "-i", ""],
+            capture_output=True, text=True, timeout=5
+        )
+        # ffmpeg prints the device list to stderr regardless of outcome
+        in_audio_section = False
+        for line in result.stderr.splitlines():
+            if "AVFoundation audio devices" in line:
+                in_audio_section = True
+                continue
+            if in_audio_section:
+                m = re.search(r"\[(\d+)\]\s+(.+)", line)
+                if m and "blackhole" in m.group(2).lower():
+                    return int(m.group(1))
+        return None
+    except Exception:
+        return None
+
+
+def _get_ffmpeg_cmd() -> list[str] | None:
+    """Build the ffmpeg command for system-audio loopback capture."""
+    if IS_MAC:
+        idx = _find_blackhole_audio_index()
+        if idx is None:
+            return None
+        return [
+            "ffmpeg", "-hide_banner", "-loglevel", "error",
+            "-f", "avfoundation", "-i", f":{idx}",
+            "-f", "s16le", "-ar", str(_SAMPLE_RATE), "-ac", str(_CHANNELS),
+            "pipe:1",
+        ]
     return [
         "ffmpeg",
         "-hide_banner",
@@ -83,6 +122,24 @@ def get_status() -> dict:
     """Return availability info for the /audio/info endpoint."""
     has_ffmpeg = _ffmpeg_in_path()
     has_sd     = _get_sounddevice_cmd() is not None
+    if IS_MAC:
+        has_blackhole = has_ffmpeg and _find_blackhole_audio_index() is not None
+        available = has_blackhole
+        install_hint = (
+            "" if has_blackhole else
+            "Install BlackHole (brew install blackhole-2ch) and add it to a "
+            "Multi-Output Device in Audio MIDI Setup alongside your speakers."
+        )
+        return {
+            "available": available,
+            "backend": "ffmpeg+blackhole" if has_blackhole else "none",
+            "ffmpeg": has_ffmpeg,
+            "blackhole": has_blackhole,
+            "sample_rate": _SAMPLE_RATE,
+            "channels": _CHANNELS,
+            "encoding": "pcm_s16le",
+            "install_hint": install_hint,
+        }
     return {
         "available":  has_ffmpeg or has_sd,
         "backend":    "ffmpeg" if has_ffmpeg else ("sounddevice" if has_sd else "none"),
@@ -105,16 +162,24 @@ def stream_generator() -> Generator[bytes, None, None]:
     """
     global _active_proc
 
-    if _ffmpeg_in_path():
-        cmd = _get_ffmpeg_cmd()
-    else:
+    cmd = _get_ffmpeg_cmd() if _ffmpeg_in_path() else None
+    if cmd is None and not IS_MAC:
+        # sounddevice's default InputStream isn't a loopback capture on macOS
+        # (no BlackHole-equivalent fallback path exists there), so this
+        # fallback only makes sense on Windows.
         cmd = _get_sounddevice_cmd()
 
     if cmd is None:
-        logger.error(
-            "[AudioStream] No audio backend available. "
-            "Install ffmpeg (winget install ffmpeg) or sounddevice (pip install sounddevice)."
-        )
+        if IS_MAC:
+            logger.error(
+                "[AudioStream] BlackHole not found. Install with `brew install "
+                "blackhole-2ch` and add it to a Multi-Output Device in Audio MIDI Setup."
+            )
+        else:
+            logger.error(
+                "[AudioStream] No audio backend available. "
+                "Install ffmpeg (winget install ffmpeg) or sounddevice (pip install sounddevice)."
+            )
         return
 
     try:

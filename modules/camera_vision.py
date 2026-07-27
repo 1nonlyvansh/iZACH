@@ -20,6 +20,8 @@ import re
 import threading
 import time
 
+from modules.platform_utils import IS_MAC
+
 # Suppress OpenCV VIDEOIO/DSHOW/MSMF C++ backend warnings BEFORE importing cv2.
 # cv2.setLogLevel() only affects Python-level logs; VIDEOIO prints directly to
 # stderr bypassing Python logging. The env var is the only reliable suppressor.
@@ -140,7 +142,13 @@ def _get_camera_names_wmi() -> dict[int, str]:
 
 
 def _get_camera_names() -> dict[int, str]:
-    """Prefer pygrabber (accurate index mapping) → fall back to WMI."""
+    """Prefer pygrabber (accurate index mapping) → fall back to WMI.
+    On macOS neither pygrabber (Windows-only DirectShow wrapper) nor WMI exist —
+    AVFoundation has no simple Python enumeration API either, so cameras just get
+    a generic "Camera N" name via _resolve_cam_name's fallback (macOS rarely has
+    more than the built-in camera + maybe one external/Continuity Camera anyway)."""
+    if IS_MAC:
+        return {}
     dshow = _get_camera_names_dshow()
     if dshow:
         return dshow
@@ -192,6 +200,20 @@ def _scan_cameras_worker(wmi_names: dict, result_queue) -> None:
     except AttributeError:
         pass
 
+    if IS_MAC:
+        # AVFoundation's camera backend prints "out device of bound" straight
+        # to stderr via NSLog for every unpopulated index — a native-level
+        # print that bypasses cv2.setLogLevel(0) above entirely. Safe to
+        # blanket-silence: this whole function already runs in an isolated
+        # child process (see docstring) whose stderr carries no Python
+        # tracebacks the caller depends on — results only ever come back via
+        # result_queue.
+        try:
+            _devnull_fd = os.open(os.devnull, os.O_WRONLY)
+            os.dup2(_devnull_fd, 2)
+        except Exception:
+            pass
+
     def _try_open(idx: int, backend=None) -> bool:
         try:
             cap = cv2.VideoCapture(idx, backend) if backend is not None else cv2.VideoCapture(idx)
@@ -213,10 +235,16 @@ def _scan_cameras_worker(wmi_names: dict, result_queue) -> None:
         if not _is_camera_device(name):
             continue
 
-        # CAP_DSHOW → CAP_MSMF → auto (DSHOW is the more stable backend on
-        # Windows for enumeration; MSMF has known access-violation issues
-        # probing some webcams)
-        if _try_open(i, cv2.CAP_DSHOW) or _try_open(i, cv2.CAP_MSMF) or _try_open(i):
+        if IS_MAC:
+            # AVFoundation is macOS's native camera backend — no DSHOW/MSMF
+            # access-violation concern here, just try it then a bare fallback.
+            opened = _try_open(i, cv2.CAP_AVFOUNDATION) or _try_open(i)
+        else:
+            # CAP_DSHOW → CAP_MSMF → auto (DSHOW is the more stable backend on
+            # Windows for enumeration; MSMF has known access-violation issues
+            # probing some webcams)
+            opened = _try_open(i, cv2.CAP_DSHOW) or _try_open(i, cv2.CAP_MSMF) or _try_open(i)
+        if opened:
             result.append({"index": i, "name": name})
 
     result_queue.put(result)
@@ -278,8 +306,9 @@ def list_cameras(force_refresh: bool = False) -> list[dict]:
 # ── Camera helpers ────────────────────────────────────────────────────────────
 
 def _open_camera(index: int) -> cv2.VideoCapture:
-    """Open camera trying CAP_DSHOW first, then CAP_MSMF as fallback."""
-    for backend in (cv2.CAP_DSHOW, cv2.CAP_MSMF):
+    """Open camera trying the platform-native backend first, then a fallback."""
+    backends = (cv2.CAP_AVFOUNDATION,) if IS_MAC else (cv2.CAP_DSHOW, cv2.CAP_MSMF)
+    for backend in backends:
         cap = cv2.VideoCapture(index, backend)
         if cap.isOpened():
             ret, _ = cap.read()

@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@color/bg_deep">
+
+    <LinearLayout android:id="@+id/topBar"
+        android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:minHeight="72dp" android:background="@color/bg_panel"
+        android:orientation="horizontal" android:gravity="center_vertical"
+        android:paddingHorizontal="4dp">
+
+        <ImageButton android:id="@+id/btnMenu"
+            android:layout_width="48dp" android:layout_height="48dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@android:drawable/ic_menu_sort_by_size" android:contentDescription="Menu" />
+
+        <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content"
+            android:layout_weight="1" android:orientation="vertical" android:gravity="center">
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:text="iZACH" android:textColor="@color/cyan" android:textSize="20sp"
+                android:fontFamily="monospace" android:letterSpacing="0.15" android:textStyle="bold" />
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:text="Choose a device" android:textColor="@color/text_sec" android:textSize="11sp"
+                android:fontFamily="monospace" android:layout_marginTop="2dp" />
+        </LinearLayout>
+
+        <View android:layout_width="48dp" android:layout_height="48dp" />
+    </LinearLayout>
+
+    <ScrollView android:layout_width="match_parent" android:layout_height="0dp"
+        android:layout_weight="1" android:padding="16dp">
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <TextView android:id="@+id/tvEmptyState"
+                android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:text="No PCs paired yet.\nTap + below to scan the QR code shown in iZACH's desktop Settings."
+                android:textColor="@color/text_sec" android:textSize="12sp"
+                android:fontFamily="monospace" android:gravity="center"
+                android:layout_marginTop="48dp" android:layout_marginBottom="24dp"
+                android:visibility="gone" />
+
+            <LinearLayout android:id="@+id/devicesContainer"
+                android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:orientation="vertical" />
+
+            <LinearLayout android:id="@+id/cardAddDevice"
+                android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:orientation="horizontal" android:gravity="center"
+                android:background="@drawable/bg_shortcut_tile" android:padding="18dp"
+                android:clickable="true" android:focusable="true"
+                android:layout_marginTop="4dp">
+                <TextView
+                    android:layout_width="wrap_content" android:layout_height="wrap_content"
+                    android:text="+  CONNECT ANOTHER PC" android:textColor="@color/cyan"
+                    android:textSize="13sp" android:fontFamily="monospace"
+                    android:letterSpacing="0.1" android:textStyle="bold" />
+            </LinearLayout>
+
+        </LinearLayout>
+    </ScrollView>
+</LinearLayout>

@@ -35,9 +35,7 @@ class SettingsActivity : AppCompatActivity() {
                 val url  = json.getString("backend_url")
                 val host = json.getString("ws_host")
                 val secret = json.optString("pairing_secret", "")
-                api.saveBackendUrl(url)
-                api.saveWsHost(host)
-                if (secret.isNotBlank()) api.savePairingSecret(secret)
+                api.applyConnection(url, host, secret)
                 binding.etBackendUrl.setText(url)
                 binding.etWsHost.setText(host)
                 binding.etPairingSecret.setText(secret)
@@ -111,6 +109,7 @@ class SettingsActivity : AppCompatActivity() {
                 .setPrompt("Scan iZACH QR code shown on your PC")
                 .setBeepEnabled(false)
                 .setOrientationLocked(false)
+                .setCaptureActivity(com.izach.android.ui.QrCaptureActivity::class.java)
             qrLauncher.launch(options)
         }
 
@@ -178,6 +177,7 @@ class SettingsActivity : AppCompatActivity() {
                 toast("Backend URL required")
                 return@setOnClickListener
             }
+            api.clearActiveProfileLinkIfDifferentHost(wsHost)
             api.saveBackendUrl(url)
             api.saveWsHost(wsHost)
             api.savePairingSecret(binding.etPairingSecret.text.toString().trim())
@@ -238,7 +238,7 @@ class SettingsActivity : AppCompatActivity() {
                 binding.tvTestResult.text = if (ok)
                     "✓ Connected to $url"
                 else
-                    "✗ Cannot reach $url\n• Check PC IP (run ipconfig on PC)\n• Allow port 5050/5051 in Windows Firewall"
+                    "✗ Cannot reach $url\n• Check PC IP (ipconfig on Windows, ifconfig/System Settings → Network on Mac)\n• Allow port 5050/5051 through the PC's firewall"
                 binding.tvTestResult.setTextColor(
                     if (ok) getColor(R.color.cyan) else getColor(R.color.red_neon)
                 )

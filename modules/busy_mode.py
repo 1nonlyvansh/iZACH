@@ -24,7 +24,14 @@ import re
 logger = logging.getLogger(__name__)
 
 _LOG_FILE      = os.path.join(os.path.dirname(os.path.dirname(__file__)), "busy_session.jsonl")
-_OBSIDIAN_DIR  = os.environ.get("OBSIDIAN_VAULT", r"C:\iZACH\iZACH-brain")
+# Was hardcoded to a Windows path (C:\iZACH\iZACH-brain) — silently never
+# worked on macOS since os.makedirs() there just creates a literal folder
+# named that string rather than failing. Now matches modules/obsidian_brain.py's
+# VAULT_PATH default (same vault, same override convention).
+_OBSIDIAN_DIR  = os.environ.get(
+    "OBSIDIAN_VAULT",
+    os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "iZACH-Brain"),
+)
 
 # ── State ──────────────────────────────────────────────────────
 _lock          = threading.Lock()

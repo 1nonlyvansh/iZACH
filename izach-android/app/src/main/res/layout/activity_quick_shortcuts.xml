@@ -147,6 +147,7 @@
             android:orientation="vertical"
             android:gravity="center"
             android:background="@drawable/bg_shortcut_tile"
+            android:layout_marginEnd="8dp"
             android:clickable="true"
             android:focusable="true">
 
@@ -172,6 +173,47 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="OPEN DASHBOARD"
+                android:textColor="@color/text_sec"
+                android:textSize="7sp"
+                android:fontFamily="monospace"
+                android:letterSpacing="0.05"
+                android:layout_marginTop="1dp" />
+        </LinearLayout>
+
+        <!-- Devices tile — which PC this phone is connected to, handoff -->
+        <LinearLayout
+            android:id="@+id/tileDevices"
+            android:layout_width="0dp"
+            android:layout_height="72dp"
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:background="@drawable/bg_shortcut_tile"
+            android:clickable="true"
+            android:focusable="true">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="⇄"
+                android:textColor="@color/cyan"
+                android:textSize="22sp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="DEVICES"
+                android:textColor="@color/cyan"
+                android:textSize="8sp"
+                android:fontFamily="monospace"
+                android:letterSpacing="0.1"
+                android:textStyle="bold"
+                android:layout_marginTop="2dp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="MAC / WINDOWS"
                 android:textColor="@color/text_sec"
                 android:textSize="7sp"
                 android:fontFamily="monospace"

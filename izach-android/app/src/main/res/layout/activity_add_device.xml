@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@color/bg_deep">
+
+    <LinearLayout android:id="@+id/topBar"
+        android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:minHeight="56dp" android:background="@color/bg_panel"
+        android:orientation="horizontal" android:gravity="center_vertical"
+        android:paddingHorizontal="8dp">
+        <ImageButton android:id="@+id/btnBack"
+            android:layout_width="48dp" android:layout_height="48dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@drawable/ic_back" android:contentDescription="Back" />
+        <TextView android:layout_width="0dp" android:layout_height="wrap_content"
+            android:layout_weight="1" android:gravity="center"
+            android:text="CONNECT A PC" android:textColor="@color/cyan" android:textSize="14sp"
+            android:fontFamily="monospace" android:letterSpacing="0.2" android:textStyle="bold" />
+        <View android:layout_width="48dp" android:layout_height="48dp" />
+    </LinearLayout>
+
+    <LinearLayout android:layout_width="match_parent" android:layout_height="0dp"
+        android:layout_weight="1" android:orientation="vertical" android:gravity="center"
+        android:padding="32dp">
+
+        <TextView
+            android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:text="📷" android:textSize="48sp" android:layout_marginBottom="24dp" />
+
+        <TextView
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:text="This adds a new PC as its own saved connection — whatever you're currently connected to stays untouched."
+            android:textColor="@color/text_sec" android:textSize="12sp"
+            android:fontFamily="monospace" android:gravity="center"
+            android:layout_marginBottom="32dp" />
+
+        <Button android:id="@+id/btnScanQr"
+            android:layout_width="match_parent" android:layout_height="52dp"
+            android:text="SCAN QR CODE" android:textColor="@color/bg_deep"
+            android:backgroundTint="@color/cyan" android:fontFamily="monospace"
+            android:textSize="13sp" android:textStyle="bold"
+            android:layout_marginBottom="24dp" />
+
+        <TextView
+            android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:text="— or enter manually —" android:textColor="@color/text_sec"
+            android:textSize="10sp" android:fontFamily="monospace"
+            android:layout_marginBottom="16dp" />
+
+        <EditText android:id="@+id/etManualUrl"
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:hint="http://192.168.x.x:5050" android:textColorHint="@color/text_sec"
+            android:textColor="@color/text_pri" android:fontFamily="monospace" android:textSize="12sp"
+            android:background="@color/bg_card" android:padding="12dp"
+            android:layout_marginBottom="8dp" android:inputType="textUri" />
+
+        <EditText android:id="@+id/etManualSecret"
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:hint="Pairing secret" android:textColorHint="@color/text_sec"
+            android:textColor="@color/text_pri" android:fontFamily="monospace" android:textSize="12sp"
+            android:background="@color/bg_card" android:padding="12dp"
+            android:layout_marginBottom="16dp" />
+
+        <Button android:id="@+id/btnAddManual"
+            android:layout_width="match_parent" android:layout_height="48dp"
+            android:text="ADD" android:textColor="@color/cyan"
+            android:backgroundTint="@color/bg_card" android:fontFamily="monospace"
+            android:textSize="12sp" />
+
+    </LinearLayout>
+</LinearLayout>

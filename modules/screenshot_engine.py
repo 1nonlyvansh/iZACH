@@ -31,6 +31,11 @@ def capture(monitor: int = 0, notify: bool = True) -> str | None:
             _ensure()
             import pyautogui
             img = pyautogui.screenshot()
+            if img.mode != "RGB":
+                # macOS's screencapture-backed pyautogui returns RGBA (has an
+                # alpha channel) — JPEG has no transparency support and
+                # raises "cannot write mode RGBA as JPEG" outright.
+                img = img.convert("RGB")
             img.thumbnail((1280, 720))
             filename = f"screen_{int(time.time())}.jpg"
             path = SCREENSHOT_DIR / filename
@@ -64,6 +69,8 @@ def capture_sync() -> str | None:
         _ensure()
         import pyautogui
         img = pyautogui.screenshot()
+        if img.mode != "RGB":
+            img = img.convert("RGB")
         img.thumbnail((1280, 720))
         filename = f"screen_{int(time.time())}.jpg"
         path = SCREENSHOT_DIR / filename

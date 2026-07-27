@@ -84,7 +84,40 @@ def _is_excluded(app: str, title: str, excluded_apps: list) -> bool:
     return False
 
 
+def _capture_active_window_mac():
+    """Requires macOS Screen Recording permission (System Settings > Privacy &
+    Security > Screen Recording) — returns None without it, same fail-quiet
+    behavior as the Windows path below."""
+    try:
+        import Quartz
+        from PIL import ImageGrab
+        from modules.window_watcher import get_active_window
+        pid = get_active_window().get("pid")
+        if not pid:
+            return None
+        options = Quartz.kCGWindowListOptionOnScreenOnly | Quartz.kCGWindowListExcludeDesktopElements
+        windows = Quartz.CGWindowListCopyWindowInfo(options, Quartz.kCGNullWindowID) or []
+        for w in windows:
+            if w.get("kCGWindowOwnerPID") != pid:
+                continue
+            b = w.get("kCGWindowBounds")
+            if not b:
+                continue
+            left, top = int(b["X"]), int(b["Y"])
+            right, bottom = left + int(b["Width"]), top + int(b["Height"])
+            if right <= left or bottom <= top:
+                continue
+            return ImageGrab.grab(bbox=(left, top, right, bottom))
+        return None
+    except Exception as e:
+        logger.debug(f"Capture failed: {e}")
+        return None
+
+
 def _capture_active_window():
+    from modules.platform_utils import IS_MAC
+    if IS_MAC:
+        return _capture_active_window_mac()
     try:
         import win32gui
         from PIL import ImageGrab

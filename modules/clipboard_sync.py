@@ -5,7 +5,6 @@ Uses PowerShell (no extra deps). Deduplicates to avoid echo loops.
 """
 import hashlib
 import re
-import subprocess
 import threading
 import time
 
@@ -146,23 +145,21 @@ def handle_clipboard_response(cmd: str) -> bool:
 
 
 def _ps_get() -> str:
+    # Despite the name (kept for minimal diff — was PowerShell-based), this is now
+    # cross-platform via pyperclip (pbcopy/pbpaste on macOS, PowerShell/win32
+    # clipboard API on Windows, xclip/xsel on Linux) instead of shelling out to
+    # PowerShell directly, which was Windows-only and much slower to boot per poll.
     try:
-        r = subprocess.run(
-            ["powershell", "-NoProfile", "-Command", "Get-Clipboard"],
-            capture_output=True, text=True, timeout=2
-        )
-        return r.stdout.strip()
+        import pyperclip
+        return (pyperclip.paste() or "").strip()
     except Exception:
         return ""
 
 
 def _ps_set(text: str):
     try:
-        safe = text.replace("'", '"')
-        subprocess.run(
-            ["powershell", "-NoProfile", "-Command", f"Set-Clipboard -Value '{safe}'"],
-            timeout=2, capture_output=True
-        )
+        import pyperclip
+        pyperclip.copy(text)
     except Exception:
         pass
 

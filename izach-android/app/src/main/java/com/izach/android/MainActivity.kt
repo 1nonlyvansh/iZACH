@@ -21,7 +21,6 @@ import android.text.TextWatcher
 import android.view.View
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
-import androidx.biometric.BiometricPrompt
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.app.RemoteInput
@@ -119,7 +118,6 @@ class MainActivity : AppCompatActivity() {
         adapter = ChatAdapter()
 
         val prefs = getSharedPreferences("izach_prefs", MODE_PRIVATE)
-        if (prefs.getBoolean("biometric_lock", false)) showBiometricPrompt()
 
         createNotificationChannel()
         setupRecyclerView()
@@ -131,6 +129,7 @@ class MainActivity : AppCompatActivity() {
         loadHistory()
         checkStatus()
         pollDndBusyStatus()
+        applyPlatformChips()
 
         // Play Services drops registered geofences on reboot and can lose
         // them on rare process-death edge cases — cheap to just re-assert
@@ -184,21 +183,6 @@ class MainActivity : AppCompatActivity() {
             else -> null
         } ?: return
         startActivity(Intent(this, target))
-    }
-
-    private fun showBiometricPrompt() {
-        val executor = ContextCompat.getMainExecutor(this)
-        val prompt = BiometricPrompt(this, executor, object : BiometricPrompt.AuthenticationCallback() {
-            override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {}
-            override fun onAuthenticationError(errorCode: Int, errString: CharSequence) { finish() }
-            override fun onAuthenticationFailed() {}
-        })
-        val info = BiometricPrompt.PromptInfo.Builder()
-            .setTitle("iZACH")
-            .setSubtitle("Authenticate to continue")
-            .setNegativeButtonText("Cancel")
-            .build()
-        prompt.authenticate(info)
     }
 
     private fun createNotificationChannel() {
@@ -562,6 +546,20 @@ class MainActivity : AppCompatActivity() {
         binding.chipBusy.setOnClickListener { showBusyToggleDialog() }
         binding.chipBgMode.setOnClickListener {
             startActivity(Intent(this, QuickShortcutsActivity::class.java))
+        }
+    }
+
+    // Background Mode doesn't exist on macOS iZACH — hide the header chip
+    // entirely (not just disable) when connected to Mac, same treatment as
+    // the Forge/Background tiles in Quick Shortcuts. Uses the cached
+    // platform on the active profile if already known (no visible flash),
+    // then confirms with a live check in case it's stale or unknown yet.
+    private fun applyPlatformChips() {
+        binding.chipBgMode.visibility = if (api.activePlatform() == "mac") View.GONE else View.VISIBLE
+        lifecycleScope.launch {
+            api.getSystemStatus().onSuccess { status ->
+                binding.chipBgMode.visibility = if (status.platform == "mac") View.GONE else View.VISIBLE
+            }
         }
     }
 

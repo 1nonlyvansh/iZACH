@@ -12,5 +12,6 @@ data class SystemStatus(
     val mma: Boolean,
     val pcName: String = "",
     val batteryPct: Int? = null,
-    val batteryPlugged: Boolean? = null
+    val batteryPlugged: Boolean? = null,
+    val platform: String = ""
 )

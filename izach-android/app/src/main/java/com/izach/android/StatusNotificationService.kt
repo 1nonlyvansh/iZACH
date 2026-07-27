@@ -53,6 +53,13 @@ class StatusNotificationService : Service() {
         scope.launch {
             while (true) {
                 refresh()
+                // Cross-device command queue drains here too — this service
+                // is the one thing that keeps running (as long as Android
+                // allows the foreground service to live) even when no
+                // Activity is on screen, matching "runs whenever a targeted
+                // PC comes online" rather than only while the queue screen
+                // is open.
+                runCatching { api.drainCommandQueue() }
                 delay(POLL_INTERVAL_MS)
             }
         }
@@ -81,7 +88,10 @@ class StatusNotificationService : Service() {
         }
         val dnd = api.getDndStatus().getOrNull()
         val busy = api.getBusyStatus().getOrNull()
-        val uiMode = api.getUiMode().getOrNull() ?: "normal"
+        // Background Mode / UI-mode switching don't exist on macOS iZACH —
+        // no reason to poll a route that's always going to answer "normal."
+        val isMac = status.platform == "mac"
+        val uiMode = if (isMac) "" else (api.getUiMode().getOrNull() ?: "normal")
         post(
             Snapshot(
                 paired = true,
@@ -112,8 +122,12 @@ class StatusNotificationService : Service() {
             else -> {
                 val dnd = if (s.dndActive) "On" + (s.dndReason.takeIf { it.isNotBlank() && it != "manual" }?.let { " ($it)" } ?: "") else "Off"
                 val busy = if (s.busyActive) "On" + (s.busyReason.takeIf { it.isNotBlank() }?.let { " ($it)" } ?: "") else "Off"
-                val mode = if (s.uiMode == "background") "Background" else "Normal"
-                "DND: $dnd · Busy: $busy · PC Mode: $mode"
+                if (s.uiMode.isBlank()) {
+                    "DND: $dnd · Busy: $busy"
+                } else {
+                    val mode = if (s.uiMode == "background") "Background" else "Normal"
+                    "DND: $dnd · Busy: $busy · PC Mode: $mode"
+                }
             }
         }
 

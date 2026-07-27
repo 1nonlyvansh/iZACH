@@ -9,6 +9,7 @@ Lightweight: pystray + Pillow only (~tens of MB), vs ~400 MB for Electron.
 """
 
 import os
+import sys
 import threading
 import subprocess
 
@@ -213,12 +214,14 @@ def _open_ui(mode, icon=None):
             no_win = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
             # Build (so latest source + chosen UI is reflected), then launch.
+            build_cmd = ["cmd", "/c", "npm", "run", "build"] if sys.platform == "win32" else ["npm", "run", "build"]
             subprocess.run(
-                ["cmd", "/c", "npm", "run", "build"], cwd=ui_dir, env=env,
+                build_cmd, cwd=ui_dir, env=env,
                 stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL, creationflags=no_win,
             )
-            ebin = os.path.join(ui_dir, "node_modules", ".bin", "electron.cmd")
+            ebin_name = "electron.cmd" if sys.platform == "win32" else "electron"
+            ebin = os.path.join(ui_dir, "node_modules", ".bin", ebin_name)
             cmd = [ebin, "."] if os.path.exists(ebin) else ["npx", "--yes", "electron", "."]
             subprocess.Popen(
                 cmd, cwd=ui_dir, env=env,
@@ -255,10 +258,15 @@ def _quit(icon, item):
 def _build_menu():
     import pystray
     from pystray import MenuItem as Item, Menu
+    from modules.platform_utils import IS_MAC
+    # "classic" mode is really just the Electron/React dashboard theme, historically
+    # labeled "Forge UI" for parity with forge_ui.py — a separate Tkinter/WebView2
+    # app that only exists on Windows. Use the accurate name on macOS.
+    classic_label = "Open Classic UI" if IS_MAC else "Open Forge UI"
     return Menu(
         Item("iZACH — Background Mode", None, enabled=False),
         Menu.SEPARATOR,
-        Item("Open Forge UI",  lambda i, it: _open_ui("classic", i)),
+        Item(classic_label,    lambda i, it: _open_ui("classic", i)),
         Item("Open Cortex UI", lambda i, it: _open_ui("scifi", i)),
         Menu.SEPARATOR,
         Item("Mic Active",     _toggle_mic,  checked=lambda it: _mic_active()),

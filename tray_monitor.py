@@ -1,9 +1,9 @@
 """
 tray_monitor.py — Lightweight always-on iZACH tray monitor.
 
-Runs as its own tiny process (NOT inside the backend). Can start with Windows
-via a registry Run key so iZACH is always reachable from the tray even when
-the backend is offline.
+Runs as its own tiny process (NOT inside the backend). Can start at login —
+Windows via a registry Run key, macOS via a launchd LaunchAgent — so iZACH is
+always reachable from the tray even when the backend is offline.
 
 Indicator dot on the iZACH icon:
   🔴 Red    — Python backend offline (can't reach :5050/health)
@@ -14,10 +14,11 @@ Indicator dot on the iZACH icon:
 Right-click menu:
   • Start iZACH     (if offline)
   • Stop iZACH      (if online — graceful /shutdown)
-  • Open Forge UI   (launches Electron)
+  • Open Classic UI  (launches Electron — labeled "Open Forge UI" on Windows,
+                       where forge_ui.py's separate Tkinter app also exists)
   • Open Cortex UI  (launches Electron)
   • Status          (backend version/uptime)
-  • Start with Windows (toggle registry Run key)
+  • Start at Login  (toggle registry Run key on Windows / launchd on macOS)
   ─────────────────
   • Quit Monitor
 
@@ -36,12 +37,16 @@ import urllib.request
 import pystray
 from PIL import Image, ImageDraw
 
+from modules.platform_utils import IS_WINDOWS, IS_MAC
+
 # ── Paths ─────────────────────────────────────────────────────
-BASE         = r"C:\Projects\iZACH"
-VENV_PY      = os.path.join(BASE, r".venv\Scripts\python.exe")
+BASE = os.environ.get("IZACH_BASE", os.path.dirname(os.path.abspath(__file__)))
+VENV_PY = os.path.join(BASE, ".venv", "Scripts", "python.exe") if IS_WINDOWS \
+    else os.path.join(BASE, ".venv", "bin", "python3")
 MAIN_PY      = os.path.join(BASE, "main.py")
 ELECTRON_DIR = os.path.join(BASE, "izach-ui")
-ELECTRON_BIN = os.path.join(ELECTRON_DIR, "node_modules", ".bin", "electron.cmd")
+ELECTRON_BIN = os.path.join(ELECTRON_DIR, "node_modules", ".bin",
+                             "electron.cmd" if IS_WINDOWS else "electron")
 APIKEYS      = os.path.join(BASE, "api_keys.json")
 ICON_FILES   = [
     os.path.join(BASE, "iZACH logo.png"),
@@ -198,8 +203,14 @@ def _watcher():
         time.sleep(3)
 
 
-# ── Registry (Start with Windows) ────────────────────────────
+# ── Start at login: Windows registry Run key / macOS launchd LaunchAgent ──
+_LAUNCHD_LABEL = "com.izach.monitor"
+_LAUNCHD_PLIST = os.path.expanduser(f"~/Library/LaunchAgents/{_LAUNCHD_LABEL}.plist")
+
+
 def _is_startup_enabled() -> bool:
+    if IS_MAC:
+        return os.path.exists(_LAUNCHD_PLIST)
     try:
         import winreg
         k = winreg.OpenKey(winreg.HKEY_CURRENT_USER, REG_KEY_PATH)
@@ -211,6 +222,38 @@ def _is_startup_enabled() -> bool:
 
 
 def _toggle_startup(icon, item):
+    if IS_MAC:
+        try:
+            if _is_startup_enabled():
+                subprocess.run(["launchctl", "unload", _LAUNCHD_PLIST],
+                                capture_output=True, timeout=5)
+                os.remove(_LAUNCHD_PLIST)
+                print("[MONITOR] Removed from macOS login items.")
+            else:
+                os.makedirs(os.path.dirname(_LAUNCHD_PLIST), exist_ok=True)
+                plist = f"""<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key><string>{_LAUNCHD_LABEL}</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>{sys.executable}</string>
+        <string>{os.path.abspath(__file__)}</string>
+    </array>
+    <key>RunAtLoad</key><true/>
+</dict>
+</plist>
+"""
+                with open(_LAUNCHD_PLIST, "w", encoding="utf-8") as f:
+                    f.write(plist)
+                subprocess.run(["launchctl", "load", _LAUNCHD_PLIST],
+                                capture_output=True, timeout=5)
+                print(f"[MONITOR] Added to macOS login items: {_LAUNCHD_PLIST}")
+            icon.update_menu()
+        except Exception as e:
+            print(f"[MONITOR] Startup toggle failed: {e}")
+        return
     try:
         import winreg
         k = winreg.OpenKey(winreg.HKEY_CURRENT_USER, REG_KEY_PATH, 0,
@@ -278,8 +321,9 @@ def _open_ui(mode):
             env = os.environ.copy()
             env["NODE_ENV"] = "production"
             no_win = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+            build_cmd = ["cmd", "/c", "npm", "run", "build"] if IS_WINDOWS else ["npm", "run", "build"]
             subprocess.run(
-                ["cmd", "/c", "npm", "run", "build"], cwd=ELECTRON_DIR,
+                build_cmd, cwd=ELECTRON_DIR,
                 stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL, creationflags=no_win, env=env,
             )
@@ -333,11 +377,17 @@ def _build_menu():
         Item("2 hours",    lambda i, it: _dnd_timer(7200)),
     )
 
+    # "classic" mode is really just the Electron/React dashboard theme, historically
+    # labeled "Forge UI" for parity with forge_ui.py — a separate Tkinter/WebView2
+    # app that only exists on Windows. Use accurate names on macOS.
+    classic_label = "Open Classic UI" if IS_MAC else "Open Forge UI"
+    startup_label = "Start at Login" if IS_MAC else "Start with Windows"
+
     if online:
         return Menu(
             Item("iZACH",          None, enabled=False),
             Menu.SEPARATOR,
-            Item("Open Forge UI",  lambda i, it: _open_ui("classic")),
+            Item(classic_label,    lambda i, it: _open_ui("classic")),
             Item("Open Cortex UI", lambda i, it: _open_ui("scifi")),
             Menu.SEPARATOR,
             Item("Mic Active",     _toggle_mic,  checked=_mic_on),
@@ -346,7 +396,7 @@ def _build_menu():
             Item("Busy Mode",      _toggle_busy, checked=_busy_on),
             Menu.SEPARATOR,
             Item("Stop iZACH",         _stop_izach),
-            Item("Start with Windows", _toggle_startup,
+            Item(startup_label, _toggle_startup,
                  checked=lambda it: _is_startup_enabled()),
             Menu.SEPARATOR,
             Item("Quit Monitor",   _quit),
@@ -358,7 +408,7 @@ def _build_menu():
             Menu.SEPARATOR,
             Item("Start iZACH",        _start_izach),
             Menu.SEPARATOR,
-            Item("Start with Windows", _toggle_startup,
+            Item(startup_label, _toggle_startup,
                  checked=lambda it: _is_startup_enabled()),
             Menu.SEPARATOR,
             Item("Quit Monitor",   _quit),
