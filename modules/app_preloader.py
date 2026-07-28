@@ -239,7 +239,7 @@ def _check_and_preload():
         if pat["hour_bucket"] != target_bucket:
             continue
         # Only fire in the first 2 minutes of the pre-launch window
-        if now.minute > PRE_LAUNCH_MINUTES + 1:
+        if now.minute >= PRE_LAUNCH_MINUTES:
             continue
 
         key = f"{pat['app']}:{today_str}"

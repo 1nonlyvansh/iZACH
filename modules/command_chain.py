@@ -379,6 +379,33 @@ Output format:
         except Exception as _busy_err:
             logger.debug(f"[BUSY command] {_busy_err}")
 
+        # ── Dual-instance handoff ("hand off to mac", "move to windows") ──
+        # Intercept before anything else reaches it — with no explicit check,
+        # this fell all the way through to the generic AI intent classifier,
+        # which grabbed the whole phrase as a kill_app app_name ("No app named
+        # 'hands off to mac' is running.").
+        # \bhands?\s+off\s+to\b tolerates "hands off to" (typo/mishear for
+        # "hand off to") alongside the exact phrase and the other triggers.
+        # (A second, later copy of this same check also exists further down
+        # in the system-control dispatch chain as a fallback for whatever
+        # path doesn't route through here first — harmless redundancy, first
+        # match wins and returns.)
+        try:
+            if re.search(r'\bhands?\s+off\s+to\b', query) or any(
+                w in query for w in ["handoff to", "move izach to", "move to windows", "move to mac"]
+            ):
+                _target_m = re.search(r'\b(windows|macos|mac)\b', query)
+                if not _target_m:
+                    self.speak("Hand off to which machine — Windows or Mac?")
+                else:
+                    _target = _target_m.group(1)
+                    from modules.instance_coordinator import initiate_handoff
+                    _ok, _msg = initiate_handoff(_target)
+                    self.speak(_msg)
+                return
+        except Exception as _handoff_err:
+            logger.debug(f"[Dual-instance handoff command] {_handoff_err}")
+
         # ── Recorded browser task replay (Cortex UI Browser widget) ──────
         # Two ways in: (a) the scheduler fires the sentinel action text set by
         # schedule_recording_job(), or (b) the user speaks a custom trigger
@@ -1472,7 +1499,14 @@ Output format:
             if not product:
                 self.speak("What product should I check the price of?")
                 return
-            _bg(web_automation.lookup_price, product, announce=f"Checking price of {product}.")
+            # Not using _bg() here — its `not ok or announce is None` check
+            # means a SUCCESSFUL lookup's actual price never got spoken (only
+            # the "Checking price of X" announce played, then silence).
+            self.speak(f"Checking price of {product}.")
+            def _speak_price_result():
+                ok, msg = web_automation.lookup_price(product)
+                self.speak(msg)
+            threading.Thread(target=_speak_price_result, daemon=True).start()
             return
 
         # ── Login ──────────────────────────────────────────────
@@ -3529,8 +3563,11 @@ Return ONLY JSON."""
                 return
 
             if platform == "spotify":
-                # Speak immediately — TTS generates while Spotify API runs
-                self.speak(f"Playing {full_query}.")
+                # Speak immediately — TTS generates while Spotify API runs.
+                # Deliberately not "Playing X." (a claim we can't back yet) —
+                # if the lookup below fails, the follow-up correction used to
+                # read as a contradiction ("Playing X. No active device.").
+                self.speak(f"Looking for {full_query} on Spotify.")
                 status = self.spotify_handler.play_track(full_query)
                 if any(w in status.lower() for w in ["couldn't", "error", "not found", "failed", "no active"]):
                     self.speak(status)

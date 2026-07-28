@@ -5,6 +5,7 @@ import re
 import logging
 import json
 import threading
+import time
 from rapidfuzz import process, fuzz
 from dotenv import load_dotenv
 
@@ -180,7 +181,19 @@ class SpotifyController:
         try:
             devices = self.sp.devices()
             if not devices or not devices['devices']:
-                return None
+                # No Spotify Connect target registered anywhere — usually
+                # just means the desktop app isn't running. Try launching it
+                # and give it a moment to register as a device before giving
+                # up entirely, instead of immediately failing every play command.
+                try:
+                    from modules.automation import open_app
+                    open_app("spotify")
+                    time.sleep(4)
+                    devices = self.sp.devices()
+                except Exception:
+                    pass
+                if not devices or not devices['devices']:
+                    return None
             for d in devices['devices']:
                 if d['is_active']:
                     self.last_device_id = d['id']

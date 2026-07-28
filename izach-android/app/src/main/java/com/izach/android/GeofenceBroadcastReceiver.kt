@@ -24,12 +24,20 @@ class GeofenceBroadcastReceiver : BroadcastReceiver() {
         val api = IZACHApi(context)
         val locations = api.getGeofences()
 
-        for (g in triggered) {
-            val loc = locations.find { it.id == g.requestId } ?: continue
-            val command = if (transition == Geofence.GEOFENCE_TRANSITION_ENTER) loc.arriveCommand else loc.leaveCommand
-            if (command.isBlank()) continue
-            CoroutineScope(Dispatchers.IO).launch {
-                api.sendCommand(command)
+        // goAsync() tells Android this receiver has pending async work, so the
+        // process isn't killed the instant onReceive() returns — without it,
+        // the coroutine below could be torn down before sendCommand() completes.
+        val pendingResult = goAsync()
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                for (g in triggered) {
+                    val loc = locations.find { it.id == g.requestId } ?: continue
+                    val command = if (transition == Geofence.GEOFENCE_TRANSITION_ENTER) loc.arriveCommand else loc.leaveCommand
+                    if (command.isBlank()) continue
+                    api.sendCommand(command)
+                }
+            } finally {
+                pendingResult.finish()
             }
         }
     }

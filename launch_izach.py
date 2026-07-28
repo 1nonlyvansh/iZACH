@@ -133,7 +133,7 @@ def wait_http(url, label, color, timeout=30, interval=1.5):
     for i in range(int(timeout / interval)):
         try:
             r = requests.get(url, timeout=2)
-            if r.status_code < 500:
+            if r.status_code == 200:
                 log(color, label, f"{G}✓ Online{RST}  ({url})")
                 return True
         except Exception:
@@ -243,18 +243,15 @@ print(f"\n{C}━━━ Step 2 / 6 — iZACH Backend (port 5050) ━━━{RST}")
 # Backend always runs (mandatory) — the toggle only controls whether it gets
 # its own visible terminal window or runs headless, logging to logs/izach.log.
 # If the auto-promotion watchdog is installed (Settings → auto-promote
-# enabled), launchd already owns this process's lifecycle — spawning our own
-# copy here would double-launch it and fight over port 5050, so defer to
-# launchd (kickstart) instead of Popen in that case.
-if IS_MAC:
-    from modules.instance_coordinator import is_watchdog_installed, kickstart_watchdog
-    if is_watchdog_installed():
-        log(C, "iZACH", f"{DIM}Watchdog installed — restarting via launchd instead of a new process{RST}")
-        kickstart_watchdog()
-        p_izach = None
-    else:
-        p_izach = start("iZACH", C, IZACH_CMD, cwd=BASE, filter_objc_noise=IS_MAC,
-                         new_window=BOOT["backend"], log_name="izach")
+# enabled), the OS scheduler (launchd on Mac, Task Scheduler on Windows)
+# already owns this process's lifecycle — spawning our own copy here would
+# double-launch it and fight over port 5050, so defer to the scheduler
+# (kickstart) instead of Popen in that case.
+from modules.instance_coordinator import is_watchdog_installed, kickstart_watchdog
+if is_watchdog_installed():
+    log(C, "iZACH", f"{DIM}Watchdog installed — restarting via the OS scheduler instead of a new process{RST}")
+    kickstart_watchdog()
+    p_izach = None
 else:
     p_izach = start("iZACH", C, IZACH_CMD, cwd=BASE, filter_objc_noise=IS_MAC,
                      new_window=BOOT["backend"], log_name="izach")

@@ -23,6 +23,10 @@ class WidgetToggleReceiver : BroadcastReceiver() {
         val api = IZACHApi(context)
         val prefs = context.getSharedPreferences("izach_prefs", Context.MODE_PRIVATE)
 
+        // goAsync() keeps this receiver's process alive long enough for the
+        // toggle call below to finish — without it Android can kill it right
+        // after onReceive() returns, silently dropping the widget tap.
+        val pendingResult = goAsync()
         when (intent.action) {
             ACTION_TOGGLE_DND -> {
                 val dndActive = prefs.getBoolean("dnd_active", false)
@@ -38,7 +42,10 @@ class WidgetToggleReceiver : BroadcastReceiver() {
                                 prefs.getBoolean("busy_active", false)
                             )
                         }
-                    } catch (_: Exception) {}
+                    } catch (_: Exception) {
+                    } finally {
+                        pendingResult.finish()
+                    }
                 }
             }
             ACTION_TOGGLE_BUSY -> {
@@ -55,9 +62,13 @@ class WidgetToggleReceiver : BroadcastReceiver() {
                                 status.active
                             )
                         }
-                    } catch (_: Exception) {}
+                    } catch (_: Exception) {
+                    } finally {
+                        pendingResult.finish()
+                    }
                 }
             }
+            else -> pendingResult.finish()
         }
     }
 }

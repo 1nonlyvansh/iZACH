@@ -227,6 +227,12 @@ izach-android/build/
 *.aab
 
 # ========================
+# Syncthing (dual-instance shared brain sync — see .stignore)
+# ========================
+.stfolder/
+.stversions/
+
+# ========================
 # OS junk
 # ========================
 .DS_Store

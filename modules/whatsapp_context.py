@@ -139,24 +139,30 @@ def _wait_for_bridge(timeout: int = 120) -> bool:
 
 # ── Processed message ID store ────────────────────────────────
 
-def _load_processed_ids() -> set:
+def _load_processed_ids() -> dict:
+    # dict.fromkeys() instead of set() — dicts preserve insertion order
+    # (sets never do, in any Python version), so _mark_processed()'s trim
+    # step below actually evicts the oldest ids instead of an arbitrary
+    # hash-order subset. Membership checks (`in`/`not in`) work identically
+    # on both, so this is a drop-in swap for every caller.
     if not os.path.exists(PROCESSED_FILE):
-        return set()
+        return {}
     try:
         with open(PROCESSED_FILE) as f:
-            return set(json.load(f))
+            return dict.fromkeys(json.load(f))
     except Exception:
-        return set()
+        return {}
 
 
 def _mark_processed(msg_id: str):
     if not msg_id:
         return
     ids = _load_processed_ids()
-    ids.add(msg_id)
-    # trim to cap
+    ids[msg_id] = None
+    # trim to cap — keep the newest MAX_STORED_IDS, oldest-first order
+    # preserved by dict.fromkeys() above
     if len(ids) > MAX_STORED_IDS:
-        ids = set(list(ids)[-MAX_STORED_IDS:])
+        ids = dict.fromkeys(list(ids)[-MAX_STORED_IDS:])
     with open(PROCESSED_FILE, "w") as f:
         json.dump(list(ids), f)
 

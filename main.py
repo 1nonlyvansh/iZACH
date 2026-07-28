@@ -326,6 +326,25 @@ def stop_speech():
 _last_izach_question: str = ""   # last spoken text if it ended with '?'
 _question_expires_at: float = 0.0
 
+# Which channel triggered the command currently being processed — "voice" (the
+# default, matching original always-speak behaviour) or "text" (typed into the
+# chat UI). speak() reads this to decide whether to do TTS + WS-broadcast a
+# chat bubble, since a text command's reply is already shown via the direct
+# HTTP response and doesn't need either. Deliberately a plain module global,
+# not reset back to "voice" after each text command: background threads a
+# command spawns (e.g. a deferred "download ready" notice) call speak() after
+# the request has already returned, and still need to see "text" correctly —
+# the voice loop reclaims it to "voice" before every command it processes, so
+# in practice it's never stale for longer than the gap between commands, when
+# nothing calls speak() anyway. See modules/ui_api.py's /command route.
+_SPEAK_SOURCE = "voice"
+
+
+def set_speak_source(source: str):
+    global _SPEAK_SOURCE
+    _SPEAK_SOURCE = source
+
+
 def speak(text, tone: str = "casual"):
     if not text:
         return
@@ -337,6 +356,12 @@ def speak(text, tone: str = "casual"):
         return
     if app and hasattr(app, 'write_log'):
         app.write_log(f"iZACH: {display_text}")
+
+    if _SPEAK_SOURCE == "text":
+        # Typed command — the chat UI already has this reply via the direct
+        # HTTP response, and no TTS should play for something you typed.
+        return
+
     if app and hasattr(app, 'set_speaking'):
         app.set_speaking(True)
     try:
@@ -1316,6 +1341,7 @@ def start_brain(ui=None):
                     if _wake_detector and _wake_detector.is_active():
                         _wake_detector.extend_active()
                     continue
+                set_speak_source("voice")
                 print(f"[USER]: {query}")
                 if app and hasattr(app, 'root'):
                     try:

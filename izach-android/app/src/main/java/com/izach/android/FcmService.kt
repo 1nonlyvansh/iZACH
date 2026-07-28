@@ -11,9 +11,8 @@ import androidx.core.content.ContextCompat
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import com.izach.android.network.IZACHApi
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 
 /**
  * Fallback delivery path for DND/handoff/reminder alerts when the app is
@@ -25,8 +24,12 @@ class FcmService : FirebaseMessagingService() {
 
     override fun onNewToken(token: String) {
         super.onNewToken(token)
+        // FCM already calls onNewToken() off the main thread, and a fire-and-
+        // forget coroutine here isn't guaranteed to finish before the Service
+        // is torn down — block on it (runBlocking is safe, we're not on the
+        // main thread) so registration actually completes.
         val api = IZACHApi(this)
-        CoroutineScope(Dispatchers.IO).launch {
+        runBlocking(Dispatchers.IO) {
             api.registerFcmToken(token)
         }
     }

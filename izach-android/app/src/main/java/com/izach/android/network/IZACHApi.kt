@@ -669,6 +669,19 @@ class IZACHApi(context: Context) {
 
     fun screenshotImageUrl(filename: String): String = "${baseUrl()}/screenshot/image/$filename"
 
+    // /screenshot/image requires the pairing signature like every other
+    // route — fetch through the signed `client` (its interceptor attaches
+    // X-iZACH-Signature/-Timestamp) rather than a bare OkHttpClient, or the
+    // backend 401s and the caller silently gets a null bitmap.
+    suspend fun screenshotImageBytes(filename: String): ByteArray? = withContext(Dispatchers.IO) {
+        runCatching {
+            val req = Request.Builder().url(screenshotImageUrl(filename)).build()
+            val resp = client.newCall(req).execute()
+            if (!resp.isSuccessful) return@withContext null
+            resp.body?.bytes()
+        }.getOrNull()
+    }
+
     suspend fun captureScreenshot(): Result<String> = withContext(Dispatchers.IO) {
         runCatching {
             val req = Request.Builder().url("${baseUrl()}/screenshot/capture")

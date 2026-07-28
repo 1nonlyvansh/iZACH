@@ -15,6 +15,7 @@ from flask_cors import CORS
 from werkzeug.utils import secure_filename
 
 from modules.platform_utils import IS_MAC
+from modules.audio_init_lock import PYAUDIO_INIT_LOCK
 
 # ── Safe mode — commands requiring explicit confirmation ──────
 _DANGEROUS_CMDS = [
@@ -506,6 +507,12 @@ def ui_command():
         captured = []
         chain_obj = getattr(_chain_fn, '__self__', None)
         _patched = _patch_agents_for_text_reply(chain_obj, captured)
+
+        try:
+            import main as _main
+            _main.set_speak_source("text")
+        except Exception:
+            pass
 
         _chain_fn(text)
 
@@ -2809,7 +2816,6 @@ def vision_stream():
 def mic_devices():
     try:
         import pyaudio
-        p = pyaudio.PyAudio()
         devices = []
         seen_names = set()
 
@@ -2825,38 +2831,40 @@ def mic_devices():
             "what u hear",
         ]
 
-        for i in range(p.get_device_count()):
-            info = p.get_device_info_by_index(i)
-            if info.get("maxInputChannels", 0) <= 0:
-                continue
+        with PYAUDIO_INIT_LOCK:
+            p = pyaudio.PyAudio()
+            for i in range(p.get_device_count()):
+                info = p.get_device_info_by_index(i)
+                if info.get("maxInputChannels", 0) <= 0:
+                    continue
 
-            raw_name = info.get("name", "")
-            # PyAudio on some Windows builds returns bytes; always coerce to str
-            if isinstance(raw_name, bytes):
-                name = raw_name.decode("utf-8", errors="replace").strip()
-            else:
-                name = str(raw_name).strip()
+                raw_name = info.get("name", "")
+                # PyAudio on some Windows builds returns bytes; always coerce to str
+                if isinstance(raw_name, bytes):
+                    name = raw_name.decode("utf-8", errors="replace").strip()
+                else:
+                    name = str(raw_name).strip()
 
-            # Skip empty / placeholder names like "Input ()"
-            if not name or name in ("Input ()", "Microphone ()"):
-                continue
+                # Skip empty / placeholder names like "Input ()"
+                if not name or name in ("Input ()", "Microphone ()"):
+                    continue
 
-            # Skip known virtual / loopback / streaming devices
-            name_lower = name.lower()
-            if any(p_ in name_lower for p_ in _SKIP_PATTERNS):
-                continue
+                # Skip known virtual / loopback / streaming devices
+                name_lower = name.lower()
+                if any(p_ in name_lower for p_ in _SKIP_PATTERNS):
+                    continue
 
-            # De-duplicate — pyaudio lists same physical mic under multiple
-            # Windows audio API layers (MME, DirectSound, WASAPI).
-            # Keep first occurrence only.
-            norm = re.sub(r'\s*\(.*?\)\s*$', '', name).strip().lower()
-            if norm in seen_names:
-                continue
-            seen_names.add(norm)
+                # De-duplicate — pyaudio lists same physical mic under multiple
+                # Windows audio API layers (MME, DirectSound, WASAPI).
+                # Keep first occurrence only.
+                norm = re.sub(r'\s*\(.*?\)\s*$', '', name).strip().lower()
+                if norm in seen_names:
+                    continue
+                seen_names.add(norm)
 
-            devices.append({"index": i, "name": name})
+                devices.append({"index": i, "name": name})
 
-        p.terminate()
+            p.terminate()
         import main as _main
         active = getattr(_main, "_mic_device_index", None)
         return jsonify({"ok": True, "devices": devices, "active": active})

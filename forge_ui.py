@@ -1935,12 +1935,32 @@ class BrowserWindow(tk.Toplevel):
 # SETTINGS PAGE
 # ─────────────────────────────────────────────
 class SettingsPage(tk.Frame):
+    # Tab key -> (label, builder-method-name(s) run in order to populate self._body)
+    _TABS = [
+        ("memory",     "MEMORY",                          ["_build_memory_section"]),
+        ("personal",   "PERSONALISATION",                 ["_build_voice_section", "_build_proactive_section"]),
+        ("appearance", "APPEARANCE",                       ["_build_appearance_section"]),
+        ("device",     "DEVICE CONNECTION",                ["_build_device_connection_section", "_build_phone_pairing_section"]),
+        ("notif",      "NOTIFICATIONS AND ANNOUNCEMENTS",  ["_build_meetings_section", "_build_notifications_section"]),
+        ("services",   "CONNECTED SERVICES",               ["_build_email_agent_section", "_build_connected_services_section"]),
+        ("boot",       "BOOT SETTINGS",                    ["_build_boot_settings_section"]),
+        ("keys",       "KEYS & ID",                        ["_build_api_section"]),
+        ("contacts",   "CONTACTS",                         ["_build_contacts_section"]),
+        ("security",   "SECURITY",                         ["_build_security_section"]),
+        ("commands",   "COMMANDS",                         ["_build_commands_section"]),
+        ("links",      "CUSTOM LINKS",                     ["_build_custom_websites_section"]),
+        ("others",     "OTHERS",                           ["_build_others_section"]),
+        ("advanced",   "ADVANCED",                         ["_build_advanced_section"]),
+        ("about",      "ABOUT iZACH",                      ["_build_dashboard_section", "_build_about_section"]),
+    ]
+
     def __init__(self, parent, on_close, **kw):
         super().__init__(parent, bg=BG_DEEP, **kw)
         self.on_close = on_close
         self._memory_rows = []
+        self._active_tab = self._TABS[0][0]
         self._build()
-        self._load_all()
+        self._switch_settings_tab(self._active_tab)
 
     def _build(self):
         # Header
@@ -1960,6 +1980,51 @@ class SettingsPage(tk.Frame):
                   command=self._close,
                   padx=12, pady=4).pack(side="right", padx=16, pady=8)
 
+        # Horizontally-scrollable tab strip
+        tabstrip_outer = tk.Frame(self, bg=BG_PANEL, height=34)
+        tabstrip_outer.pack(fill="x")
+        tabstrip_outer.pack_propagate(False)
+
+        self._tab_canvas = tk.Canvas(tabstrip_outer, bg=BG_PANEL, highlightthickness=0, height=34)
+        self._tab_canvas.pack(fill="both", expand=True)
+
+        self._tab_bar = tk.Frame(self._tab_canvas, bg=BG_PANEL)
+        self._tab_bar_win = self._tab_canvas.create_window((0, 0), window=self._tab_bar, anchor="nw")
+        self._tab_bar.bind("<Configure>", lambda e: self._tab_canvas.configure(
+            scrollregion=self._tab_canvas.bbox("all")))
+
+        def _tab_wheel(e):
+            step = int(-1 * (e.delta / 120))
+            self._tab_canvas.xview_scroll(step, "units")
+        # Windows sends vertical deltas on <MouseWheel> for both plain and
+        # shift-scroll — bind both so either scroll gesture moves the tab strip.
+        self._tab_canvas.bind("<MouseWheel>", _tab_wheel)
+        self._tab_canvas.bind("<Shift-MouseWheel>", _tab_wheel)
+
+        self._tab_drag_x = None
+        def _tab_drag_start(e):
+            self._tab_drag_x = e.x
+        def _tab_drag_move(e):
+            if self._tab_drag_x is None:
+                return
+            dx = e.x - self._tab_drag_x
+            self._tab_canvas.xview_scroll(int(-dx / 4), "units")
+            self._tab_drag_x = e.x
+        self._tab_canvas.bind("<ButtonPress-1>", _tab_drag_start)
+        self._tab_canvas.bind("<B1-Motion>", _tab_drag_move)
+
+        self._tab_buttons = {}
+        for key, label, _builders in self._TABS:
+            f = tk.Frame(self._tab_bar, bg=BG_PANEL)
+            f.pack(side="left", padx=(0, 1), pady=2, fill="y")
+            lbl = tk.Label(f, text=label, bg=BG_PANEL, fg=TEXT_SEC,
+                          font=("Consolas", 8, "bold"), padx=10, pady=6, cursor="hand2")
+            lbl.pack()
+            lbl.bind("<Button-1>", lambda e, k=key: self._switch_settings_tab(k))
+            lbl.bind("<MouseWheel>", _tab_wheel)
+            lbl.bind("<Shift-MouseWheel>", _tab_wheel)
+            self._tab_buttons[key] = (f, lbl)
+
         # Scrollable body
         body_outer = tk.Frame(self, bg=BG_DEEP)
         body_outer.pack(fill="both", expand=True, padx=16, pady=10)
@@ -1972,6 +2037,7 @@ class SettingsPage(tk.Frame):
         scrollbar.pack(side="right", fill="y")
         canvas.pack(side="left", fill="both", expand=True)
 
+        self._body_canvas = canvas
         self._body = tk.Frame(canvas, bg=BG_DEEP)
         self._body_win = canvas.create_window((0, 0), window=self._body, anchor="nw")
         self._body.bind("<Configure>", lambda e: canvas.configure(
@@ -1979,17 +2045,27 @@ class SettingsPage(tk.Frame):
         canvas.bind("<Configure>", lambda e: canvas.itemconfig(
             self._body_win, width=e.width))
 
-        self._build_phone_pairing_section()
-        self._build_dashboard_section()
-        self._build_memory_section()
-        self._build_api_section()
-        self._build_voice_section()
-        self._build_meetings_section()
-        self._build_proactive_section()
-        self._build_email_agent_section()
-        self._build_notifications_section()
-        self._build_custom_websites_section()
-        self._build_about_section()
+        def _body_wheel(e):
+            canvas.yview_scroll(int(-1 * (e.delta / 120)), "units")
+        canvas.bind("<MouseWheel>", _body_wheel)
+        self._body.bind("<MouseWheel>", _body_wheel)
+
+    def _switch_settings_tab(self, key):
+        self._active_tab = key
+        for k, (f, lbl) in self._tab_buttons.items():
+            active = (k == key)
+            bg = CYAN_DARK if active else BG_PANEL
+            f.configure(bg=bg)
+            lbl.configure(bg=bg, fg=CYAN if active else TEXT_SEC)
+
+        for w in self._body.winfo_children():
+            w.destroy()
+
+        builders = next(b for k2, _lbl, b in self._TABS if k2 == key)
+        for name in builders:
+            getattr(self, name)()
+
+        self._body_canvas.yview_moveto(0)
 
     def _section(self, title):
         card = _card(self._body)
@@ -2031,6 +2107,8 @@ class SettingsPage(tk.Frame):
                   font=("Consolas", 8, "bold"), relief="flat", cursor="hand2",
                   command=self._load_phone_pairing_ui, padx=8, pady=3).pack(side="left")
 
+        self._load_phone_pairing_ui()
+
     def _load_phone_pairing_ui(self):
         def _work():
             try:
@@ -2048,10 +2126,10 @@ class SettingsPage(tk.Frame):
                         self._qr_label.config(image=photo, text="")
                         self._qr_label.image = photo  # keep a reference, Tk drops it otherwise
                     self._pairing_secret_label.config(text=secret or "—")
-                self.after(0, _apply)
+                self._safe_after(0, _apply)
             except Exception as e:
                 print(f"[SETTINGS] Phone pairing load error: {e}")
-                self.after(0, lambda: self._qr_label.config(text="unavailable", fg=AMBER))
+                self._safe_after(0, lambda: self._qr_label.config(text="unavailable", fg=AMBER))
         threading.Thread(target=_work, daemon=True).start()
 
     def _copy_pairing_secret(self):
@@ -2075,6 +2153,8 @@ class SettingsPage(tk.Frame):
         tk.Button(card, text="↻ REFRESH", bg=BG_PANEL, fg=TEXT_SEC,
                   font=("Consolas", 8, "bold"), relief="flat", cursor="hand2",
                   command=self._load_dashboard_ui, padx=8, pady=3).pack(anchor="w", padx=12, pady=(6, 10))
+
+        self._load_dashboard_ui()
 
     def _load_dashboard_ui(self):
         def _work():
@@ -2117,7 +2197,7 @@ class SettingsPage(tk.Frame):
                 for label, (text, color) in results.items():
                     if label in self._dash_rows:
                         self._dash_rows[label].config(text=text, fg=color)
-            self.after(0, _apply)
+            self._safe_after(0, _apply)
         threading.Thread(target=_work, daemon=True).start()
 
     # ── Memory Section ──
@@ -2164,6 +2244,8 @@ class SettingsPage(tk.Frame):
                   relief="flat", cursor="hand2",
                   command=self._add_memory,
                   padx=10, pady=3).pack(side="left")
+
+        self._load_memory_ui()
 
     def _load_memory_ui(self):
         for w in self._memory_frame.winfo_children():
@@ -2254,6 +2336,8 @@ class SettingsPage(tk.Frame):
                   command=self._save_api_keys,
                   padx=14, pady=4).pack(anchor="w", padx=12, pady=(6, 10))
 
+        self._load_api_keys()
+
     def _load_api_keys(self):
         try:
             import json
@@ -2271,17 +2355,21 @@ class SettingsPage(tk.Frame):
     def _save_api_keys(self):
         import json
         path = os.path.join(os.path.dirname(__file__), "api_keys.json")
-        keys = {k: e.get() for k, e in self._api_entries.items()}
+        # Read-merge-write — this used to blindly overwrite the whole file
+        # with ONLY these 6 key fields, silently wiping out every other
+        # setting (dual_instance, boot_terminals, memory, etc) on every save.
+        data = {}
+        if os.path.exists(path):
+            with open(path) as f:
+                data = json.load(f)
+        data.update({k: e.get() for k, e in self._api_entries.items()})
         with open(path, "w") as f:
-            json.dump(keys, f, indent=2)
-        # Show saved confirmation
-        for w in self._body.winfo_children():
-            pass
+            json.dump(data, f, indent=2)
         self._saved_label = tk.Label(self._body, text="✓ API keys saved. Restart to apply.",
                                      bg=BG_DEEP, fg=GREEN,
                                      font=("Consolas", 9))
         self._saved_label.pack(pady=4)
-        self.after(3000, lambda: self._saved_label.destroy()
+        self._safe_after(3000, lambda: self._saved_label.destroy()
                    if self._saved_label.winfo_exists() else None)
 
     # ── Voice Section ──
@@ -2683,7 +2771,7 @@ class SettingsPage(tk.Frame):
                 items = r.get("watchlist", [])
             except Exception:
                 items = []
-            self.after(0, lambda: (self._email_watchlist_entry.delete(0, "end"),
+            self._safe_after(0, lambda: (self._email_watchlist_entry.delete(0, "end"),
                                     self._email_watchlist_entry.insert(0, ", ".join(items))))
         threading.Thread(target=_work, daemon=True).start()
 
@@ -2714,7 +2802,7 @@ class SettingsPage(tk.Frame):
                     lines.append(f"{o.get('description') or 'Package'} via {o.get('carrier') or '?'} — "
                                  f"{(o.get('status') or '').replace('_', ' ')}{eta}")
                 self._email_orders_lbl.config(text="\n".join(lines))
-            self.after(0, _apply)
+            self._safe_after(0, _apply)
         threading.Thread(target=_work, daemon=True).start()
 
     def _email_refresh_status(self):
@@ -2723,7 +2811,7 @@ class SettingsPage(tk.Frame):
                 r = requests.get("http://127.0.0.1:5050/email/auth/status", timeout=5).json()
             except Exception:
                 r = {"connected": False, "status": "idle"}
-            self.after(0, lambda: self._email_apply_status(r))
+            self._safe_after(0, lambda: self._email_apply_status(r))
         threading.Thread(target=_work, daemon=True).start()
 
     def _email_apply_status(self, status):
@@ -2749,7 +2837,7 @@ class SettingsPage(tk.Frame):
             except Exception as e:
                 print(f"[SETTINGS] Email connect error: {e}")
                 return
-            self.after(0, self._email_poll_connect)
+            self._safe_after(0, self._email_poll_connect)
         threading.Thread(target=_work, daemon=True).start()
 
     def _email_poll_connect(self, attempt=0):
@@ -2763,8 +2851,8 @@ class SettingsPage(tk.Frame):
                 if r.get("status") in ("connected", "error") or attempt > 60:
                     self._email_apply_status(r)
                 else:
-                    self.after(2000, lambda: self._email_poll_connect(attempt + 1))
-            self.after(0, _apply)
+                    self._safe_after(2000, lambda: self._email_poll_connect(attempt + 1))
+            self._safe_after(0, _apply)
         threading.Thread(target=_work, daemon=True).start()
 
     def _email_disconnect(self):
@@ -2773,7 +2861,7 @@ class SettingsPage(tk.Frame):
                 requests.post("http://127.0.0.1:5050/email/auth/disconnect", timeout=5)
             except Exception as e:
                 print(f"[SETTINGS] Email disconnect error: {e}")
-            self.after(0, self._email_refresh_status)
+            self._safe_after(0, self._email_refresh_status)
         threading.Thread(target=_work, daemon=True).start()
 
     # ── Unified Notifications Section (Phase 5) ──
@@ -2816,7 +2904,7 @@ class SettingsPage(tk.Frame):
                     body = (n.get("body") or "")[:70]
                     lines.append(f"{icon} {n.get('title', '')}  [{when}]\n    {body}")
                 self._notif_feed_lbl.config(text="\n".join(lines))
-            self.after(0, _apply)
+            self._safe_after(0, _apply)
         threading.Thread(target=_work, daemon=True).start()
 
     # ── Custom Websites Section ──
@@ -2917,7 +3005,7 @@ class SettingsPage(tk.Frame):
                 self._ws_url_entry.delete(0, "end")
                 self._ws_msg_var.set(f'Added "{name}"')
                 self._load_custom_websites_ui()
-                self.after(3000, lambda: self._ws_msg_var.set(""))
+                self._safe_after(3000, lambda: self._ws_msg_var.set(""))
             else:
                 self._ws_msg_var.set(data.get("error", "Error"))
         except Exception as e:
@@ -2998,12 +3086,1037 @@ class SettingsPage(tk.Frame):
         except Exception as e:
             print(f"[SETTINGS] Nickname save error: {e}")
 
-    def _load_all(self):
-        self._load_phone_pairing_ui()
-        self._load_dashboard_ui()
-        self._load_memory_ui()
-        self._load_api_keys()
-        self._load_custom_websites_ui()
+    # ── Generic /settings REST helpers — new sections below use these
+    # instead of the local api_keys.json read/write older sections use.
+    # It's the same underlying file (SETTINGS_FILE = "api_keys.json" in
+    # modules/ui_api.py), but going through the route matters for
+    # dual_instance specifically (its POST handler installs/uninstalls the
+    # auto-promote watchdog as a side effect) and for anything that needs
+    # live backend state rather than a static flag. ──
+    def _settings_get(self):
+        try:
+            return requests.get(f"{_API}/settings", timeout=5).json()
+        except Exception as e:
+            print(f"[SETTINGS] GET /settings error: {e}")
+            return None
+
+    def _settings_post(self, payload):
+        def _work():
+            try:
+                requests.post(f"{_API}/settings", json=payload, timeout=8)
+            except Exception as e:
+                print(f"[SETTINGS] POST /settings error: {e}")
+        threading.Thread(target=_work, daemon=True).start()
+
+    # ── Appearance Section ──
+    def _build_appearance_section(self):
+        card = self._section("APPEARANCE")
+        tk.Label(card, text="FONT SIZE", bg=BG_CARD, fg=TEXT_PRI,
+                 font=("Consolas", 9)).pack(anchor="w", padx=12, pady=(0, 6))
+
+        self._font_size_var = tk.StringVar(value="13")
+        opt_row = tk.Frame(card, bg=BG_CARD)
+        opt_row.pack(anchor="w", padx=12, pady=(0, 4))
+        for label, val in [("Small", "11"), ("Normal", "13"), ("Large", "15"), ("X-Large", "17")]:
+            tk.Radiobutton(opt_row, text=label, value=val, variable=self._font_size_var,
+                          bg=BG_CARD, fg=TEXT_SEC, selectcolor=BG_DEEP, activebackground=BG_CARD,
+                          font=("Consolas", 8), command=self._save_font_size
+                          ).pack(side="left", padx=(0, 10))
+
+        tk.Label(card,
+                 text="Shared with Cortex UI (restart required to apply there). Forge UI\n"
+                      "hardcodes font sizes at each widget — living font-scaling here would\n"
+                      "need a much larger refactor, out of scope for this change.",
+                 bg=BG_CARD, fg=TEXT_SEC, font=("Consolas", 8), justify="left").pack(
+            anchor="w", padx=12, pady=(0, 10))
+
+        self._load_font_size()
+
+    def _load_font_size(self):
+        def _work():
+            d = self._settings_get()
+            fs = "13"
+            if d and d.get("ok"):
+                fs = str((d.get("settings") or {}).get("font_size", 13))
+            def _apply():
+                try:
+                    self._font_size_var.set(fs)
+                except Exception:
+                    pass
+            self._safe_after(0, _apply)
+        threading.Thread(target=_work, daemon=True).start()
+
+    def _save_font_size(self):
+        try:
+            self._settings_post({"font_size": int(self._font_size_var.get())})
+        except Exception:
+            pass
+
+    # ── Device Connection Section — dual-instance + mobile phone ──
+    def _build_device_connection_section(self):
+        card = self._section("MULTI-DEVICE (WINDOWS + MAC)")
+        tk.Label(card,
+                 text="Run iZACH on two machines — whichever starts second detects the other\n"
+                      "and offers Secondary Connector mode instead of a duplicate brain.",
+                 bg=BG_CARD, fg=TEXT_SEC, font=("Consolas", 8), justify="left").pack(
+            anchor="w", padx=12, pady=(0, 8))
+
+        row = tk.Frame(card, bg=BG_CARD)
+        row.pack(fill="x", padx=12, pady=4)
+        self._dual_enabled_var = tk.BooleanVar(value=False)
+        tk.Checkbutton(row, text="Enable Dual-Instance Coordination", variable=self._dual_enabled_var,
+                      bg=BG_CARD, fg=TEXT_SEC, selectcolor=BG_DEEP, activebackground=BG_CARD,
+                      font=("Consolas", 8)).pack(side="left")
+
+        host_row = tk.Frame(card, bg=BG_CARD)
+        host_row.pack(fill="x", padx=12, pady=4)
+        tk.Label(host_row, text="Peer Host", bg=BG_CARD, fg=TEXT_PRI,
+                 font=("Consolas", 9), width=14, anchor="w").pack(side="left")
+        self._peer_host_entry = tk.Entry(host_row, bg=BG_DEEP, fg=CYAN, insertbackground=CYAN,
+                                          font=("Consolas", 9), relief="flat",
+                                          highlightthickness=1, highlightbackground=BORDER_HI, width=18)
+        self._peer_host_entry.pack(side="left", padx=(4, 12), ipady=3)
+        tk.Label(host_row, text="Port", bg=BG_CARD, fg=TEXT_PRI,
+                 font=("Consolas", 9)).pack(side="left")
+        self._peer_port_entry = tk.Entry(host_row, bg=BG_DEEP, fg=CYAN, insertbackground=CYAN,
+                                          font=("Consolas", 9), relief="flat",
+                                          highlightthickness=1, highlightbackground=BORDER_HI, width=8)
+        self._peer_port_entry.pack(side="left", padx=(4, 0), ipady=3)
+
+        pin_row = tk.Frame(card, bg=BG_CARD)
+        pin_row.pack(fill="x", padx=12, pady=4)
+        tk.Label(pin_row, text="Primary Pin", bg=BG_CARD, fg=TEXT_PRI,
+                 font=("Consolas", 9), width=14, anchor="w").pack(side="left")
+        self._primary_pin_var = tk.StringVar(value="auto")
+        for label, val in [("Auto", "auto"), ("Prefer Mac", "always_mac"), ("Prefer Windows", "always_windows")]:
+            tk.Radiobutton(pin_row, text=label, value=val, variable=self._primary_pin_var,
+                          bg=BG_CARD, fg=TEXT_SEC, selectcolor=BG_DEEP, activebackground=BG_CARD,
+                          font=("Consolas", 8)).pack(side="left", padx=(0, 8))
+
+        promote_row = tk.Frame(card, bg=BG_CARD)
+        promote_row.pack(fill="x", padx=12, pady=4)
+        self._auto_promote_var = tk.BooleanVar(value=False)
+        tk.Checkbutton(promote_row, text="Auto-Promote if Primary Goes Offline", variable=self._auto_promote_var,
+                      bg=BG_CARD, fg=TEXT_SEC, selectcolor=BG_DEEP, activebackground=BG_CARD,
+                      font=("Consolas", 8)).pack(side="left")
+        tk.Label(promote_row, text="Timeout (min)", bg=BG_CARD, fg=TEXT_PRI,
+                 font=("Consolas", 9)).pack(side="left", padx=(12, 4))
+        self._auto_promote_timeout_entry = tk.Entry(promote_row, bg=BG_DEEP, fg=CYAN, insertbackground=CYAN,
+                                                     font=("Consolas", 9), relief="flat",
+                                                     highlightthickness=1, highlightbackground=BORDER_HI, width=5)
+        self._auto_promote_timeout_entry.pack(side="left", ipady=3)
+
+        save_row = tk.Frame(card, bg=BG_CARD)
+        save_row.pack(fill="x", padx=12, pady=(8, 4))
+        tk.Button(save_row, text="SAVE", command=self._save_dual_instance,
+                 bg=CYAN_DARK, fg=CYAN, font=("Consolas", 8, "bold"),
+                 relief="flat", cursor="hand2", padx=10, pady=3).pack(side="left")
+
+        status_row = tk.Frame(card, bg=BG_CARD)
+        status_row.pack(fill="x", padx=12, pady=(8, 4))
+        self._peer_status_lbl = tk.Label(status_row, text="● NOT CONFIGURED", bg=BG_CARD, fg=TEXT_SEC,
+                                         font=("Consolas", 9, "bold"))
+        self._peer_status_lbl.pack(side="left")
+        tk.Button(status_row, text="TEST CONNECTION", command=self._test_peer_connection,
+                 bg=BG_PANEL, fg=TEXT_SEC, font=("Consolas", 8, "bold"),
+                 relief="flat", cursor="hand2", padx=8, pady=3).pack(side="left", padx=(12, 0))
+
+        tk.Frame(card, bg=BG_CARD, height=8).pack()
+        self._load_dual_instance()
+
+        # Mobile Phone sub-card
+        phone_card = self._section("MOBILE PHONE")
+        phone_status_row = tk.Frame(phone_card, bg=BG_CARD)
+        phone_status_row.pack(fill="x", padx=12, pady=(0, 6))
+        self._dc_phone_status_lbl = tk.Label(phone_status_row, text="● DISCONNECTED", bg=BG_CARD, fg=TEXT_SEC,
+                                             font=("Consolas", 9, "bold"))
+        self._dc_phone_status_lbl.pack(side="left")
+
+        self._dc_phone_name_lbl = tk.Label(phone_card, text="", bg=BG_CARD, fg=CYAN,
+                                           font=("Consolas", 8))
+        self._dc_phone_name_lbl.pack(anchor="w", padx=12, pady=(0, 6))
+
+        tk.Button(phone_card, text="REMOVE DEVICE", command=self._remove_phone_device,
+                 bg="#2a0000", fg=RED, font=("Consolas", 8, "bold"),
+                 relief="flat", cursor="hand2", padx=8, pady=4).pack(anchor="w", padx=12, pady=(0, 4))
+        tk.Label(phone_card,
+                 text="Rotates the pairing secret — the connected phone will need to\n"
+                      "re-scan the QR code (above) to reconnect.",
+                 bg=BG_CARD, fg=TEXT_SEC, font=("Consolas", 8), justify="left").pack(
+            anchor="w", padx=12, pady=(0, 8))
+        tk.Frame(phone_card, bg=BG_CARD, height=8).pack()
+
+        self._load_dc_phone_status()
+
+    def _load_dual_instance(self):
+        def _work():
+            d = self._settings_get()
+            di = {}
+            if d and d.get("ok"):
+                di = (d.get("settings") or {}).get("dual_instance") or {}
+            def _apply():
+                try:
+                    self._dual_enabled_var.set(bool(di.get("enabled")))
+                    self._peer_host_entry.delete(0, "end")
+                    self._peer_host_entry.insert(0, di.get("peer_host", "") or "")
+                    self._peer_port_entry.delete(0, "end")
+                    self._peer_port_entry.insert(0, str(di.get("peer_port", 5050)))
+                    self._primary_pin_var.set(di.get("primary_pin", "auto"))
+                    self._auto_promote_var.set(bool(di.get("auto_promote_enabled")))
+                    self._auto_promote_timeout_entry.delete(0, "end")
+                    self._auto_promote_timeout_entry.insert(0, str(di.get("auto_promote_timeout_minutes", 5)))
+                except Exception:
+                    pass
+            self._safe_after(0, _apply)
+        threading.Thread(target=_work, daemon=True).start()
+
+    def _save_dual_instance(self):
+        try:
+            port = int(self._peer_port_entry.get().strip() or 5050)
+        except ValueError:
+            port = 5050
+        try:
+            timeout = int(self._auto_promote_timeout_entry.get().strip() or 5)
+        except ValueError:
+            timeout = 5
+        payload = {"dual_instance": {
+            "enabled": self._dual_enabled_var.get(),
+            "peer_host": self._peer_host_entry.get().strip(),
+            "peer_port": port,
+            "primary_pin": self._primary_pin_var.get(),
+            "auto_promote_enabled": self._auto_promote_var.get(),
+            "auto_promote_timeout_minutes": timeout,
+        }}
+        self._settings_post(payload)
+
+    def _test_peer_connection(self):
+        try:
+            self._peer_status_lbl.config(text="● CHECKING…", fg=AMBER)
+        except Exception:
+            pass
+        def _work():
+            try:
+                d = requests.get(f"{_API}/peer/check", timeout=8).json()
+            except Exception:
+                d = {"ok": False}
+            def _apply():
+                try:
+                    if not d.get("ok"):
+                        self._peer_status_lbl.config(text="● ERROR CHECKING", fg=RED)
+                    elif not d.get("configured"):
+                        self._peer_status_lbl.config(text="● NOT CONFIGURED", fg=TEXT_SEC)
+                    elif d.get("reachable") and d.get("peer"):
+                        p = d["peer"]
+                        self._peer_status_lbl.config(
+                            text=f"● REACHABLE — {p.get('platform','?')} ({p.get('hostname','?')})", fg=GREEN)
+                    else:
+                        self._peer_status_lbl.config(text="● UNREACHABLE", fg=RED)
+                except Exception:
+                    pass
+            self._safe_after(0, _apply)
+        threading.Thread(target=_work, daemon=True).start()
+
+    def _load_dc_phone_status(self):
+        def _work():
+            try:
+                d = requests.get(f"{_API}/phone/status", timeout=5).json()
+            except Exception:
+                d = {"connected": False, "device_name": ""}
+            def _apply():
+                try:
+                    connected = bool(d.get("connected"))
+                    self._dc_phone_status_lbl.config(
+                        text="● CONNECTED" if connected else "● DISCONNECTED",
+                        fg=GREEN if connected else TEXT_SEC)
+                    name = d.get("device_name") or ""
+                    self._dc_phone_name_lbl.config(text=f"Device: {name}" if (connected and name) else "")
+                except Exception:
+                    pass
+            self._safe_after(0, _apply)
+        threading.Thread(target=_work, daemon=True).start()
+
+    def _remove_phone_device(self):
+        def _work():
+            try:
+                requests.post(f"{_API}/phone/unpair", timeout=8)
+            except Exception as e:
+                print(f"[SETTINGS] Phone unpair error: {e}")
+            self._safe_after(0, self._load_dc_phone_status)
+            self._safe_after(0, self._load_phone_pairing_ui)
+        threading.Thread(target=_work, daemon=True).start()
+
+    # ── Connected Services additions — Calendar, Spotify, WhatsApp restart ──
+    def _build_connected_services_section(self):
+        card = self._section("GOOGLE CALENDAR")
+        cal_status_row = tk.Frame(card, bg=BG_CARD)
+        cal_status_row.pack(fill="x", padx=12, pady=(0, 6))
+        self._cal_status_lbl = tk.Label(cal_status_row, text="● NOT CONNECTED", bg=BG_CARD, fg=TEXT_SEC,
+                                        font=("Consolas", 9, "bold"))
+        self._cal_status_lbl.pack(side="left")
+        cal_btn_row = tk.Frame(card, bg=BG_CARD)
+        cal_btn_row.pack(fill="x", padx=12, pady=(0, 10))
+        self._cal_connect_btn = tk.Button(cal_btn_row, text="⊕ CONNECT GOOGLE CALENDAR", command=self._cal_connect_start,
+                 bg=CYAN_DARK, fg=CYAN, font=("Consolas", 8, "bold"),
+                 relief="flat", cursor="hand2", padx=8, pady=4)
+        self._cal_connect_btn.pack(side="left")
+        self._cal_disconnect_btn = tk.Button(cal_btn_row, text="DISCONNECT", command=self._cal_disconnect,
+                 bg="#2a0000", fg=RED, font=("Consolas", 8, "bold"),
+                 relief="flat", cursor="hand2", padx=8, pady=4)
+        tk.Frame(card, bg=BG_CARD, height=6).pack()
+
+        card2 = self._section("SPOTIFY")
+        sp_status_row = tk.Frame(card2, bg=BG_CARD)
+        sp_status_row.pack(fill="x", padx=12, pady=(0, 6))
+        self._sp_status_lbl = tk.Label(sp_status_row, text="● NOT CONNECTED", bg=BG_CARD, fg=TEXT_SEC,
+                                       font=("Consolas", 9, "bold"))
+        self._sp_status_lbl.pack(side="left")
+        sp_btn_row = tk.Frame(card2, bg=BG_CARD)
+        sp_btn_row.pack(fill="x", padx=12, pady=(0, 10))
+        self._sp_connect_btn = tk.Button(sp_btn_row, text="⊕ CONNECT SPOTIFY", command=self._sp_connect_start,
+                 bg=CYAN_DARK, fg=CYAN, font=("Consolas", 8, "bold"),
+                 relief="flat", cursor="hand2", padx=8, pady=4)
+        self._sp_connect_btn.pack(side="left")
+        self._sp_disconnect_btn = tk.Button(sp_btn_row, text="DISCONNECT", command=self._sp_disconnect,
+                 bg="#2a0000", fg=RED, font=("Consolas", 8, "bold"),
+                 relief="flat", cursor="hand2", padx=8, pady=4)
+        tk.Label(card2, text="Client ID/Secret are entered separately under Keys & ID — this is\n"
+                             "just the connect/disconnect step on top of those credentials.",
+                bg=BG_CARD, fg=TEXT_SEC, font=("Consolas", 8), justify="left").pack(
+            anchor="w", padx=12, pady=(0, 8))
+        tk.Frame(card2, bg=BG_CARD, height=6).pack()
+
+        card3 = self._section("WHATSAPP")
+        self._wa_restart_msg_var = tk.StringVar()
+        tk.Button(card3, text="RESTART WHATSAPP BRIDGE", command=self._restart_whatsapp_bridge,
+                 bg=BG_PANEL, fg=TEXT_SEC, font=("Consolas", 8, "bold"),
+                 relief="flat", cursor="hand2", padx=8, pady=4).pack(anchor="w", padx=12, pady=(0, 4))
+        tk.Label(card3, textvariable=self._wa_restart_msg_var, bg=BG_CARD, fg=AMBER,
+                 font=("Consolas", 8)).pack(anchor="w", padx=12, pady=(0, 8))
+        tk.Frame(card3, bg=BG_CARD, height=6).pack()
+
+        self._cal_refresh_status()
+        self._sp_refresh_status()
+
+    def _cal_refresh_status(self):
+        def _work():
+            try:
+                r = requests.get(f"{_API}/calendar/auth/status", timeout=5).json()
+            except Exception:
+                r = {"connected": False}
+            self._safe_after(0, lambda: self._cal_apply_status(r))
+        threading.Thread(target=_work, daemon=True).start()
+
+    def _cal_apply_status(self, status):
+        try:
+            connected = bool(status.get("connected"))
+            if connected:
+                user = status.get("user") or ""
+                self._cal_status_lbl.config(text=f"● CONNECTED — {user}" if user else "● CONNECTED", fg=GREEN)
+                self._cal_connect_btn.pack_forget()
+                self._cal_disconnect_btn.pack(side="left")
+            else:
+                self._cal_status_lbl.config(text="● NOT CONNECTED", fg=TEXT_SEC)
+                self._cal_disconnect_btn.pack_forget()
+                self._cal_connect_btn.pack(side="left")
+        except Exception:
+            pass
+
+    def _cal_connect_start(self):
+        def _work():
+            try:
+                requests.post(f"{_API}/calendar/auth/connect", timeout=5)
+            except Exception as e:
+                print(f"[SETTINGS] Calendar connect error: {e}")
+                return
+            self._safe_after(0, lambda: self._cal_poll_connect())
+        threading.Thread(target=_work, daemon=True).start()
+
+    def _cal_poll_connect(self, attempt=0):
+        try:
+            self._cal_status_lbl.config(text="● CONNECTING…", fg=AMBER)
+        except Exception:
+            pass
+        def _work():
+            try:
+                r = requests.get(f"{_API}/calendar/auth/status", timeout=5).json()
+            except Exception:
+                r = {"connected": False}
+            def _apply():
+                if r.get("connected") or attempt > 40:
+                    self._cal_apply_status(r)
+                else:
+                    self._safe_after(3000, lambda: self._cal_poll_connect(attempt + 1))
+            self._safe_after(0, _apply)
+        threading.Thread(target=_work, daemon=True).start()
+
+    def _cal_disconnect(self):
+        def _work():
+            try:
+                requests.post(f"{_API}/calendar/auth/disconnect", timeout=5)
+            except Exception as e:
+                print(f"[SETTINGS] Calendar disconnect error: {e}")
+            self._safe_after(0, self._cal_refresh_status)
+        threading.Thread(target=_work, daemon=True).start()
+
+    def _sp_refresh_status(self):
+        def _work():
+            try:
+                r = requests.get(f"{_API}/spotify/auth/status", timeout=5).json()
+            except Exception:
+                r = {"connected": False}
+            self._safe_after(0, lambda: self._sp_apply_status(r))
+        threading.Thread(target=_work, daemon=True).start()
+
+    def _sp_apply_status(self, status):
+        try:
+            connected = bool(status.get("connected"))
+            if connected:
+                user = status.get("user") or ""
+                self._sp_status_lbl.config(text=f"● CONNECTED — {user}" if user else "● CONNECTED", fg=GREEN)
+                self._sp_connect_btn.pack_forget()
+                self._sp_disconnect_btn.pack(side="left")
+            else:
+                self._sp_status_lbl.config(text="● NOT CONNECTED", fg=TEXT_SEC)
+                self._sp_disconnect_btn.pack_forget()
+                self._sp_connect_btn.pack(side="left")
+        except Exception:
+            pass
+
+    def _sp_connect_start(self):
+        def _work():
+            try:
+                requests.post(f"{_API}/spotify/auth/connect", timeout=5)
+            except Exception as e:
+                print(f"[SETTINGS] Spotify connect error: {e}")
+                return
+            self._safe_after(0, lambda: self._sp_poll_connect())
+        threading.Thread(target=_work, daemon=True).start()
+
+    def _sp_poll_connect(self, attempt=0):
+        try:
+            self._sp_status_lbl.config(text="● CONNECTING…", fg=AMBER)
+        except Exception:
+            pass
+        def _work():
+            try:
+                r = requests.get(f"{_API}/spotify/auth/status", timeout=5).json()
+            except Exception:
+                r = {"connected": False}
+            def _apply():
+                if r.get("connected") or attempt > 40:
+                    self._sp_apply_status(r)
+                else:
+                    self._safe_after(3000, lambda: self._sp_poll_connect(attempt + 1))
+            self._safe_after(0, _apply)
+        threading.Thread(target=_work, daemon=True).start()
+
+    def _sp_disconnect(self):
+        def _work():
+            try:
+                requests.post(f"{_API}/spotify/auth/disconnect", timeout=5)
+            except Exception as e:
+                print(f"[SETTINGS] Spotify disconnect error: {e}")
+            self._safe_after(0, self._sp_refresh_status)
+        threading.Thread(target=_work, daemon=True).start()
+
+    def _restart_whatsapp_bridge(self):
+        try:
+            self._wa_restart_msg_var.set("Restarting…")
+        except Exception:
+            pass
+        def _work():
+            try:
+                d = requests.post(f"{_API}/whatsapp/restart-bridge", timeout=10).json()
+                msg = f"Bridge {d.get('status', 'restarted')}." if d.get("ok") else f"Error: {d.get('error', 'unknown')}"
+            except Exception as e:
+                msg = f"Backend offline: {e}"
+            def _apply():
+                try:
+                    self._wa_restart_msg_var.set(msg)
+                except Exception:
+                    pass
+            self._safe_after(0, _apply)
+        threading.Thread(target=_work, daemon=True).start()
+
+    # ── Boot Settings Section ──
+    def _build_boot_settings_section(self):
+        card = self._section("INTERFACE MODE")
+        tk.Label(card, text="Restart required to apply", bg=BG_CARD, fg=TEXT_SEC,
+                 font=("Consolas", 8)).pack(anchor="w", padx=12, pady=(0, 6))
+        self._boot_ui_var = tk.StringVar(value="classic")
+        for label, val in [("Interactive (Cortex/Forge UI opens)", "classic"),
+                            ("Background — voice/tray only, low RAM", "background")]:
+            tk.Radiobutton(card, text=label, value=val, variable=self._boot_ui_var,
+                          bg=BG_CARD, fg=TEXT_SEC, selectcolor=BG_DEEP, activebackground=BG_CARD,
+                          font=("Consolas", 8)).pack(anchor="w", padx=12, pady=2)
+        self._ask_ui_boot_var = tk.BooleanVar(value=False)
+        tk.Checkbutton(card, text="Ask Every Time During Boot", variable=self._ask_ui_boot_var,
+                      bg=BG_CARD, fg=TEXT_SEC, selectcolor=BG_DEEP, activebackground=BG_CARD,
+                      font=("Consolas", 8)).pack(anchor="w", padx=12, pady=(4, 8))
+        tk.Frame(card, bg=BG_CARD, height=6).pack()
+
+        card2 = self._section("BOOT TERMINALS")
+        tk.Label(card2, text="Skip launching terminals for services you don't use.",
+                bg=BG_CARD, fg=TEXT_SEC, font=("Consolas", 8)).pack(anchor="w", padx=12, pady=(0, 6))
+        self._boot_term_vars = {}
+        for key, label in [
+            ("boot_interface", "Boot Interface Terminal"),
+            ("backend", "Python Backend Terminal"),
+            ("ngrok", "Ngrok Terminal"),
+            ("whatsapp_bridge", "WhatsApp Bridge Terminal"),
+            ("n8n", "n8n Terminal"),
+        ]:
+            var = tk.BooleanVar(value=True)
+            self._boot_term_vars[key] = var
+            tk.Checkbutton(card2, text=label, variable=var,
+                          bg=BG_CARD, fg=TEXT_SEC, selectcolor=BG_DEEP, activebackground=BG_CARD,
+                          font=("Consolas", 8)).pack(anchor="w", padx=12, pady=2)
+
+        tk.Button(card2, text="SAVE BOOT SETTINGS", command=self._save_boot_settings,
+                 bg=CYAN_DARK, fg=CYAN, font=("Consolas", 8, "bold"),
+                 relief="flat", cursor="hand2", padx=10, pady=3).pack(anchor="w", padx=12, pady=(8, 10))
+
+        self._load_boot_settings()
+
+    def _load_boot_settings(self):
+        def _work():
+            d = self._settings_get()
+            s = (d.get("settings") or {}) if (d and d.get("ok")) else {}
+            def _apply():
+                try:
+                    self._boot_ui_var.set(s.get("ui", "classic"))
+                    self._ask_ui_boot_var.set(bool(s.get("ask_ui_on_boot")))
+                    bt = s.get("boot_terminals") or {}
+                    for key, var in self._boot_term_vars.items():
+                        var.set(bool(bt.get(key, True)))
+                except Exception:
+                    pass
+            self._safe_after(0, _apply)
+        threading.Thread(target=_work, daemon=True).start()
+
+    def _save_boot_settings(self):
+        payload = {
+            "ui": self._boot_ui_var.get(),
+            "ask_ui_on_boot": self._ask_ui_boot_var.get(),
+            "boot_terminals": {k: v.get() for k, v in self._boot_term_vars.items()},
+        }
+        self._settings_post(payload)
+
+    # ── Security Section ──
+    def _build_security_section(self):
+        card = self._section("VOICE AUTHENTICATION")
+        self._voice_status_lbl = tk.Label(card, text="● CHECKING…", bg=BG_CARD, fg=TEXT_SEC,
+                                          font=("Consolas", 9, "bold"))
+        self._voice_status_lbl.pack(anchor="w", padx=12, pady=(0, 8))
+        btn_row = tk.Frame(card, bg=BG_CARD)
+        btn_row.pack(fill="x", padx=12, pady=(0, 8))
+        tk.Button(btn_row, text="ENROLL VOICE", command=self._enroll_voice,
+                 bg=CYAN_DARK, fg=CYAN, font=("Consolas", 8, "bold"),
+                 relief="flat", cursor="hand2", padx=8, pady=4).pack(side="left", padx=(0, 8))
+        tk.Button(btn_row, text="DELETE", command=self._delete_voice,
+                 bg="#2a0000", fg=RED, font=("Consolas", 8, "bold"),
+                 relief="flat", cursor="hand2", padx=8, pady=4).pack(side="left")
+        self._voice_msg_var = tk.StringVar()
+        tk.Label(card, textvariable=self._voice_msg_var, bg=BG_CARD, fg=AMBER,
+                 font=("Consolas", 8)).pack(anchor="w", padx=12, pady=(0, 8))
+        tk.Frame(card, bg=BG_CARD, height=6).pack()
+
+        card2 = self._section("FACE AUTHENTICATION")
+        self._face_status_lbl = tk.Label(card2, text="● CHECKING…", bg=BG_CARD, fg=TEXT_SEC,
+                                         font=("Consolas", 9, "bold"))
+        self._face_status_lbl.pack(anchor="w", padx=12, pady=(0, 8))
+        btn_row2 = tk.Frame(card2, bg=BG_CARD)
+        btn_row2.pack(fill="x", padx=12, pady=(0, 8))
+        tk.Button(btn_row2, text="ENROLL FACE", command=self._enroll_face,
+                 bg=CYAN_DARK, fg=CYAN, font=("Consolas", 8, "bold"),
+                 relief="flat", cursor="hand2", padx=8, pady=4).pack(side="left", padx=(0, 8))
+        tk.Button(btn_row2, text="DELETE", command=self._delete_face,
+                 bg="#2a0000", fg=RED, font=("Consolas", 8, "bold"),
+                 relief="flat", cursor="hand2", padx=8, pady=4).pack(side="left")
+        self._face_msg_var = tk.StringVar()
+        tk.Label(card2, textvariable=self._face_msg_var, bg=BG_CARD, fg=AMBER,
+                 font=("Consolas", 8)).pack(anchor="w", padx=12, pady=(0, 8))
+        tk.Frame(card2, bg=BG_CARD, height=6).pack()
+
+        card3 = self._section("EXPORT")
+        exp_row = tk.Frame(card3, bg=BG_CARD)
+        exp_row.pack(fill="x", padx=12, pady=(0, 8))
+        tk.Button(exp_row, text="EXPORT CHAT (TXT)", command=lambda: self._export_chat("txt"),
+                 bg=BG_PANEL, fg=TEXT_SEC, font=("Consolas", 8, "bold"),
+                 relief="flat", cursor="hand2", padx=8, pady=4).pack(side="left", padx=(0, 8))
+        tk.Button(exp_row, text="EXPORT CHAT (PDF)", command=lambda: self._export_chat("pdf"),
+                 bg=BG_PANEL, fg=TEXT_SEC, font=("Consolas", 8, "bold"),
+                 relief="flat", cursor="hand2", padx=8, pady=4).pack(side="left")
+        tk.Frame(card3, bg=BG_CARD, height=6).pack()
+
+        self._refresh_voice_status()
+        self._refresh_face_status()
+
+    def _refresh_voice_status(self):
+        def _work():
+            try:
+                d = requests.get(f"{_API}/voice/status", timeout=5).json()
+                enrolled = bool(d.get("enrolled"))
+            except Exception:
+                enrolled = False
+            def _apply():
+                try:
+                    self._voice_status_lbl.config(
+                        text="● ENROLLED" if enrolled else "● NOT ENROLLED",
+                        fg=GREEN if enrolled else TEXT_SEC)
+                except Exception:
+                    pass
+            self._safe_after(0, _apply)
+        threading.Thread(target=_work, daemon=True).start()
+
+    def _enroll_voice(self):
+        self._voice_msg_var.set("Starting guided enrollment — follow the voice prompts…")
+        def _work():
+            try:
+                requests.post(f"{_API}/voice/enroll", json={"label": "owner"}, timeout=5)
+            except Exception as e:
+                print(f"[SETTINGS] Voice enroll error: {e}")
+            self._safe_after(5000, self._refresh_voice_status)
+        threading.Thread(target=_work, daemon=True).start()
+
+    def _delete_voice(self):
+        def _work():
+            try:
+                requests.delete(f"{_API}/voice/delete", timeout=5)
+            except Exception as e:
+                print(f"[SETTINGS] Voice delete error: {e}")
+            self._safe_after(0, self._refresh_voice_status)
+        threading.Thread(target=_work, daemon=True).start()
+
+    def _refresh_face_status(self):
+        def _work():
+            try:
+                d = requests.get(f"{_API}/face/status", timeout=5).json()
+                enrolled = bool(d.get("enrolled"))
+            except Exception:
+                enrolled = False
+            def _apply():
+                try:
+                    self._face_status_lbl.config(
+                        text="● ENROLLED" if enrolled else "● NOT ENROLLED",
+                        fg=GREEN if enrolled else TEXT_SEC)
+                except Exception:
+                    pass
+            self._safe_after(0, _apply)
+        threading.Thread(target=_work, daemon=True).start()
+
+    def _enroll_face(self):
+        self._face_msg_var.set("Starting enrollment — look at the camera…")
+        def _work():
+            try:
+                d = requests.post(f"{_API}/face/enroll", timeout=5).json()
+                if not d.get("ok"):
+                    msg = d.get("error", "Enrollment failed")
+                    self._safe_after(0, lambda: self._face_msg_var.set(msg))
+                    return
+            except Exception as e:
+                self._safe_after(0, lambda: self._face_msg_var.set(f"Error: {e}"))
+                return
+            self._safe_after(5000, self._refresh_face_status)
+        threading.Thread(target=_work, daemon=True).start()
+
+    def _delete_face(self):
+        def _work():
+            try:
+                requests.delete(f"{_API}/face/delete", timeout=5)
+            except Exception as e:
+                print(f"[SETTINGS] Face delete error: {e}")
+            self._safe_after(0, self._refresh_face_status)
+        threading.Thread(target=_work, daemon=True).start()
+
+    def _export_chat(self, fmt):
+        def _work():
+            try:
+                r = requests.get(f"{_API}/export-chat", params={"format": fmt}, timeout=15)
+                content = r.content
+            except Exception as e:
+                print(f"[SETTINGS] Export error: {e}")
+                return
+            def _save():
+                import tkinter.filedialog as fd
+                ext = ".pdf" if fmt == "pdf" else ".txt"
+                path = fd.asksaveasfilename(defaultextension=ext,
+                                            initialfile=f"iZACH-chat-export{ext}")
+                if path:
+                    with open(path, "wb") as f:
+                        f.write(content)
+            self._safe_after(0, _save)
+        threading.Thread(target=_work, daemon=True).start()
+
+    # ── Contacts Section ──
+    def _build_contacts_section(self):
+        card = self._section("CONTACTS")
+
+        add_row = tk.Frame(card, bg=BG_CARD)
+        add_row.pack(fill="x", padx=12, pady=(0, 6))
+        tk.Label(add_row, text="Number", bg=BG_CARD, fg=TEXT_SEC,
+                 font=("Consolas", 8)).pack(side="left")
+        self._contact_num_entry = tk.Entry(add_row, bg=BG_DEEP, fg=CYAN, insertbackground=CYAN,
+                                            font=("Consolas", 9), relief="flat",
+                                            highlightthickness=1, highlightbackground=BORDER_HI, width=16)
+        self._contact_num_entry.pack(side="left", padx=(4, 8), ipady=3)
+        tk.Label(add_row, text="Name", bg=BG_CARD, fg=TEXT_SEC,
+                 font=("Consolas", 8)).pack(side="left")
+        self._contact_name_entry = tk.Entry(add_row, bg=BG_DEEP, fg=CYAN, insertbackground=CYAN,
+                                             font=("Consolas", 9), relief="flat",
+                                             highlightthickness=1, highlightbackground=BORDER_HI, width=20)
+        self._contact_name_entry.pack(side="left", padx=(4, 8), ipady=3)
+        tk.Button(add_row, text="+ ADD", command=self._add_contact,
+                 bg=GREEN_DIM, fg=GREEN, font=("Consolas", 9, "bold"),
+                 relief="flat", cursor="hand2", padx=10, pady=3).pack(side="left")
+
+        import_row = tk.Frame(card, bg=BG_CARD)
+        import_row.pack(fill="x", padx=12, pady=(0, 8))
+        tk.Button(import_row, text="IMPORT CSV / VCF", command=self._import_contacts,
+                 bg=BG_PANEL, fg=TEXT_SEC, font=("Consolas", 8, "bold"),
+                 relief="flat", cursor="hand2", padx=8, pady=4).pack(side="left")
+        self._contact_msg_var = tk.StringVar()
+        tk.Label(import_row, textvariable=self._contact_msg_var, bg=BG_CARD, fg=AMBER,
+                 font=("Consolas", 8)).pack(side="left", padx=(8, 0))
+
+        self._contacts_frame = tk.Frame(card, bg=BG_CARD)
+        self._contacts_frame.pack(fill="x", padx=12, pady=(0, 8))
+        tk.Frame(card, bg=BG_CARD, height=6).pack()
+
+        self._load_contacts_ui()
+
+    def _load_contacts_ui(self):
+        def _work():
+            try:
+                d = requests.get(f"{_API}/contacts", timeout=5).json()
+                contacts = d.get("contacts", []) if d.get("ok") else []
+            except Exception:
+                contacts = []
+            def _apply():
+                try:
+                    for w in self._contacts_frame.winfo_children():
+                        w.destroy()
+                    if not contacts:
+                        tk.Label(self._contacts_frame, text="No contacts saved.",
+                                 bg=BG_CARD, fg=TEXT_SEC, font=("Consolas", 8)).pack(anchor="w")
+                        return
+                    for c in contacts:
+                        row = tk.Frame(self._contacts_frame, bg="#071020",
+                                      highlightthickness=1, highlightbackground=BORDER)
+                        row.pack(fill="x", pady=2)
+                        tk.Label(row, text=c.get("name", ""), bg="#071020", fg=CYAN,
+                                 font=("Consolas", 9, "bold"), width=22,
+                                 anchor="w").pack(side="left", padx=(8, 4), pady=4)
+                        tk.Label(row, text=c.get("number", ""), bg="#071020", fg=TEXT_SEC,
+                                 font=("Consolas", 8), anchor="w").pack(side="left", fill="x", expand=True)
+                        tk.Button(row, text="✕", bg="#1a0000", fg=RED,
+                                  font=("Consolas", 8, "bold"), relief="flat", cursor="hand2",
+                                  padx=6, pady=2,
+                                  command=lambda n=c.get("number", ""): self._delete_contact(n)
+                                  ).pack(side="right", padx=6)
+                except Exception:
+                    pass
+            self._safe_after(0, _apply)
+        threading.Thread(target=_work, daemon=True).start()
+
+    def _add_contact(self):
+        number = self._contact_num_entry.get().strip()
+        name = self._contact_name_entry.get().strip()
+        if not number or not name:
+            self._contact_msg_var.set("Number and name required.")
+            return
+        def _work():
+            try:
+                d = requests.post(f"{_API}/contacts", json={"number": number, "name": name}, timeout=5).json()
+            except Exception as e:
+                d = {"ok": False, "error": str(e)}
+            def _apply():
+                try:
+                    if d.get("ok"):
+                        self._contact_num_entry.delete(0, "end")
+                        self._contact_name_entry.delete(0, "end")
+                        self._contact_msg_var.set(f'Added "{name}"')
+                        self._load_contacts_ui()
+                    else:
+                        self._contact_msg_var.set(d.get("error", "Error"))
+                except Exception:
+                    pass
+            self._safe_after(0, _apply)
+        threading.Thread(target=_work, daemon=True).start()
+
+    def _delete_contact(self, number):
+        def _work():
+            try:
+                requests.delete(f"{_API}/contacts/{quote(number, safe='')}", timeout=5)
+            except Exception as e:
+                print(f"[SETTINGS] Contact delete error: {e}")
+            self._safe_after(0, self._load_contacts_ui)
+        threading.Thread(target=_work, daemon=True).start()
+
+    def _import_contacts(self):
+        import tkinter.filedialog as fd
+        path = fd.askopenfilename(filetypes=[("Contacts", "*.csv;*.vcf")])
+        if not path:
+            return
+        def _work():
+            try:
+                with open(path, "rb") as f:
+                    d = requests.post(f"{_API}/contacts/import",
+                                      files={"file": (os.path.basename(path), f)}, timeout=15).json()
+            except Exception as e:
+                d = {"ok": False, "error": str(e)}
+            def _apply():
+                try:
+                    if d.get("ok"):
+                        self._contact_msg_var.set(f"Imported {d.get('imported', 0)} contacts.")
+                        self._load_contacts_ui()
+                    else:
+                        self._contact_msg_var.set(d.get("error", "Import failed"))
+                except Exception:
+                    pass
+            self._safe_after(0, _apply)
+        threading.Thread(target=_work, daemon=True).start()
+
+    # ── Commands Section — static list, mirrors Cortex UI's own hardcoded
+    # accordion (cortex-ui.html buildCommandsAccordion) rather than any live
+    # backend registry, since no such registry exists on either side. ──
+    _COMMAND_CATEGORIES = [
+        ("Media & Spotify", ["Play [song/artist]", "Pause / Resume music", "Next track / Previous track",
+                              "Set volume to [0-100]", "Search Spotify for [query]", "Add to liked songs",
+                              "Show current song"]),
+        ("System Control", ["Set brightness to [0-100]", "Mute / Unmute system", "Open Task Manager",
+                             "Lock screen", "Restart / Shutdown PC", "Take screenshot", "Empty recycle bin"]),
+        ("WhatsApp", ['Send "[message]" to [contact]', "Read messages from [contact]",
+                      "Read last WhatsApp message", "Reply to last message", "Mark as read",
+                      "Show group summary"]),
+        ("Web & Search", ["Search [query] on Google", "Open YouTube and search [query]",
+                          "Look up [topic] on Wikipedia", "Open [website]", "Translate [text] to [language]",
+                          "Find news about [topic]"]),
+        ("Productivity & Files", ["Open [app name]", "Open [file/folder]", "Create a new note in Obsidian",
+                                  "Set reminder for [time]: [task]", "Show my reminders", "Sync Obsidian vault"]),
+        ("Weather & News", ["What's the weather today?", "Weather in [city]", "5-day forecast",
+                            "Top headlines today", "News about [topic]", "Any sports results?"]),
+        ("Memory & Knowledge", ["Remember [key] is [value]", "What is [key]?", "Forget [key]",
+                                "What do you know about me?", "Show all memories", "Update [key] to [value]"]),
+        ("App Launcher", ["Open Chrome / Firefox", "Open VS Code", "Open Spotify", "Open WhatsApp Web",
+                         "Open File Explorer", "Open Notepad", "Open Settings"]),
+        ("Clipboard & Docs", ["Read clipboard", "Copy [text] to clipboard", "Summarize clipboard",
+                             "Translate clipboard", "Format as code", "Ask AI about clipboard"]),
+        ("Smart Devices & IoT", ["Turn on/off [device]", "Set [device] brightness to [%]",
+                                 "What devices are connected?", "Run scene [name]"]),
+        ("Finance & Research", ["Stock price of [symbol]", "Research [topic]", "Summarize this URL",
+                               "Compare [A] vs [B]", "Calculate [expression]"]),
+        ("Automation & Chains", ["Run chain [name]", "Create a command chain", "Schedule [task] at [time]",
+                                 "What chains are saved?", "Run morning routine"]),
+    ]
+
+    def _build_commands_section(self):
+        card = self._section("VOICE COMMANDS")
+        self._cmd_open = set()
+        for name, cmds in self._COMMAND_CATEGORIES:
+            block = tk.Frame(card, bg=BG_CARD)
+            block.pack(fill="x", padx=12, pady=2)
+            list_frame = tk.Frame(block, bg="#071020", highlightthickness=1, highlightbackground=BORDER)
+
+            def _toggle(n=name, lf=list_frame, btn_holder=[]):
+                if n in self._cmd_open:
+                    self._cmd_open.discard(n)
+                    lf.pack_forget()
+                else:
+                    self._cmd_open.add(n)
+                    lf.pack(fill="x", pady=(2, 6))
+
+            btn = tk.Button(block, text=f"▾ {name}", command=_toggle,
+                            bg=BG_PANEL, fg=TEXT_SEC, font=("Consolas", 8, "bold"),
+                            relief="flat", cursor="hand2", anchor="w", padx=8, pady=4)
+            btn.pack(fill="x")
+            for c in cmds:
+                tk.Label(list_frame, text=f"· {c}", bg="#071020", fg=TEXT_PRI,
+                         font=("Consolas", 8), anchor="w").pack(fill="x", padx=10, pady=1)
+        tk.Frame(card, bg=BG_CARD, height=6).pack()
+
+    # ── Others Section — privacy + system actions ──
+    def _build_others_section(self):
+        card = self._section("PRIVACY")
+        row = tk.Frame(card, bg=BG_CARD)
+        row.pack(fill="x", padx=12, pady=4)
+        self._cmd_history_var = tk.BooleanVar(value=True)
+        tk.Checkbutton(row, text="Save Command History", variable=self._cmd_history_var,
+                      bg=BG_CARD, fg=TEXT_SEC, selectcolor=BG_DEEP, activebackground=BG_CARD,
+                      font=("Consolas", 8)).pack(side="left")
+
+        ret_row = tk.Frame(card, bg=BG_CARD)
+        ret_row.pack(fill="x", padx=12, pady=4)
+        tk.Label(ret_row, text="Log Retention", bg=BG_CARD, fg=TEXT_PRI,
+                 font=("Consolas", 9), width=14, anchor="w").pack(side="left")
+        self._log_retention_var = tk.StringVar(value="30")
+        for label, val in [("7d", "7"), ("14d", "14"), ("30d", "30"), ("90d", "90")]:
+            tk.Radiobutton(ret_row, text=label, value=val, variable=self._log_retention_var,
+                          bg=BG_CARD, fg=TEXT_SEC, selectcolor=BG_DEEP, activebackground=BG_CARD,
+                          font=("Consolas", 8)).pack(side="left", padx=(0, 8))
+
+        tk.Button(card, text="SAVE", command=self._save_privacy_settings,
+                 bg=CYAN_DARK, fg=CYAN, font=("Consolas", 8, "bold"),
+                 relief="flat", cursor="hand2", padx=10, pady=3).pack(anchor="w", padx=12, pady=(6, 10))
+        tk.Frame(card, bg=BG_CARD, height=6).pack()
+
+        card2 = self._section("SYSTEM ACTIONS")
+        act_row = tk.Frame(card2, bg=BG_CARD)
+        act_row.pack(fill="x", padx=12, pady=(0, 6))
+        tk.Button(act_row, text="ANALYZE LOGS", command=self._analyze_logs,
+                 bg=BG_PANEL, fg=TEXT_SEC, font=("Consolas", 8, "bold"),
+                 relief="flat", cursor="hand2", padx=8, pady=4).pack(side="left", padx=(0, 8))
+        tk.Button(act_row, text="SYNC OBSIDIAN", command=self._sync_obsidian,
+                 bg=BG_PANEL, fg=TEXT_SEC, font=("Consolas", 8, "bold"),
+                 relief="flat", cursor="hand2", padx=8, pady=4).pack(side="left", padx=(0, 8))
+        tk.Button(act_row, text="CLEAR CACHE", command=self._clear_cache,
+                 bg=BG_PANEL, fg=TEXT_SEC, font=("Consolas", 8, "bold"),
+                 relief="flat", cursor="hand2", padx=8, pady=4).pack(side="left")
+        self._sys_action_msg_var = tk.StringVar()
+        tk.Label(card2, textvariable=self._sys_action_msg_var, bg=BG_CARD, fg=AMBER,
+                 font=("Consolas", 8)).pack(anchor="w", padx=12, pady=(0, 8))
+        tk.Frame(card2, bg=BG_CARD, height=6).pack()
+
+        self._load_privacy_settings()
+
+    def _load_privacy_settings(self):
+        def _work():
+            d = self._settings_get()
+            s = (d.get("settings") or {}) if (d and d.get("ok")) else {}
+            def _apply():
+                try:
+                    self._cmd_history_var.set(bool(s.get("command_history_enabled", True)))
+                    self._log_retention_var.set(str(s.get("log_retention_days", 30)))
+                except Exception:
+                    pass
+            self._safe_after(0, _apply)
+        threading.Thread(target=_work, daemon=True).start()
+
+    def _save_privacy_settings(self):
+        self._settings_post({
+            "command_history_enabled": self._cmd_history_var.get(),
+            "log_retention_days": int(self._log_retention_var.get()),
+        })
+
+    def _analyze_logs(self):
+        self._sys_action_msg_var.set("Analyzing…")
+        def _work():
+            try:
+                d = requests.post(f"{_API}/analyze", params={"mode": "overwrite"}, timeout=30).json()
+                msg = d.get("message", "Done.") if d.get("ok") else d.get("error", "Failed")
+            except Exception as e:
+                msg = f"Error: {e}"
+            self._safe_after(0, lambda: self._sys_action_msg_var.set(msg))
+        threading.Thread(target=_work, daemon=True).start()
+
+    def _sync_obsidian(self):
+        self._sys_action_msg_var.set("Syncing…")
+        def _work():
+            try:
+                d = requests.post(f"{_API}/obsidian/sync", timeout=15).json()
+                msg = d.get("message", "Synced.") if d.get("ok") else d.get("error", "Failed")
+            except Exception as e:
+                msg = f"Error: {e}"
+            self._safe_after(0, lambda: self._sys_action_msg_var.set(msg))
+        threading.Thread(target=_work, daemon=True).start()
+
+    def _clear_cache(self):
+        self._sys_action_msg_var.set("Clearing…")
+        def _work():
+            try:
+                d = requests.post(f"{_API}/cache/clear", json={"targets": ["temp", "screenshots"]}, timeout=15).json()
+                msg = ", ".join(d.get("cleared", [])) or "Cleared." if d.get("ok") else d.get("error", "Failed")
+            except Exception as e:
+                msg = f"Error: {e}"
+            self._safe_after(0, lambda: self._sys_action_msg_var.set(msg))
+        threading.Thread(target=_work, daemon=True).start()
+
+    # ── Advanced Section — overlays, hotkeys, power ──
+    def _build_advanced_section(self):
+        card = self._section("OVERLAYS")
+        hk_row = tk.Frame(card, bg=BG_CARD)
+        hk_row.pack(fill="x", padx=12, pady=4)
+        tk.Label(hk_row, text="Command Bar", bg=BG_CARD, fg=TEXT_PRI,
+                 font=("Consolas", 9), width=14, anchor="w").pack(side="left")
+        self._hotkey_bar_entry = tk.Entry(hk_row, bg=BG_DEEP, fg=CYAN, insertbackground=CYAN,
+                                          font=("Consolas", 9), relief="flat",
+                                          highlightthickness=1, highlightbackground=BORDER_HI, width=20)
+        self._hotkey_bar_entry.pack(side="left", padx=(4, 0), ipady=3)
+
+        hk_row2 = tk.Frame(card, bg=BG_CARD)
+        hk_row2.pack(fill="x", padx=12, pady=4)
+        tk.Label(hk_row2, text="Mic Toggle", bg=BG_CARD, fg=TEXT_PRI,
+                 font=("Consolas", 9), width=14, anchor="w").pack(side="left")
+        self._hotkey_mic_entry = tk.Entry(hk_row2, bg=BG_DEEP, fg=CYAN, insertbackground=CYAN,
+                                          font=("Consolas", 9), relief="flat",
+                                          highlightthickness=1, highlightbackground=BORDER_HI, width=20)
+        self._hotkey_mic_entry.pack(side="left", padx=(4, 0), ipady=3)
+        tk.Label(card, text="restart required to apply", bg=BG_CARD, fg=TEXT_SEC,
+                 font=("Consolas", 8)).pack(anchor="w", padx=12, pady=(0, 4))
+
+        ptt_row = tk.Frame(card, bg=BG_CARD)
+        ptt_row.pack(fill="x", padx=12, pady=4)
+        self._ptt_var = tk.BooleanVar(value=False)
+        tk.Checkbutton(ptt_row, text="Push-to-Talk Mode (hold hotkey to talk)", variable=self._ptt_var,
+                      bg=BG_CARD, fg=TEXT_SEC, selectcolor=BG_DEEP, activebackground=BG_CARD,
+                      font=("Consolas", 8)).pack(side="left")
+        tk.Frame(card, bg=BG_CARD, height=6).pack()
+
+        card2 = self._section("POWER SETTINGS")
+        self._batt_auto_var = tk.BooleanVar(value=False)
+        tk.Checkbutton(card2, text="Auto Background on Battery", variable=self._batt_auto_var,
+                      bg=BG_CARD, fg=TEXT_SEC, selectcolor=BG_DEEP, activebackground=BG_CARD,
+                      font=("Consolas", 8)).pack(anchor="w", padx=12, pady=2)
+        self._lid_close_var = tk.BooleanVar(value=False)
+        tk.Checkbutton(card2, text="Auto Background on Lid Close", variable=self._lid_close_var,
+                      bg=BG_CARD, fg=TEXT_SEC, selectcolor=BG_DEEP, activebackground=BG_CARD,
+                      font=("Consolas", 8)).pack(anchor="w", padx=12, pady=2)
+
+        tk.Button(card2, text="SAVE", command=self._save_advanced_settings,
+                 bg=CYAN_DARK, fg=CYAN, font=("Consolas", 8, "bold"),
+                 relief="flat", cursor="hand2", padx=10, pady=3).pack(anchor="w", padx=12, pady=(8, 10))
+
+        self._load_advanced_settings()
+
+    def _load_advanced_settings(self):
+        def _work():
+            d = self._settings_get()
+            s = (d.get("settings") or {}) if (d and d.get("ok")) else {}
+            def _apply():
+                try:
+                    self._hotkey_bar_entry.delete(0, "end")
+                    self._hotkey_bar_entry.insert(0, s.get("hotkey_bar", "ctrl+shift+space"))
+                    self._hotkey_mic_entry.delete(0, "end")
+                    self._hotkey_mic_entry.insert(0, s.get("hotkey_mic", "ctrl+shift+m"))
+                    self._ptt_var.set(bool(s.get("push_to_talk")))
+                    self._batt_auto_var.set(bool(s.get("battery_auto_switch")))
+                    self._lid_close_var.set(bool(s.get("lid_close_trigger")))
+                except Exception:
+                    pass
+            self._safe_after(0, _apply)
+        threading.Thread(target=_work, daemon=True).start()
+
+    def _save_advanced_settings(self):
+        self._settings_post({
+            "hotkey_bar": self._hotkey_bar_entry.get().strip().lower(),
+            "hotkey_mic": self._hotkey_mic_entry.get().strip().lower(),
+            "push_to_talk": self._ptt_var.get(),
+            "battery_auto_switch": self._batt_auto_var.get(),
+            "lid_close_trigger": self._lid_close_var.get(),
+        })
+
+    def _safe_after(self, delay, fn):
+        """Wraps self.after() so a background request that outlives its tab
+        (user switched tabs before the response came back) fails silently
+        instead of throwing "invalid command name" — destroy-and-rebuild-on-
+        switch means the widget a deferred callback was going to update may
+        no longer exist by the time it actually runs."""
+        def _wrapped():
+            try:
+                fn()
+            except tk.TclError:
+                pass
+        self.after(delay, _wrapped)
 
     def _close(self):
         self.pack_forget()
@@ -3474,7 +4587,7 @@ class JarvisUI:
             )
         self._settings_page.place(x=0, y=0, relwidth=1, relheight=1)
         self._settings_page.lift()
-        self._settings_page._load_all()
+        self._settings_page._switch_settings_tab(self._settings_page._active_tab)
 
     def _close_settings(self):
         if hasattr(self, '_settings_page'):

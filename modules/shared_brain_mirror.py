@@ -1,25 +1,34 @@
 """
-Bidirectional mirror between the real project files and ~/izach-shared-brain.
+Bidirectional mirror between the real project files and each machine's own
+izach-shared-brain mirror folder.
 
-Why this exists: Syncthing cannot scan ~/Desktop/Projects/iZACH directly on
-this Mac (root cause undetermined — ruled out TCC/FDA, Unix perms, .stignore,
-Syncthing version, reboot; the directory just silently scans as empty). Every
-test against a folder outside ~/Desktop works correctly, so Syncthing is
-pointed at ~/izach-shared-brain instead, and this script keeps that mirror in
-sync with the real files by content hash, in both directions.
+Why this exists: Syncthing cannot reliably scan the real project folder
+directly, on EITHER machine, for distinct reasons:
+  - Windows: C:\\Projects\\iZACH — local edits never get detected as changed
+    (confirmed with fsWatcher on, manual rescans, and a full version
+    downgrade to v1.30.0; ruled out folder-type misconfiguration, path/
+    symlink mismatch, and file locking — root cause undetermined). Pulling
+    from the Mac works fine; pushing local Windows edits out does not, on
+    any file.
+  - macOS: ~/Desktop/Projects/iZACH — the directory just silently scans as
+    empty (root cause undetermined — ruled out TCC/FDA, Unix perms,
+    .stignore, Syncthing version, reboot). Every test against a folder
+    outside ~/Desktop works correctly.
 
-Only runs on macOS. Windows syncs its real project folder directly — it never
-hit this bug, so it needs no mirror.
+Both machines work around their own bug the same way: point Syncthing at a
+dedicated mirror folder instead of the real project root, and have this
+script keep that mirror in sync with the real files by content hash, in
+both directions.
 """
 import hashlib
 import os
 import shutil
 import time
 
-from modules.platform_utils import IS_MAC
+from modules.platform_utils import IS_WINDOWS, IS_MAC
 
 REAL_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-MIRROR_ROOT = os.path.expanduser("~/izach-shared-brain")
+MIRROR_ROOT = r"C:\izach-shared-brain" if IS_WINDOWS else os.path.expanduser("~/izach-shared-brain")
 
 FLAT_FILES = [
     "smart_memory.json",
@@ -84,7 +93,7 @@ def sync_once():
 
 
 def run_forever():
-    if not IS_MAC:
+    if not (IS_WINDOWS or IS_MAC):
         return
     while True:
         try:

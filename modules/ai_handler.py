@@ -404,6 +404,10 @@ class AIProvider:
                 print(f"[SkillRoute] Gemini failed: {e}")
 
         if model_pref in ("groq", "auto") or True:
+            # `or True` is load-bearing, not leftover debug code: this block
+            # is also the safety-net Groq+Gemini fallback for deepseek/gemini
+            # failures above (see "falling back to Groq" comment) — without
+            # it, model_pref=="deepseek" would skip Groq entirely on failure.
             try:
                 q = f"{sys_prompt}\n\nUser: {query}" if sys_prompt else query
                 result = self._call_groq(q)

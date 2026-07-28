@@ -51,9 +51,16 @@ Intents (pick exactly one):
 - crypto_price    : bitcoin price, BTC rate, ethereum, ETH, dogecoin, crypto rate
 - weather         : weather/temperature/mausam for any city or current location
 - news            : latest news, headlines, what's happening, khabar, news about X
-- web_search      : search for X, look up X, what is X, find information about X (short factual)
+- web_search      : search for X, look up X, what is X, find information about X, search on/for the
+                     internet for X (short factual). This is ALSO where fees/cost/price questions about
+                     colleges, courses, programs, subscriptions, memberships, or any other SERVICE go —
+                     e.g. "fees of X university", "cost of X course", "price of X program" are web_search,
+                     NOT price_lookup, since those aren't items sold on shopping sites.
 - deep_research   : research X, deep research, full report on X, investigate X, comprehensive info
-- price_lookup    : how much does X cost, price of X (product), check price of X
+- price_lookup    : ONLY for a physical retail PRODUCT's price on shopping sites (electronics, gadgets,
+                     appliances, groceries) — e.g. "how much does an iPhone 15 cost", "price of a Dyson
+                     vacuum". If X is a service, course, program, or institution rather than a purchasable
+                     item, use web_search instead.
 - page_summarize  : summarize this page, what does this page say, read this page
 
 Rules:
@@ -62,7 +69,10 @@ Rules:
 - stock_symbol: UPPERCASE ticker; if user says "Reliance" → "RELIANCE", "TCS" → "TCS"
 - city: extract city name as-is from command; null = use default city
 - web_search vs deep_research: short factual → web_search; "research/full report/investigate" → deep_research
-- query: stripped of trigger words; just the topic/question
+- web_search vs price_lookup: retail product → price_lookup; anything else (service/course/institution
+  fees, subscription cost, etc.) → web_search
+- query: stripped of trigger words, but KEEP every specific name/entity/location the user mentioned
+  (institution names, course names, cities) — do not shorten or generalize it
 - Output ONLY the JSON object
 """
 
@@ -330,7 +340,13 @@ class ResearchAgent:
         try:
             from modules import web_automation
             self.speak(f"Checking price of {product}.")
-            _bg(web_automation.lookup_price, product)
+            # Not using the module-level _bg() here — it discards fn's return
+            # value entirely, so the actual scraped price/answer never got
+            # spoken; only this upfront "Checking..." line ever played.
+            def _run():
+                ok, msg = web_automation.lookup_price(product)
+                self.speak(msg)
+            threading.Thread(target=_run, daemon=True).start()
         except Exception as e:
             self.speak(f"Price lookup error: {e}")
         return True

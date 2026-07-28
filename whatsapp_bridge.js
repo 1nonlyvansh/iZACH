@@ -34,6 +34,39 @@ function _waitUntilSendReady(maxMs = 10000) {
     });
 }
 
+// Only one recovery cycle should ever be in flight — whatsapp-web.js's own
+// 'disconnected' event AND a failed /messages/* call can both notice the
+// same broken session around the same time, and without this guard they'd
+// each schedule their own destroy()+createClient(), racing two clients into
+// existence.
+let _recovering = false;
+function _recoverFromStaleClient(client, reason) {
+    if (_recovering) return;
+    _recovering = true;
+    isReady = false;
+    sendReady = false;
+    console.log(`[WHATSAPP] Recovering — ${reason}. Restarting...`);
+    notifyIZACH('/whatsapp/status', { status: 'disconnected' });
+    setTimeout(() => {
+        client.destroy()
+            .then(() => createClient())
+            .catch(err => {
+                console.log(`[BRIDGE] Destroy/restart error: ${err.message}`);
+                createClient();
+            })
+            .finally(() => { _recovering = false; });
+    }, 5000);
+}
+
+// A previous session's client can get stuck during initialize() — neither
+// 'ready' nor 'qr' ever fires, no error either — most often because the
+// LocalAuth session dir (.wwebjs_auth) itself is corrupted, e.g. from the
+// Chromium profile being killed mid-write by an ungraceful process
+// termination. Puppeteer/whatsapp-web.js don't time this out on their own,
+// so without this watchdog it just hangs at "connecting" forever with no
+// way to recover short of manually deleting the session directory by hand.
+const INIT_TIMEOUT_MS = 90000;
+
 function createClient() {
     const client = new Client({
         authStrategy: new LocalAuth(),
@@ -44,7 +77,28 @@ function createClient() {
     });
     activeClient = client;
 
+    const initWatchdog = setTimeout(() => {
+        console.log(`[WHATSAPP] Still not ready/QR after ${INIT_TIMEOUT_MS / 1000}s — session likely corrupted. Clearing and retrying fresh.`);
+        // A prior session's isReady/sendReady could still be true here (this
+        // watchdog fires on RE-init, not just first boot) — without resetting
+        // them, callers keep seeing "connected" while the client is actually
+        // being destroyed and rebuilt from scratch.
+        isReady = false;
+        sendReady = false;
+        notifyIZACH('/whatsapp/status', { status: 'disconnected' });
+        try {
+            fs.rmSync(SESSION_PATH, { recursive: true, force: true });
+            console.log('[BRIDGE] Session cleared.');
+        } catch (e) {
+            console.log(`[BRIDGE] Could not clear session: ${e.message}`);
+        }
+        client.destroy()
+            .catch(() => {})
+            .finally(() => createClient());
+    }, INIT_TIMEOUT_MS);
+
     client.on('qr', qr => {
+        clearTimeout(initWatchdog);
         console.log('[WHATSAPP] Scan QR code:');
         qrcode.generate(qr, { small: true });
         notifyIZACH('/whatsapp/qr', { qr });
@@ -53,6 +107,7 @@ function createClient() {
     let acceptMessages = false;
 
     client.on('ready', () => {
+        clearTimeout(initWatchdog);
         isReady = true;
         console.log('[WHATSAPP] Bridge Online');
         notifyIZACH('/whatsapp/status', { status: 'connected' });
@@ -64,18 +119,7 @@ function createClient() {
     });
 
     client.on('disconnected', (reason) => {
-        isReady = false;
-        sendReady = false;
-        console.log(`[WHATSAPP] Disconnected: ${reason}. Restarting...`);
-        notifyIZACH('/whatsapp/status', { status: 'disconnected' });
-        setTimeout(() => {
-            client.destroy()
-                .then(() => createClient())
-                .catch(err => {
-                    console.log(`[BRIDGE] Destroy/restart error: ${err.message}`);
-                    createClient();
-                });
-        }, 5000);
+        _recoverFromStaleClient(client, `disconnected: ${reason}`);
     });
 
     client.on('incoming_call', async (call) => {
@@ -180,6 +224,7 @@ app.post('/send-message', async (req, res) => {
 // Send voice note endpoint
 app.post('/send-voice', async (req, res) => {
     const { number, audio_path } = req.body;
+    if (!audio_path) return res.status(400).json({ status: 'error', message: 'audio_path required' });
     await _waitUntilSendReady();
     try {
         const resolved = path.resolve(audio_path);
@@ -202,11 +247,11 @@ app.get('/health', (req, res) => {
 
 // Fetch message history for past N hours (used by Phase 3 context engine)
 app.get('/messages/history', async (req, res) => {
+    const hours = parseInt(req.query.hours) || 24;
+    const since = Date.now() - (hours * 60 * 60 * 1000);
     if (!isReady || !activeClient) {
         return res.status(503).json({ error: 'WhatsApp not connected — scan the QR code first.', messages: [] });
     }
-    const hours = parseInt(req.query.hours) || 24;
-    const since = Date.now() - (hours * 60 * 60 * 1000);
     try {
         const chats = await activeClient.getChats();
         const messages = [];
@@ -233,7 +278,17 @@ app.get('/messages/history', async (req, res) => {
         messages.sort((a, b) => a.timestamp - b.timestamp);
         res.json({ messages, count: messages.length });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        // getChats()/fetchMessages() failing here means the underlying
+        // WhatsApp Web session is actually broken even though isReady was
+        // still true (whatsapp-web.js's own 'disconnected' event doesn't
+        // always fire for this — the page can go stale silently). The raw
+        // error is whatsapp-web.js's own minified internal JS (e.g. a bare
+        // "r" from a WhatsApp Web variable name), not useful to callers —
+        // report the real problem instead, and kick off the same recovery
+        // the 'disconnected' handler uses.
+        console.log(`[BRIDGE] /messages/history failed against a client that claimed ready: ${e.message}`);
+        _recoverFromStaleClient(activeClient, `stale client (${e.message})`);
+        res.status(503).json({ error: 'WhatsApp session appears broken — reconnecting automatically, try again shortly.', messages: [] });
     }
 });
 
@@ -248,7 +303,8 @@ app.get('/messages/chat', async (req, res) => {
         const chats = await activeClient.getChats();
         const chat = chats.find(c => c.id._serialized === number || c.id.user === number.replace('@c.us', ''));
         if (!chat) return res.json({ messages: [], count: 0 });
-        const msgs = await chat.fetchMessages({ limit: parseInt(limit) });
+        const parsedLimit = parseInt(limit);
+        const msgs = await chat.fetchMessages({ limit: Number.isNaN(parsedLimit) ? 10 : parsedLimit });
         const out = [];
         for (const msg of msgs) {
             if (msg.isStatus) continue;
@@ -258,7 +314,9 @@ app.get('/messages/chat', async (req, res) => {
         }
         res.json({ messages: out, count: out.length });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        console.log(`[BRIDGE] /messages/chat failed against a client that claimed ready: ${e.message}`);
+        _recoverFromStaleClient(activeClient, `stale client (${e.message})`);
+        res.status(503).json({ error: 'WhatsApp session appears broken — reconnecting automatically, try again shortly.', messages: [] });
     }
 });
 

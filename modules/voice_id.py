@@ -30,6 +30,8 @@ import threading
 import time
 import uuid
 
+from modules.audio_init_lock import PYAUDIO_INIT_LOCK
+
 import numpy as np
 
 logger = logging.getLogger(__name__)
@@ -256,14 +258,19 @@ def _record_audio(seconds: int = PHRASE_SECONDS,
                   sample_rate: int = SAMPLE_RATE) -> "np.ndarray | None":
     try:
         import pyaudio
-        pa     = pyaudio.PyAudio()
-        stream = pa.open(format=pyaudio.paInt16, channels=1, rate=sample_rate,
-                         input=True, frames_per_buffer=1024)
-        frames = []
-        total  = int(sample_rate / 1024 * seconds)
-        for _ in range(total):
-            frames.append(stream.read(1024, exception_on_overflow=False))
-        stream.stop_stream(); stream.close(); pa.terminate()
+        # PortAudio isn't thread-safe for concurrent init/terminate across
+        # threads — hold the same lock the main voice loop uses, so this
+        # can't race main.py's own PyAudio open/terminate and crash the
+        # process with a native access violation.
+        with PYAUDIO_INIT_LOCK:
+            pa     = pyaudio.PyAudio()
+            stream = pa.open(format=pyaudio.paInt16, channels=1, rate=sample_rate,
+                             input=True, frames_per_buffer=1024)
+            frames = []
+            total  = int(sample_rate / 1024 * seconds)
+            for _ in range(total):
+                frames.append(stream.read(1024, exception_on_overflow=False))
+            stream.stop_stream(); stream.close(); pa.terminate()
         raw = np.frombuffer(b"".join(frames), dtype=np.int16)
         return raw.astype(np.float32) / 32768.0
     except Exception as e:

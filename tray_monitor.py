@@ -107,7 +107,7 @@ def _probe() -> str:
     """Return current state string by querying the backend."""
     try:
         with urllib.request.urlopen(f"{API}/health", timeout=2) as r:
-            if r.status >= 500:
+            if r.status != 200:
                 return "offline"
     except Exception:
         return "offline"

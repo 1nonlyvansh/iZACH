@@ -20,6 +20,8 @@ a peer.
 import json
 import os
 import socket
+import subprocess
+import sys
 import threading
 import time
 
@@ -294,36 +296,78 @@ def watch_for_auto_promotion(poll_interval_s: int = 30):
             unreachable_since = None
 
 
-# ── Auto-promotion watchdog (macOS launchd) ─────────────────────
+# ── Auto-promotion watchdog (Task Scheduler on Windows, launchd on macOS) ─
 # watch_for_auto_promotion() above exits the process on os._exit(0) — for
 # that to actually self-heal (restart as primary) instead of just leaving
-# iZACH dead, SOMETHING has to relaunch it. launchd only manages processes
-# IT directly spawns — it can't "watch" an arbitrary already-running process
-# — so when auto-promote is enabled, launchd becomes the thing that starts
-# main.py (RunAtLoad + KeepAlive), and launch_izach.py's backend step
-# defers to it (kickstart_watchdog) instead of spawning its own subprocess,
-# so there's never two main.py instances fighting over port 5050.
+# iZACH dead, SOMETHING has to relaunch it. Neither Task Scheduler nor
+# launchd can "watch" an arbitrary already-running process — each can only
+# relaunch a process IT directly spawns — so when auto-promote is enabled,
+# the OS scheduler becomes the thing that starts main.py, and
+# launch_izach.py's backend step defers to it (kickstart_watchdog) instead
+# of spawning its own subprocess, so there's never two main.py instances
+# fighting over port 5050.
+_PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+# Windows — Task Scheduler running a PowerShell relaunch-loop script.
+_WATCHDOG_TASK_NAME = "iZACH_Watchdog"
+_WATCHDOG_SCRIPT_PATH = os.path.join(_PROJECT_ROOT, "izach_watchdog.ps1")
+
+# macOS — launchd agent (RunAtLoad + KeepAlive) running main.py directly.
 _WATCHDOG_LABEL = "com.izach.watchdog"
 _WATCHDOG_PLIST = os.path.expanduser(f"~/Library/LaunchAgents/{_WATCHDOG_LABEL}.plist")
-_PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 def is_watchdog_installed() -> bool:
-    return IS_MAC and os.path.exists(_WATCHDOG_PLIST)
+    if IS_MAC:
+        return os.path.exists(_WATCHDOG_PLIST)
+    if IS_WINDOWS:
+        try:
+            r = subprocess.run(
+                ["schtasks", "/query", "/tn", _WATCHDOG_TASK_NAME],
+                capture_output=True, timeout=10,
+            )
+            return r.returncode == 0
+        except Exception:
+            return False
+    return False
+
+
+def _write_windows_watchdog_script():
+    """The wrapper loop is what actually provides restart-on-exit — Task
+    Scheduler has no launchd-style KeepAlive, so its only job is to start
+    this loop once at logon; the loop itself relaunches main.py forever."""
+    python_exe = sys.executable
+    main_py = os.path.join(_PROJECT_ROOT, "main.py")
+    script = (
+        "# iZACH watchdog — relaunches main.py whenever it exits, so a\n"
+        "# Secondary Connector auto-promoting itself (os._exit(0) in\n"
+        "# instance_coordinator.watch_for_auto_promotion) actually comes back\n"
+        "# up instead of just staying dead. Uninstalled by uninstall_watchdog().\n"
+        "# Set-Location matters — main.py opens config files (api_keys.json etc.)\n"
+        "# via bare relative paths, assuming cwd is the project root. Task\n"
+        "# Scheduler's default working directory is NOT that, so without this\n"
+        "# main.py boots partway then crashes on a missing-file error.\n"
+        f"Set-Location \"{_PROJECT_ROOT}\"\n"
+        "while ($true) {\n"
+        f"    & \"{python_exe}\" \"{main_py}\"\n"
+        "    Start-Sleep -Seconds 2\n"
+        "}\n"
+    )
+    with open(_WATCHDOG_SCRIPT_PATH, "w", encoding="utf-8") as f:
+        f.write(script)
 
 
 def install_watchdog() -> tuple[bool, str]:
-    """Register main.py with launchd: RunAtLoad + KeepAlive so it's
+    """Register main.py with the OS's own service/scheduler so it's
     relaunched on ANY exit (including the clean os._exit(0) auto-promotion
-    uses). No-op with a clear error on Windows — see Task Scheduler
-    equivalent there instead."""
-    if not IS_MAC:
-        return False, "Watchdog install is macOS-only here — Windows uses Task Scheduler instead."
-    try:
-        python_bin = os.path.join(_PROJECT_ROOT, ".venv", "bin", "python3")
-        main_py = os.path.join(_PROJECT_ROOT, "main.py")
-        os.makedirs(os.path.dirname(_WATCHDOG_PLIST), exist_ok=True)
-        plist = f"""<?xml version="1.0" encoding="UTF-8"?>
+    uses): Task Scheduler + a relaunch-loop script on Windows, launchd
+    RunAtLoad+KeepAlive on macOS."""
+    if IS_MAC:
+        try:
+            python_bin = os.path.join(_PROJECT_ROOT, ".venv", "bin", "python3")
+            main_py = os.path.join(_PROJECT_ROOT, "main.py")
+            os.makedirs(os.path.dirname(_WATCHDOG_PLIST), exist_ok=True)
+            plist = f"""<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
@@ -341,38 +385,95 @@ def install_watchdog() -> tuple[bool, str]:
 </dict>
 </plist>
 """
-        with open(_WATCHDOG_PLIST, "w", encoding="utf-8") as f:
-            f.write(plist)
-        import subprocess
-        subprocess.run(["launchctl", "load", _WATCHDOG_PLIST], capture_output=True, timeout=5)
-        return True, "Watchdog installed — iZACH backend now auto-restarts on exit."
-    except Exception as e:
-        return False, f"Watchdog install failed: {e}"
+            with open(_WATCHDOG_PLIST, "w", encoding="utf-8") as f:
+                f.write(plist)
+            subprocess.run(["launchctl", "load", _WATCHDOG_PLIST], capture_output=True, timeout=5)
+            return True, "Watchdog installed — iZACH backend now auto-restarts on exit."
+        except Exception as e:
+            return False, f"Watchdog install failed: {e}"
+    if IS_WINDOWS:
+        try:
+            _write_windows_watchdog_script()
+            cmd = [
+                "schtasks", "/create", "/tn", _WATCHDOG_TASK_NAME,
+                "/tr", f'powershell.exe -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "{_WATCHDOG_SCRIPT_PATH}"',
+                "/sc", "onlogon", "/f",
+            ]
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
+            if r.returncode == 0:
+                return True, "Watchdog installed — main.py restarts automatically if it exits."
+            return False, f"schtasks failed: {(r.stderr or r.stdout).strip()}"
+        except Exception as e:
+            return False, f"Could not install watchdog: {e}"
+    return False, "Watchdog is only supported on Windows and macOS."
 
 
 def uninstall_watchdog() -> tuple[bool, str]:
-    if not IS_MAC:
-        return False, "Watchdog is macOS-only here."
-    try:
-        import subprocess
-        if os.path.exists(_WATCHDOG_PLIST):
-            subprocess.run(["launchctl", "unload", _WATCHDOG_PLIST], capture_output=True, timeout=5)
-            os.remove(_WATCHDOG_PLIST)
-        return True, "Watchdog removed."
-    except Exception as e:
-        return False, f"Watchdog removal failed: {e}"
+    if IS_MAC:
+        try:
+            if os.path.exists(_WATCHDOG_PLIST):
+                subprocess.run(["launchctl", "unload", _WATCHDOG_PLIST], capture_output=True, timeout=5)
+                os.remove(_WATCHDOG_PLIST)
+            return True, "Watchdog removed."
+        except Exception as e:
+            return False, f"Watchdog removal failed: {e}"
+    if IS_WINDOWS:
+        # Deleting the scheduled task only stops FUTURE starts — the wrapper
+        # loop, if already running from a prior logon, keeps relaunching
+        # main.py forever until it's actually killed too.
+        try:
+            ps_find = (
+                "Get-CimInstance Win32_Process | "
+                f"Where-Object {{ $_.CommandLine -like '*{os.path.basename(_WATCHDOG_SCRIPT_PATH)}*' }} | "
+                "Select-Object -ExpandProperty ProcessId"
+            )
+            r = subprocess.run(
+                ["powershell", "-NoProfile", "-Command", ps_find],
+                capture_output=True, text=True, timeout=10,
+            )
+            for pid in r.stdout.split():
+                pid = pid.strip()
+                if pid.isdigit():
+                    subprocess.run(["taskkill", "/PID", pid, "/F"], capture_output=True, timeout=10)
+        except Exception:
+            pass
+
+        try:
+            r = subprocess.run(
+                ["schtasks", "/delete", "/tn", _WATCHDOG_TASK_NAME, "/f"],
+                capture_output=True, text=True, timeout=15,
+            )
+            if r.returncode == 0:
+                return True, "Watchdog uninstalled."
+            # Already gone is not an error worth surfacing as one
+            if "cannot find" in (r.stderr or "").lower() or "cannot find" in (r.stdout or "").lower():
+                return True, "Watchdog was not installed."
+            return False, f"schtasks failed: {(r.stderr or r.stdout).strip()}"
+        except Exception as e:
+            return False, f"Could not uninstall watchdog: {e}"
+    return False, "Watchdog is only supported on Windows and macOS."
 
 
 def kickstart_watchdog() -> bool:
-    """Force-(re)start the launchd-managed backend right now, rather than
+    """Force the OS-managed backend to (re)start right now, rather than
     waiting for the next login. Used by launch_izach.py's backend step when
-    the watchdog is installed, instead of spawning its own subprocess —
-    launchd already owns this process's lifecycle at that point."""
-    try:
-        import subprocess
-        uid = os.getuid()
-        subprocess.run(["launchctl", "kickstart", "-k", f"gui/{uid}/{_WATCHDOG_LABEL}"],
-                        capture_output=True, timeout=10)
-        return True
-    except Exception:
-        return False
+    the watchdog is installed, instead of spawning its own subprocess — the
+    scheduler already owns this process's lifecycle at that point."""
+    if IS_MAC:
+        try:
+            uid = os.getuid()
+            subprocess.run(["launchctl", "kickstart", "-k", f"gui/{uid}/{_WATCHDOG_LABEL}"],
+                            capture_output=True, timeout=10)
+            return True
+        except Exception:
+            return False
+    if IS_WINDOWS:
+        try:
+            r = subprocess.run(
+                ["schtasks", "/run", "/tn", _WATCHDOG_TASK_NAME],
+                capture_output=True, timeout=10,
+            )
+            return r.returncode == 0
+        except Exception:
+            return False
+    return False
