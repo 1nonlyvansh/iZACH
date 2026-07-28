@@ -1,6 +1,6 @@
 {
   "name": "izach-ui",
-  "version": "2.2.0",
+  "version": "3.2.0",
   "description": "iZACH Neural Interface — Desktop AI Assistant",
   "type": "module",
   "main": "electron/main.cjs",

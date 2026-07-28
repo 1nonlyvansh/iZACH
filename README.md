@@ -11,18 +11,18 @@
 
 **Intent Zenith Adaptive Cognitive Handler**
 
-*A voice-driven AI assistant for Windows — context-aware, system-deep, always on.*
+*A voice-driven AI assistant for Windows and macOS — context-aware, system-deep, always on.*
 
 ---
 
-[![Version](https://img.shields.io/badge/Version-v2.2.0-00e5ff?style=flat-square&labelColor=050d1a)](.)
+[![Version](https://img.shields.io/badge/Version-v3.2.0-00e5ff?style=flat-square&labelColor=050d1a)](.)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-00e5ff?style=flat-square&logo=python&logoColor=00e5ff&labelColor=050d1a)](https://python.org)
 [![React](https://img.shields.io/badge/React-18-00e5ff?style=flat-square&logo=react&logoColor=00e5ff&labelColor=050d1a)](https://react.dev)
 [![Electron](https://img.shields.io/badge/Electron-Desktop-00e5ff?style=flat-square&logo=electron&logoColor=00e5ff&labelColor=050d1a)](https://electronjs.org)
 [![Flask](https://img.shields.io/badge/Flask-Backend-00e5ff?style=flat-square&logo=flask&logoColor=00e5ff&labelColor=050d1a)](https://flask.palletsprojects.com)
 [![Groq](https://img.shields.io/badge/Groq-LLM-00e5ff?style=flat-square&logoColor=00e5ff&labelColor=050d1a)](https://groq.com)
 [![Android](https://img.shields.io/badge/Android-Companion%20App-00e5ff?style=flat-square&logo=android&logoColor=00e5ff&labelColor=050d1a)](https://github.com/1nonlyvansh/iZACH/releases/latest)
-[![Platform](https://img.shields.io/badge/Platform-Windows%20Only-0d2a3a?style=flat-square&logo=windows&logoColor=c8e8f0&labelColor=050d1a)](.)
+[![Platform](https://img.shields.io/badge/Platform-Windows%20%26%20macOS-0d2a3a?style=flat-square&logo=apple&logoColor=c8e8f0&labelColor=050d1a)](.)
 [![Status](https://img.shields.io/badge/Status-Active%20Dev-1db954?style=flat-square&labelColor=050d1a)](.)
 
 </div>
@@ -31,9 +31,63 @@
 
 ## What is iZACH?
 
-iZACH is a local-first, voice-controlled AI assistant that runs natively on Windows. It doesn't just answer questions — it **acts**. Control Spotify, automate WhatsApp, execute PowerShell, manage files, browse the web, read your calendar, watch your camera, and learn your behavioral patterns — all through natural speech or a neural-themed desktop UI.
+iZACH is a local-first, voice-controlled AI assistant that runs natively on **Windows and macOS**. It doesn't just answer questions — it **acts**. Control Spotify, automate WhatsApp, execute system commands, manage files, browse the web, read your calendar, watch your camera, and learn your behavioral patterns — all through natural speech or a neural-themed desktop UI.
 
-**v2.2.0** ships a standalone multi-tab browser in Forge UI that shares live logins and saved passwords with Cortex UI, a custom nickname you can trigger iZACH with, an email agent that watches for OTPs/replies/order shipments, calendar-aware auto-DND, pattern-to-automation suggestions that create real automations, screen-aware assistance, a unified priority-ranked notification feed, and a round of phone-pairing security hardening. Full technical log: [CHANGELOG.md](CHANGELOG.md).
+**v3.2.0** brings iZACH to macOS as a full native port — not a compatibility shim — with system control, camera/mic, app launching, and notifications all reimplemented on Apple's own APIs. It also adds dual-instance coordination so a Mac and a Windows PC running iZACH can detect each other, hand off primary duty, and share one memory brain; a full Settings UI overhaul; and Android multi-device profiles with a QR-based pairing flow. Full technical log: [CHANGELOG.md](CHANGELOG.md).
+
+---
+
+## What's New in v3.2.0
+
+### macOS Compatibility — Full Native Port
+
+iZACH now runs natively on macOS, not through a compatibility layer. Every OS-coupled subsystem was ported to Apple's own frameworks rather than stubbed out.
+
+| Area | Windows | macOS |
+|---|---|---|
+| System control (volume/mute/brightness/Wi-Fi/theme) | `pycaw`/WMI/registry | AppleScript (`osascript`) |
+| App launching & detection | Start Menu / registry scan | `.app` bundle scan across `/Applications`, `~/Applications`, `/System/Applications` |
+| Camera | DirectShow | AVFoundation |
+| Microphone | WASAPI | CoreAudio — proper OS-level release on mute, not just a stream pause |
+| Notifications | Windows Toast | `osascript display notification` |
+| Process/app control | `taskkill`, Win32 process APIs | `psutil` + POSIX signals |
+
+`modules/system_control.py` is now a thin dispatcher over `system_control_windows.py` / `system_control_mac.py` / `system_control_unsupported.py`, chosen at runtime by the new `modules/platform_utils.py`. iZACH also knows what machine it's running on now — ask "which OS are you on?" and it answers correctly.
+
+### Dual-Instance Coordination (Mac ↔ Windows)
+
+If you run iZACH on both a Mac and a Windows PC, the two instances can now detect each other on the LAN, negotiate a Primary/Secondary role, and hand off between them:
+
+- **Peer detection** — each instance checks in with the other; a pin/tie-break mechanism decides which is Primary if both start at once.
+- **"Hand off to Windows/Mac"** — a voice/chat command that promotes the other machine to Primary and demotes this one.
+- **Auto-promotion** — optional watchdog: if the Primary goes offline, the Secondary can auto-promote itself after a configurable timeout.
+- **Shared brain mirror** — via Syncthing, both machines' Obsidian memory vault stays in sync, so context isn't stranded on whichever machine was Primary at the time.
+- **WhatsApp bridge gating** — only the Primary runs the WhatsApp bridge, avoiding duplicate/conflicting sessions from two machines racing the same account.
+
+### Settings UI Overhaul
+
+Cortex UI's Settings went from one flat page to a 15-tab reorganization: Personalisation, Appearance, Device Connection, Notifications & Announcements, Connected Services, Security, Boot Settings, Others, Advanced, and more — each a focused panel instead of one long scroll. Tab bar now scrolls horizontally instead of overflowing off-screen on smaller windows.
+
+### Connected Services — OAuth Fixed
+
+Calendar, Google Fit, and Smart Home OAuth previously used Google's `urn:ietf:wg:oauth:2.0:oob` flow, which Google discontinued in 2022 — the consent screen simply refused to render, making these integrations unusable regardless of OS. All three now use the standard local-server OAuth flow (same pattern Gmail/Calendar already used correctly): click Connect, approve in your browser, done — no more getting stuck at "Not Connected."
+
+### Android — Multi-Device Profiles
+
+- **Device profiles** — save and switch between multiple paired PCs from one app (new Devices screen, Add Device flow, per-device launcher).
+- **QR-based pairing** — dedicated in-app QR scanner (`QrCaptureActivity`) replaces manual IP entry as the primary pairing method.
+- **Command queue view** — see commands queued while your PC was unreachable, instead of them silently vanishing.
+- Fixed: re-scanning a QR code for one profile no longer corrupts a different, currently-active profile's saved connection.
+- Fixed: screenshot viewer showing solid black on decode failure — now shows a clear error instead of a blank image.
+- Fixed: Save/Share buttons overlapping the status bar on devices with tall notches/cutouts.
+
+### Also Fixed
+
+- **Spotify "device not found"** — device discovery now checks for a live active device first, falling back to the last-known device only if nothing live is found (was backwards — stale cache took priority over reality).
+- **Mic staying open after mute** — muting in the UI now actually releases the OS-level microphone reservation (macOS previously kept showing the mic as in-use by the app after mute).
+- **Voice response latency** — tightened speech-recognition pause/silence thresholds for a snappier turnaround, closer to a real assistant than a walkie-talkie.
+- **App detection false negatives** — apps installed but not detected (e.g. "WhatsApp is not installed" when it clearly was) fixed via the new macOS `.app` bundle scan; same class of bug checked and fixed on Windows too.
+- Dead code and dead UI buttons removed following a full audit pass across the backend, Cortex UI, and Android app.
 
 ---
 
@@ -204,7 +258,7 @@ WhatsApp, Calendar reminders, system alerts, and email agent notifications are n
 **🤖 Automation**
 - Web automation via Playwright (14 functions)
 - Playwright browser auto-closes after 10 min idle
-- PowerShell executor with safety block list
+- PowerShell executor with safety block list *(Windows only — not yet ported to macOS shell)*
 - File manager: open, find, rename, move, copy, delete, sort, organize
 - Screenshot capture → phone transfer
 - Screen reader (Tesseract OCR)
@@ -270,7 +324,7 @@ WhatsApp, Calendar reminders, system alerts, and email agent notifications are n
 - Face authentication — lazy-loaded on first face command
 - Face-gated file deletion
 - Pre-commit hook blocks secrets & large files
-- PowerShell command safety block list
+- PowerShell command safety block list *(Windows only)*
 - OAuth tokens never committed
 
 **📷 Vision**
@@ -349,6 +403,10 @@ The **Cortex UI** (`cortex-ui.html`) is iZACH's primary desktop interface — a 
 - **Persistent status notification** — ongoing notification showing PC connection + DND/Busy/Background mode *(v2.2.0)*
 - **File-transfer progress** — upload notifications show live percentage, not just start/done *(v2.2.0)*
 - **Accurate pairing status** — "ONLINE" now reflects real signed-pairing state, not just reachability *(v2.2.0)*
+- **Multi-device profiles** — save and switch between several paired PCs (Mac and/or Windows) from one app *(v3.2.0)*
+- **QR-based pairing** — dedicated in-app scanner as the primary way to pair, manual IP entry still available *(v3.2.0)*
+- **Command queue view** — see commands queued while your PC was unreachable instead of losing them silently *(v3.2.0)*
+- **Per-device launcher** — jump straight into a specific paired PC's session from a device list *(v3.2.0)*
 
 </td>
 <td width="50%" valign="top">
@@ -579,19 +637,21 @@ projects/
 
 ## Installation
 
-> **Windows only.** iZACH uses `pywin32`, PowerShell APIs, and Windows system calls.
+> **Windows and macOS.** `launch_izach.py` auto-detects your OS and paths — no manual path editing on either platform.
 
 ### Prerequisites
 
-| Tool | Required | Notes |
-|---|---|---|
-| Python | 3.10 – 3.12 | python.org |
-| Node.js | 18+ | nodejs.org |
-| Git | any | git-scm.com |
-| ngrok | optional | ngrok.com — needed for remote/WA access |
-| Tesseract OCR | optional | `winget install UB-Mannheim.TesseractOCR` |
-| MongoDB | optional | Falls back to local JSON |
-| n8n | optional | `npm install -g n8n` |
+| Tool | Required | Windows | macOS |
+|---|---|---|---|
+| Python | 3.10 – 3.12 | python.org | `brew install python@3.12` |
+| Node.js | 18+ | nodejs.org | `brew install node` |
+| Git | any | git-scm.com | preinstalled / `brew install git` |
+| ngrok | optional — remote/WA access | ngrok.com | `brew install ngrok` |
+| Tesseract OCR | optional | `winget install UB-Mannheim.TesseractOCR` | `brew install tesseract` |
+| MongoDB | optional — falls back to local JSON | — | `brew install mongodb-community` |
+| n8n | optional | `npm install -g n8n` | `npm install -g n8n` |
+| BlackHole 2ch | macOS only — needed for PC-audio-to-phone streaming | — | `brew install blackhole-2ch` |
+| Xcode Command Line Tools | macOS only — needed to build `dlib` | — | `xcode-select --install` |
 
 ---
 
@@ -601,28 +661,42 @@ projects/
 git clone https://github.com/1nonlyvansh/iZACH.git
 cd iZACH
 python -m venv .venv
+```
+
+Windows:
+```bash
 .venv\Scripts\activate
+```
+
+macOS:
+```bash
+source .venv/bin/activate
 ```
 
 ---
 
 ### 2 — Python dependencies
 
-`dlib` (face recognition) requires a prebuilt wheel — avoid cmake hell:
+`dlib` (face recognition) needs a prebuilt wheel on Windows to avoid a full cmake build:
 
 ```bash
-# Python 3.12:
+# Windows, Python 3.12:
 pip install https://github.com/z-mahmud22/Dlib_Windows_Python3.x/raw/main/dlib-19.24.99-cp312-cp312-win_amd64.whl
 
-# Python 3.11:
+# Windows, Python 3.11:
 pip install https://github.com/z-mahmud22/Dlib_Windows_Python3.x/raw/main/dlib-19.24.1-cp311-cp311-win_amd64.whl
 
-# Then everything else
+# macOS — Xcode Command Line Tools must already be installed (see Prerequisites), then just:
+pip install dlib
+
+# Then everything else, both platforms:
 pip install -r requirements.txt
 
 # Playwright browser
 playwright install chromium
 ```
+
+`requirements.txt` uses PEP 508 environment markers — Windows-only packages (`pywin32`, `pycaw`, `WMI`, `comtypes`) and macOS-only packages (`pyobjc-framework-Cocoa`, `pyobjc-framework-Quartz`, `pyobjc-framework-AVFoundation`) install automatically based on your OS from the same `pip install -r requirements.txt` command — nothing to comment out or pick manually.
 
 ---
 
@@ -640,10 +714,7 @@ cd izach-ui && npm install && cd ..
 
 ### 4 — API keys
 
-```bash
-copy .env.example .env
-# Open .env and fill in your keys
-```
+Windows: `copy .env.example .env` — macOS: `cp .env.example .env` — then open `.env` and fill in your keys.
 
 | Variable | Source |
 |---|---|
@@ -655,29 +726,18 @@ copy .env.example .env
 | `DEEPSEEK_API_KEY` | [platform.deepseek.com](https://platform.deepseek.com) — for code skills |
 | `OPENROUTER_API_KEY` | [openrouter.ai](https://openrouter.ai) — LLM fallback |
 
-**Google Calendar** (optional):
-1. Google Cloud Console → enable Calendar API
-2. OAuth 2.0 credentials → desktop app → download as `credentials.json` → place in root
-3. First run will open browser OAuth flow → creates `token.json` automatically
+**Google Calendar / Google Fit / Smart Home** (all optional, same pattern):
+1. Google Cloud Console → enable the relevant API (Calendar / Fitness)
+2. OAuth 2.0 credentials → desktop app → download as `credentials.json` (or `fitness_credentials.json`/`smart_home_credentials.json`) → place in root
+3. Connect from Settings → Connected Services — opens your browser for consent, no code to paste, polls automatically until connected
 
 ---
 
-### 5 — Fix launch paths
-
-`launch_izach.py` has hardcoded paths. Edit the top section:
-
-```python
-BASE      = r"C:\your\path\to\iZACH"
-IZACH_CMD = [r"C:\your\path\to\iZACH\.venv\Scripts\python.exe", os.path.join(BASE, "main.py")]
-# Comment out MMA_CMD if you don't have the MMA agent repo
-```
-
----
-
-### 6 — Launch
+### 5 — Launch
 
 ```bash
-python launch_izach.py
+python launch_izach.py       # Windows
+python3 launch_izach.py      # macOS
 ```
 
 Services start in order with health checks:
@@ -696,6 +756,8 @@ Services start in order with health checks:
 - **Spotify** — first command opens browser OAuth. Approve it.
 - **Face auth** — say *"enroll my face"* to register biometrics.
 - **Memory** — memories persist in `smart_memory.json` (gitignored).
+- **macOS permissions** — first run will prompt for Microphone, Camera, and (for window/app-awareness features) Screen Recording access. Grant all three, or the voice loop and vision features won't work.
+- **macOS audio streaming to phone** — requires BlackHole (see Prerequisites) plus a Multi-Output Device set up in Audio MIDI Setup so you still hear audio locally while it's also captured for streaming.
 
 ---
 
@@ -799,7 +861,9 @@ iZACH/
 | Forge UI | Python · Tkinter — legacy desktop UI, standalone WebView2 browser (v2.2.0) |
 | Browser Automation | Playwright (Chromium) |
 | Vision | OpenCV · face_recognition (dlib) · Gemini Vision |
-| System Automation | PyAutoGUI · pywin32 · psutil |
+| System Automation | PyAutoGUI · psutil · pywin32 (Windows) / PyObjC + AppleScript (macOS) |
+| Cross-Platform Layer | `modules/platform_utils.py` · `system_control_{windows,mac,common,unsupported}.py` dispatcher |
+| Dual-Instance | `instance_coordinator.py` (peer detection/handoff) · Syncthing (shared brain mirror) |
 | Memory | MongoDB · Obsidian vault (`[[wikilinks]]`) · JSON fallback |
 | Smart Memory | `smart_memory.json` · APScheduler · Obsidian sync |
 | Android | Kotlin · OkHttp · WebSocket · Quick Tiles API · AudioTrack |
@@ -811,25 +875,30 @@ iZACH/
 
 | Problem | Fix |
 |---|---|
-| `dlib` install fails | Use prebuilt wheel from step 2 |
-| Mic not detected | Windows Settings → Privacy → Microphone → allow app access |
-| Port 5050 in use | `netstat -ano \| findstr :5050` → `taskkill /PID <pid> /F` |
+| `dlib` install fails (Windows) | Use prebuilt wheel from step 2 |
+| `dlib` install fails (macOS) | Install Xcode Command Line Tools first: `xcode-select --install` |
+| Mic not detected (Windows) | Windows Settings → Privacy → Microphone → allow app access |
+| Mic not detected (macOS) | System Settings → Privacy & Security → Microphone → allow Terminal/iZACH |
+| Port 5050 in use (Windows) | `netstat -ano \| findstr :5050` → `taskkill /PID <pid> /F` |
+| Port 5050 in use (macOS) | `lsof -ti :5050 \| xargs kill -9` |
 | Electron blank screen | Backend not up — check `http://localhost:5050/health` |
-| `playwright install` fails | Activate `.venv` first: `.venv\Scripts\activate` |
+| `playwright install` fails | Activate `.venv` first (see step 1 for your OS) |
 | WhatsApp QR not showing | Run `node whatsapp_bridge.js` manually; wait 30s for browser |
 | Android app can't connect | Firewall must allow port 5050; both devices same Wi-Fi subnet |
 | Android shows DISCONNECTED | Backend must be running before opening app; check IP address |
 | Audio stream crackling | Ensure both devices on same subnet; check `/audio/stream` endpoint |
+| macOS audio streaming silent | BlackHole not installed, or no Multi-Output Device set up in Audio MIDI Setup |
 | Quick tiles not appearing | Pull down shade → edit tiles → find iZACH tiles in available list |
 | Smart memory not persisting | Check `smart_memory.json` not gitignored locally (it is by default) |
 | Spotify OAuth fails | Verify `SPOTIPY_REDIRECT_URI` matches Spotify dashboard exactly |
 | Skills not activating | Prefix must be exactly `#skill-id` with no space between `#` and id |
+| Dual-instance not detecting peer | Both machines need `dual_instance.enabled=true` **and** the other machine's real LAN IP set as `peer_host` in `api_keys.json` — no auto-discovery |
 
 ---
 
 <div align="center">
 
-**iZACH v2.1.0** — Skills system · Android audio stream · Quick Tiles · 5 crash fixes · 41 unused imports cleaned
+**iZACH v3.2.0** — macOS native port · dual-instance Mac↔Windows coordination · 15-tab Settings rebuild · Android multi-device profiles
 
 *Voice → AI → Action.*
 
