@@ -225,9 +225,16 @@ app.post('/send-message', async (req, res) => {
     if (!number || !text) {
         return res.json({ status: 'error', message: 'number and text are required' });
     }
-    // Normalize number to WA format: strip non-digits, ensure @c.us suffix
-    number = number.toString().replace(/[^0-9]/g, '');
-    if (!number.endsWith('@c.us')) number = number + '@c.us';
+    // Normalize to WA format. Only bare phone numbers get digit-stripped and
+    // forced to @c.us — a number that's already a full JID (@c.us, @g.us
+    // group, or @lid — WhatsApp's newer privacy-ID identity) is left as-is.
+    // Some contacts are addressed by @lid, not a phone-number JID at all;
+    // force-rewriting their real @lid JID into a nonexistent @c.us one is
+    // what caused "No LID for user" to fail on every retry, not just once.
+    number = number.toString().trim();
+    if (!/@(c\.us|g\.us|lid)$/.test(number)) {
+        number = number.replace(/[^0-9]/g, '') + '@c.us';
+    }
     await _waitUntilSendReady();
     try {
         await _sendWithLidRetry(() => activeClient.sendMessage(number, text));
