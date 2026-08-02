@@ -201,6 +201,24 @@ async function notifyIZACH(endpoint, data) {
 // `activeClient`, which is repointed at the current client on every
 // reconnect/restart, instead of closing over a specific client instance.
 
+// "No LID for user" (whatsapp-web.js issues #3834/#5750/#3985) is a race in
+// the library's own identity-store resolution, not a permanent failure —
+// retrying a few seconds later resolves it most of the time. Only this
+// specific error is retried; anything else fails immediately as before.
+const _LID_ERROR = /No LID for user/i;
+async function _sendWithLidRetry(sendFn, maxRetries = 2, delayMs = 3000) {
+    for (let attempt = 0; ; attempt++) {
+        try {
+            return await sendFn();
+        } catch (e) {
+            const msg = e.message || String(e);
+            if (attempt >= maxRetries || !_LID_ERROR.test(msg)) throw e;
+            console.log(`[BRIDGE] "No LID for user" — retrying in ${delayMs}ms (attempt ${attempt + 1}/${maxRetries})`);
+            await new Promise(r => setTimeout(r, delayMs));
+        }
+    }
+}
+
 // Send message endpoint
 app.post('/send-message', async (req, res) => {
     let { number, text } = req.body;
@@ -212,7 +230,7 @@ app.post('/send-message', async (req, res) => {
     if (!number.endsWith('@c.us')) number = number + '@c.us';
     await _waitUntilSendReady();
     try {
-        await activeClient.sendMessage(number, text);
+        await _sendWithLidRetry(() => activeClient.sendMessage(number, text));
         res.json({ status: 'sent' });
     } catch (e) {
         const errMsg = e.message || String(e) || 'unknown bridge error';
@@ -233,7 +251,7 @@ app.post('/send-voice', async (req, res) => {
             return res.status(403).json({ status: 'error', message: 'Path outside allowed directory' });
         }
         const media = MessageMedia.fromFilePath(resolved);
-        await activeClient.sendMessage(number, media, { sendAudioAsVoice: true });
+        await _sendWithLidRetry(() => activeClient.sendMessage(number, media, { sendAudioAsVoice: true }));
         res.json({ status: 'sent' });
     } catch (e) {
         res.json({ status: 'error', message: e.message });
