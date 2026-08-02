@@ -477,3 +477,141 @@ def kickstart_watchdog() -> bool:
         except Exception:
             return False
     return False
+
+
+# ── Boot daemon (cross-machine "Switch to Mac/Windows") ─────────────
+# Deliberately separate from the watchdog above: the watchdog only restarts
+# main.py if it exits — it does nothing when main.py has never been started
+# this session. The boot daemon is a second, independent always-on service
+# (boot_daemon.py) whose only job is to be reachable and listen for a
+# remote-start request even when iZACH itself isn't running at all.
+_BOOT_DAEMON_LABEL = "com.izach.bootdaemon"
+_BOOT_DAEMON_PLIST = os.path.expanduser(f"~/Library/LaunchAgents/{_BOOT_DAEMON_LABEL}.plist")
+_BOOT_DAEMON_TASK_NAME = "iZACH_BootDaemon"
+_BOOT_DAEMON_SCRIPT_PATH = os.path.join(_PROJECT_ROOT, "izach_boot_daemon_watchdog.ps1")
+
+
+def is_boot_daemon_installed() -> bool:
+    if IS_MAC:
+        return os.path.exists(_BOOT_DAEMON_PLIST)
+    if IS_WINDOWS:
+        try:
+            r = subprocess.run(
+                ["schtasks", "/query", "/tn", _BOOT_DAEMON_TASK_NAME],
+                capture_output=True, timeout=10,
+            )
+            return r.returncode == 0
+        except Exception:
+            return False
+    return False
+
+
+def _write_windows_boot_daemon_script():
+    python_exe = sys.executable
+    daemon_py = os.path.join(_PROJECT_ROOT, "boot_daemon.py")
+    script = (
+        "# iZACH boot daemon wrapper — relaunches boot_daemon.py whenever it\n"
+        "# exits, so the always-on remote-start listener stays up. Uninstalled\n"
+        "# by uninstall_boot_daemon(). Set-Location matters for the same reason\n"
+        "# as the main watchdog script: boot_daemon.py reads .env via a bare\n"
+        "# relative path, assuming cwd is the project root.\n"
+        f"Set-Location \"{_PROJECT_ROOT}\"\n"
+        "while ($true) {\n"
+        f"    & \"{python_exe}\" \"{daemon_py}\"\n"
+        "    Start-Sleep -Seconds 2\n"
+        "}\n"
+    )
+    with open(_BOOT_DAEMON_SCRIPT_PATH, "w", encoding="utf-8") as f:
+        f.write(script)
+
+
+def install_boot_daemon() -> tuple[bool, str]:
+    """Register boot_daemon.py as an OS-managed background service, running
+    independently of iZACH's own process — same RunAtLoad+KeepAlive pattern
+    as install_watchdog(), pointed at a different script/port."""
+    if IS_MAC:
+        try:
+            python_bin = os.path.join(_PROJECT_ROOT, ".venv", "bin", "python3")
+            daemon_py = os.path.join(_PROJECT_ROOT, "boot_daemon.py")
+            os.makedirs(os.path.dirname(_BOOT_DAEMON_PLIST), exist_ok=True)
+            plist = f"""<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key><string>{_BOOT_DAEMON_LABEL}</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>{python_bin}</string>
+        <string>{daemon_py}</string>
+    </array>
+    <key>WorkingDirectory</key><string>{_PROJECT_ROOT}</string>
+    <key>RunAtLoad</key><true/>
+    <key>KeepAlive</key><true/>
+    <key>StandardOutPath</key><string>{_PROJECT_ROOT}/logs/boot_daemon.log</string>
+    <key>StandardErrorPath</key><string>{_PROJECT_ROOT}/logs/boot_daemon.log</string>
+</dict>
+</plist>
+"""
+            with open(_BOOT_DAEMON_PLIST, "w", encoding="utf-8") as f:
+                f.write(plist)
+            subprocess.run(["launchctl", "load", _BOOT_DAEMON_PLIST], capture_output=True, timeout=5)
+            return True, "Boot daemon installed — this Mac can now be remotely started by its peer."
+        except Exception as e:
+            return False, f"Boot daemon install failed: {e}"
+    if IS_WINDOWS:
+        try:
+            _write_windows_boot_daemon_script()
+            cmd = [
+                "schtasks", "/create", "/tn", _BOOT_DAEMON_TASK_NAME,
+                "/tr", f'powershell.exe -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "{_BOOT_DAEMON_SCRIPT_PATH}"',
+                "/sc", "onlogon", "/f",
+            ]
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
+            if r.returncode == 0:
+                return True, "Boot daemon installed — this PC can now be remotely started by its peer."
+            return False, f"schtasks failed: {(r.stderr or r.stdout).strip()}"
+        except Exception as e:
+            return False, f"Could not install boot daemon: {e}"
+    return False, "Boot daemon is only supported on Windows and macOS."
+
+
+def uninstall_boot_daemon() -> tuple[bool, str]:
+    if IS_MAC:
+        try:
+            if os.path.exists(_BOOT_DAEMON_PLIST):
+                subprocess.run(["launchctl", "unload", _BOOT_DAEMON_PLIST], capture_output=True, timeout=5)
+                os.remove(_BOOT_DAEMON_PLIST)
+            return True, "Boot daemon removed."
+        except Exception as e:
+            return False, f"Boot daemon removal failed: {e}"
+    if IS_WINDOWS:
+        try:
+            ps_find = (
+                "Get-CimInstance Win32_Process | "
+                f"Where-Object {{ $_.CommandLine -like '*{os.path.basename(_BOOT_DAEMON_SCRIPT_PATH)}*' }} | "
+                "Select-Object -ExpandProperty ProcessId"
+            )
+            r = subprocess.run(
+                ["powershell", "-NoProfile", "-Command", ps_find],
+                capture_output=True, text=True, timeout=10,
+            )
+            for pid in r.stdout.split():
+                pid = pid.strip()
+                if pid.isdigit():
+                    subprocess.run(["taskkill", "/PID", pid, "/F"], capture_output=True, timeout=10)
+        except Exception:
+            pass
+
+        try:
+            r = subprocess.run(
+                ["schtasks", "/delete", "/tn", _BOOT_DAEMON_TASK_NAME, "/f"],
+                capture_output=True, text=True, timeout=15,
+            )
+            if r.returncode == 0:
+                return True, "Boot daemon uninstalled."
+            if "cannot find" in (r.stderr or "").lower() or "cannot find" in (r.stdout or "").lower():
+                return True, "Boot daemon was not installed."
+            return False, f"schtasks failed: {(r.stderr or r.stdout).strip()}"
+        except Exception as e:
+            return False, f"Could not uninstall boot daemon: {e}"
+    return False, "Boot daemon is only supported on Windows and macOS."
