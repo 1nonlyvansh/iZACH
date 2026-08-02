@@ -485,7 +485,7 @@ def kickstart_watchdog() -> bool:
 # this session. The boot daemon is a second, independent always-on service
 # (boot_daemon.py) whose only job is to be reachable and listen for a
 # remote-start request even when iZACH itself isn't running at all.
-_BOOT_DAEMON_LABEL = "com.izach.bootdaemon"
+_BOOT_DAEMON_LABEL = "com.izach.boot"
 _BOOT_DAEMON_PLIST = os.path.expanduser(f"~/Library/LaunchAgents/{_BOOT_DAEMON_LABEL}.plist")
 _BOOT_DAEMON_TASK_NAME = "iZACH_BootDaemon"
 _BOOT_DAEMON_SCRIPT_PATH = os.path.join(_PROJECT_ROOT, "izach_boot_daemon_watchdog.ps1")
@@ -534,6 +534,19 @@ def install_boot_daemon() -> tuple[bool, str]:
             python_bin = os.path.join(_PROJECT_ROOT, ".venv", "bin", "python3")
             daemon_py = os.path.join(_PROJECT_ROOT, "boot_daemon.py")
             os.makedirs(os.path.dirname(_BOOT_DAEMON_PLIST), exist_ok=True)
+            log_dir = os.path.expanduser("~/Library/Logs/iZACH")
+            os.makedirs(log_dir, exist_ok=True)
+            log_path = os.path.join(log_dir, "boot_daemon.log")
+            # No WorkingDirectory key, and logs write to ~/Library/Logs (not
+            # this project's own logs/ folder) deliberately — this project
+            # lives under ~/Desktop, one of macOS's TCC-protected folders.
+            # A LaunchAgent whose WorkingDirectory or log-file writes point
+            # inside Desktop gets silently killed by launchd shortly after
+            # spawning (posix_spawn "Operation not permitted", confirmed via
+            # `log show`), even though the exact same binary/script args
+            # spawn and run fine when cwd/logs point elsewhere. boot_daemon.py
+            # itself doesn't need cwd (resolves paths from __file__), so this
+            # has no functional cost.
             plist = f"""<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -544,11 +557,10 @@ def install_boot_daemon() -> tuple[bool, str]:
         <string>{python_bin}</string>
         <string>{daemon_py}</string>
     </array>
-    <key>WorkingDirectory</key><string>{_PROJECT_ROOT}</string>
     <key>RunAtLoad</key><true/>
     <key>KeepAlive</key><true/>
-    <key>StandardOutPath</key><string>{_PROJECT_ROOT}/logs/boot_daemon.log</string>
-    <key>StandardErrorPath</key><string>{_PROJECT_ROOT}/logs/boot_daemon.log</string>
+    <key>StandardOutPath</key><string>{log_path}</string>
+    <key>StandardErrorPath</key><string>{log_path}</string>
 </dict>
 </plist>
 """

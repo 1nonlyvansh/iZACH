@@ -37,9 +37,19 @@ from modules.platform_utils import IS_MAC, IS_WINDOWS
 _PEER_TOKEN = os.environ.get("IZACH_PEER_TOKEN", "")
 _DAEMON_PORT = int(os.environ.get("IZACH_DAEMON_PORT", "5052"))
 
-os.makedirs(os.path.join(_PROJECT_ROOT, "logs"), exist_ok=True)
+# macOS-only: log outside the project's own logs/ folder. This project
+# lives under ~/Desktop, a TCC-protected folder — a LaunchAgent whose log
+# writes land inside Desktop gets silently killed by launchd shortly after
+# spawning (posix_spawn "Operation not permitted", confirmed via `log show`
+# on a real launchd-managed run). Windows has no equivalent restriction, so
+# it keeps using the project's own logs/ folder as normal.
+if IS_MAC:
+    _LOG_DIR = os.path.expanduser("~/Library/Logs/iZACH")
+else:
+    _LOG_DIR = os.path.join(_PROJECT_ROOT, "logs")
+os.makedirs(_LOG_DIR, exist_ok=True)
 logging.basicConfig(
-    filename=os.path.join(_PROJECT_ROOT, "logs", "boot_daemon.log"),
+    filename=os.path.join(_LOG_DIR, "boot_daemon.log"),
     level=logging.INFO,
     format="%(asctime)s [DAEMON] %(message)s",
 )
