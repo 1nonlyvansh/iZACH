@@ -260,6 +260,86 @@ def initiate_handoff(target_platform: str) -> tuple[bool, str]:
     )
 
 
+_DAEMON_PORT = int(os.environ.get("IZACH_DAEMON_PORT", "5052"))
+
+
+def _exit_after_delay(seconds: float = 2.0):
+    """Runs on a background thread so the HTTP caller (ui_api.py's
+    /switch_machine route) gets its response before this process exits."""
+    time.sleep(seconds)
+    os._exit(0)
+
+
+def switch_to_peer(target_platform: str) -> tuple[bool, str]:
+    """The "Switch to Windows/Mac" button — unlike initiate_handoff() (which
+    only works if the peer is ALREADY running, and leaves this machine's own
+    shutdown to the user), this also handles a completely offline peer: boots
+    it via boot_daemon.py's /daemon/boot first, waits for it to come up
+    healthy, then automatically hands off and exits this machine's iZACH.
+    Never touches the local process unless the peer is confirmed reachable
+    and healthy first — a network hiccup mid-switch leaves this machine
+    running, not dead with no primary anywhere."""
+    cfg = _load_config()
+    if not cfg.get("peer_host"):
+        return False, "No peer configured for dual-instance switching."
+
+    my_platform = get_platform_name().lower()
+    if target_platform.lower() in my_platform:
+        return False, f"This machine is already the {get_platform_name()} instance."
+
+    if check_peer(cfg) is None:
+        # Peer's not running at all — boot it via its daemon first.
+        ok, msg = _boot_peer(cfg)
+        if not ok:
+            return False, msg
+        if not _wait_for_peer_healthy(cfg, timeout=90):
+            return False, "Peer didn't come up healthy within 90s — this machine stays primary, nothing was shut down."
+
+    try:
+        import requests
+        r = requests.post(
+            _peer_url(cfg, "/peer/handoff"), json={"action": "promote"},
+            headers={"X-iZACH-Peer-Token": _PEER_TOKEN}, timeout=5,
+        )
+        if r.status_code != 200 or not r.json().get("ok"):
+            return False, "Peer came up but rejected the handoff request — this machine stays primary."
+    except Exception:
+        return False, "Peer came up but became unreachable during handoff — this machine stays primary."
+
+    become_secondary("switched to peer")
+    threading.Thread(target=_exit_after_delay, daemon=True).start()
+    return True, "Switched — the peer machine is now primary, this one is shutting down."
+
+
+def _boot_peer(cfg: dict) -> tuple[bool, str]:
+    host = cfg.get("peer_host")
+    try:
+        import requests
+        r = requests.post(
+            f"http://{host}:{_DAEMON_PORT}/daemon/boot", timeout=5,
+            headers={"X-iZACH-Peer-Token": _PEER_TOKEN},
+        )
+        if r.status_code == 200 and r.json().get("ok"):
+            return True, "boot triggered"
+        if r.status_code == 401:
+            return False, "Peer's boot daemon rejected the request — IZACH_PEER_TOKEN doesn't match on both machines."
+        return False, "Peer's boot daemon returned an unexpected error."
+    except Exception:
+        return False, (
+            f"Could not reach {host}:{_DAEMON_PORT} — the peer machine appears to be "
+            "offline, or its boot daemon isn't installed/running."
+        )
+
+
+def _wait_for_peer_healthy(cfg: dict, timeout: int = 90) -> bool:
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if check_peer(cfg) is not None:
+            return True
+        time.sleep(3)
+    return False
+
+
 def watch_for_auto_promotion(poll_interval_s: int = 30):
     """Call from Secondary Connector mode (main.py's _start_secondary_connector).
     Runs forever in a background thread — if auto_promote_enabled and the

@@ -1980,6 +1980,20 @@ def peer_handoff():
     return jsonify({"ok": False, "error": "action must be 'promote' or 'demote'"}), 400
 
 
+@ui_bp.route("/switch_machine", methods=["POST"])
+def switch_machine():
+    """Local-only — the 'Switch to Windows/Mac' button in Settings. Called by
+    THIS machine's own Cortex/Forge UI, not the peer (unlike /peer/handoff,
+    which this internally calls once the peer's confirmed up)."""
+    data = request.get_json(silent=True) or {}
+    target = data.get("target", "")
+    if target not in ("windows", "mac"):
+        return jsonify({"ok": False, "error": "target must be 'windows' or 'mac'"}), 400
+    from modules.instance_coordinator import switch_to_peer
+    ok, msg = switch_to_peer(target)
+    return jsonify({"ok": ok, "message": msg})
+
+
 # ─────────────────────────────────────────────────────────────
 # GET  /websites         — list custom websites
 # POST /websites         — add {name, url}

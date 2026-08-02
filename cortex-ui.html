@@ -2012,6 +2012,14 @@ body.spotlight-mode .pnl:not(.spotlighted) {
           </div>
           <button class="sp-action-btn" onclick="checkPeerConnection()">TEST CONNECTION</button>
           <span class="sp-save-msg" id="dual-check-msg" style="margin-left:8px;"></span>
+          <div class="cfg-divider" style="margin:12px 0;border-top:1px solid rgba(0,148,255,0.07);"></div>
+          <div class="cfg-label">SWITCH MACHINE</div>
+          <div style="font-size:7px;color:rgba(0,148,255,0.55);margin-bottom:8px;letter-spacing:.05em;">Boots iZACH on the other machine if it's not already running, waits for it to come up healthy, then hands off and shuts down here. Nothing here is touched if the peer can't be reached.</div>
+          <div style="display:flex;gap:8px;">
+            <button class="sp-action-btn" onclick="switchMachine('windows')" style="flex:1;">SWITCH TO WINDOWS</button>
+            <button class="sp-action-btn" onclick="switchMachine('mac')" style="flex:1;">SWITCH TO MAC</button>
+          </div>
+          <span class="sp-save-msg" id="switch-machine-msg" style="display:block;margin-top:6px;"></span>
         </div>
         <div class="sp-divider"></div>
         <div class="sp-sec">
@@ -10303,6 +10311,22 @@ async function checkPeerConnection(){
     if(msg) msg.textContent='Connection error.';
   }
   setTimeout(()=>{ if(msg) msg.textContent=''; },8000);
+}
+
+async function switchMachine(target){
+  const msg=document.getElementById('switch-machine-msg');
+  if(!confirm(`Switch iZACH to ${target==='windows'?'Windows':'Mac'}? This boots it there if needed, then shuts down here once it's confirmed healthy.`)) return;
+  if(msg){ msg.style.color='rgba(0,148,255,0.7)'; msg.textContent='Switching — this can take up to a minute if the other machine needs to boot...'; }
+  try{
+    const r=await fetch(API+'/switch_machine',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({target})});
+    const d=await r.json();
+    if(msg){
+      msg.style.color = d.ok ? 'rgba(29,185,84,0.9)' : 'rgba(255,61,61,0.9)';
+      msg.textContent = d.message || (d.ok ? 'Switched.' : 'Switch failed.');
+    }
+  }catch(e){
+    if(msg){ msg.style.color='rgba(255,61,61,0.9)'; msg.textContent='Connection error — this machine was not touched.'; }
+  }
 }
 
 // ════════════════════════════════════════════════════

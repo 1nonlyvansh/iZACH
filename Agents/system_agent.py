@@ -70,7 +70,8 @@ Output ONLY valid JSON — no other text:
   "wifi_enable": <true|false|null — null means toggle>,
   "drive_id": "<drive letter or name or null>",
   "process_name": "<process/app name or null>",
-  "priority_level": "<low|normal|high|realtime or null>"
+  "priority_level": "<low|normal|high|realtime or null>",
+  "target_platform": "<mac|windows or null>"
 }}
 
 Intents (pick exactly one):
@@ -102,16 +103,18 @@ Intents (pick exactly one):
 - list_drives       : "list drives", "show drives", "connected drives"
 - eject_drive       : "eject X", "safely remove X", "remove drive X"
 - process_priority  : "boost X priority", "set X to high priority"
+- switch_machine    : "hand off to windows/mac", "switch to windows/mac", "move izach to windows/mac" — moving THIS iZACH session to the other computer (Mac<->Windows dual-instance). This is NOT open_app — "windows"/"mac" here means the other computer, not launching an application. Extract target_platform as "mac" or "windows".
 
 Rules:
 - volume_delta: positive = increase, negative = decrease; default ±10 unless user says a number
 - timer_seconds: convert "5 minutes" → 300, "1 hour" → 3600, "30 seconds" → 30
 - shutdown/restart delay: "in 10 minutes" → 600, "now"/"immediately" → 0, no time specified → 0
 - app_name: extract the app name without open/close/kill verbs
+- "hand off"/"switch"/"move" + "to windows"/"to mac" (no app name, referring to the other computer) = switch_machine, NEVER open_app with app_name="windows"/"mac"
 - Output ONLY the JSON object
 """
 
-_CONFIRM_INTENTS = {"shutdown", "restart"}   # require confirmation before executing
+_CONFIRM_INTENTS = {"shutdown", "restart", "switch_machine"}   # require confirmation before executing
 
 # open_app's LLM parser occasionally misreads a command like "play X on
 # youtube" as "open youtube" — before blindly typing the app name into
@@ -184,6 +187,7 @@ class SystemAgent:
             "list_drives":       self._list_drives,
             "eject_drive":       self._eject_drive,
             "process_priority":  self._process_priority,
+            "switch_machine":    self._switch_machine,
         }
 
         handler = dispatch.get(intent)
@@ -209,12 +213,18 @@ class SystemAgent:
             print(f"[SYS_AGENT] parse error: {e} | response: {response!r}")
             return {"intent": "unknown"}
 
-    # ── Confirmation flow (shutdown / restart) ────────────────────
+    # ── Confirmation flow (shutdown / restart / switch_machine) ────
 
     def _ask_confirm(self, intent: str, intent_data: dict) -> bool:
         self._pending_confirm = {"intent": intent, "data": intent_data}
-        label = "shut down" if intent == "shutdown" else "restart"
-        self.speak(f"Are you sure you want to {label} your PC?")
+        if intent == "shutdown":
+            label = "shut down your PC"
+        elif intent == "restart":
+            label = "restart your PC"
+        else:
+            target = intent_data.get("target_platform") or "the other computer"
+            label = f"switch iZACH over to {target} and shut down here"
+        self.speak(f"Are you sure you want to {label}?")
         return True
 
     def _resolve_confirm(self, cmd: str) -> bool:
@@ -234,6 +244,8 @@ class SystemAgent:
                 self._execute_shutdown(d)
             elif intent == "restart":
                 self._execute_restart(d)
+            elif intent == "switch_machine":
+                self._execute_switch_machine(d)
         else:
             self.speak("Okay, cancelled.")
         return True
@@ -401,6 +413,19 @@ class SystemAgent:
         _, msg = _sc.cancel_shutdown()
         self.speak(msg)
         return True
+
+    def _switch_machine(self, d: dict, cmd: str) -> bool:
+        target = (d.get("target_platform") or "").strip().lower()
+        if target not in ("mac", "windows"):
+            self.speak("Switch to which computer — Mac or Windows?")
+            return True
+        return self._ask_confirm("switch_machine", d)
+
+    def _execute_switch_machine(self, d: dict) -> None:
+        target = (d.get("target_platform") or "").strip().lower()
+        from modules.instance_coordinator import switch_to_peer
+        ok, msg = switch_to_peer(target)
+        self.speak(msg)
 
     def _wifi_on(self, d: dict, cmd: str) -> bool:
         _, msg = _sc.set_wifi(True)
