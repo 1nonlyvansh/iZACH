@@ -2066,6 +2066,37 @@ body.spotlight-mode .pnl:not(.spotlighted) {
         </div>
         <div class="sp-divider"></div>
         <div class="sp-sec">
+          <div class="sp-sec-title">ALLIEDNODE 2</div>
+          <div style="font-size:7px;color:rgba(0,148,255,0.55);margin-bottom:8px;letter-spacing:.05em;">The satellite PC controllable from the DEVICES widget — separate from the dual-instance peer above. Shared secret token: Settings → Keys &amp; ID → ALLIEDNODE2 TOKEN.</div>
+          <div id="an2-device-card" style="display:none;border:1px solid rgba(0,148,255,0.15);border-radius:4px;padding:9px 11px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+              <div style="min-width:0;">
+                <div id="an2-device-name" style="font-size:10px;color:#0094ff;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"></div>
+                <div id="an2-device-hostport" style="font-size:7px;color:rgba(0,148,255,0.5);margin-top:2px;letter-spacing:.05em;"></div>
+              </div>
+              <div style="display:flex;gap:6px;flex-shrink:0;">
+                <button class="sp-action-btn" onclick="an2DeviceEdit()">EDIT</button>
+              </div>
+            </div>
+          </div>
+          <div id="an2-device-form" style="display:none;">
+            <div class="cfg-label">DEVICE NAME</div>
+            <input class="cfg-inp" id="cfg-an2-label" placeholder="e.g. AlliedNode 2" autocomplete="off">
+            <div class="cfg-label" style="margin-top:8px;">HOST (LAN IP)</div>
+            <input class="cfg-inp" id="cfg-an2-host" placeholder="e.g. 192.168.0.137" autocomplete="off">
+            <div class="cfg-label" style="margin-top:8px;">PORT</div>
+            <input class="cfg-inp" id="cfg-an2-port" placeholder="9797" autocomplete="off">
+            <div class="cfg-label" style="margin-top:8px;">MAC ADDRESS (for Wake-on-LAN)</div>
+            <input class="cfg-inp" id="cfg-an2-mac" placeholder="e.g. F8-89-D2-00-DD-C9" autocomplete="off">
+            <div style="display:flex;gap:8px;margin-top:8px;align-items:center;">
+              <button class="sp-action-btn" onclick="an2DeviceSave()">SAVE DEVICE</button>
+              <button class="sp-action-btn" onclick="an2DeviceCancelEdit()">CANCEL</button>
+              <span class="sp-save-msg" id="an2-device-msg"></span>
+            </div>
+          </div>
+        </div>
+        <div class="sp-divider"></div>
+        <div class="sp-sec">
           <div class="sp-sec-title">MOBILE PHONE</div>
           <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
             <div class="ph-cdot" id="dc-phone-status-dot"></div>
@@ -2715,7 +2746,7 @@ body.spotlight-mode .pnl:not(.spotlighted) {
   <!-- AlliedNode 2 row -->
   <div class="dev-node-row" onclick="toggleNodeExpand('an2')">
     <div class="dev-node-dot" id="dev-dot-an2"></div>
-    <span class="dev-node-name">AlliedNode 2</span>
+    <span class="dev-node-name" id="dev-node-name-an2">AlliedNode 2</span>
     <span class="dev-node-ip">192.168.0.192</span>
     <span class="dev-node-status" id="dev-status-an2">···</span>
     <span class="dev-node-arr" id="dev-arr-an2">▼</span>
@@ -9995,6 +10026,7 @@ const _cfgBools={};
 // before settings finished loading), since that would silently clobber the
 // real peer/enabled config on every unrelated save (nickname, theme, etc).
 let _dualInstanceLoaded=false;
+let _an2Loaded=false;
 function cfgToggle(togId,key){
   _cfgBools[key]=!_cfgBools[key];
   const el=document.getElementById(togId);
@@ -10127,6 +10159,15 @@ async function loadConfig(){
     const apTimeout=document.getElementById('cfg-auto-promote-timeout'); if(apTimeout) apTimeout.value=di.auto_promote_timeout_minutes||5;
     _dualInstanceLoaded=true;
     _renderPeerDeviceCard(di);
+    const an2 = (s.allied_nodes || {})['alliednode 2'] || null;
+    if (an2) {
+      const l=document.getElementById('cfg-an2-label'); if(l) l.value=an2.label||'';
+      const h=document.getElementById('cfg-an2-host');  if(h) h.value=an2.host||'';
+      const p=document.getElementById('cfg-an2-port');  if(p) p.value=an2.port||9797;
+      const m=document.getElementById('cfg-an2-mac');   if(m) m.value=an2.mac||'';
+    }
+    _renderAn2DeviceCard(an2);
+    _an2Loaded=true;
     // Toggles
     const togMap={
       'wake_word_enabled':['tog-wake', !!(s.wake_word_enabled)],
@@ -10410,15 +10451,30 @@ async function saveConfig(msgId){
       auto_promote_timeout_minutes: apTimeoutEl && apTimeoutEl.value ? Number(apTimeoutEl.value) : 5,
     };
   }
+  // AlliedNode 2 — same "don't clobber with unpopulated DOM values before
+  // settings finished loading" guard as dual_instance above.
+  if(_an2Loaded){
+    const an2HostEl=document.getElementById('cfg-an2-host');
+    payload.allied_nodes={
+      'alliednode 2': {
+        label: document.getElementById('cfg-an2-label')?.value.trim() || 'AlliedNode 2',
+        host: an2HostEl ? an2HostEl.value.trim() : '',
+        port: document.getElementById('cfg-an2-port')?.value ? Number(document.getElementById('cfg-an2-port').value) : 9797,
+        mac: document.getElementById('cfg-an2-mac')?.value.trim() || '',
+      },
+    };
+  }
   try{
     const r=await fetch(API+'/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
     const d=await r.json();
     if(d.ok){
       msg.style.color='rgba(0,148,255,0.7)';
       msg.textContent=(payload.ui==='classic')?'Saved. Restart to switch to Classic UI.':'Settings saved.';
+      setTimeout(()=>{ if(msg) msg.textContent=''; },5000);
+      return true;
     } else { msg.style.color='rgba(255,80,80,0.7)'; msg.textContent='Error: '+(d.error||'save failed'); }
   }catch(e){ msg.style.color='rgba(255,80,80,0.7)'; msg.textContent='Backend offline.'; }
-  setTimeout(()=>{ if(msg) msg.textContent=''; },5000);
+  return false;
 }
 
 async function checkPeerConnection(){
@@ -10500,7 +10556,8 @@ async function peerDeviceSave(){
   _cfgBools['dual_enabled'] = true;
   const togDual = document.getElementById('tog-dual-enabled');
   if (togDual) togDual.classList.add('on');
-  await saveConfig('peer-device-msg');
+  const _ok = await saveConfig('peer-device-msg');
+  if (!_ok) return; // saveConfig already showed the real error — don't fake success on top of it
   const savedLabel = document.getElementById('cfg-peer-label')?.value;
   _renderPeerDeviceCard({
     peer_host: hostEl.value.trim(),
@@ -10524,7 +10581,8 @@ async function peerDeviceRemove(){
   _cfgBools['dual_enabled'] = false;
   const togDual = document.getElementById('tog-dual-enabled');
   if (togDual) togDual.classList.remove('on');
-  await saveConfig('peer-device-msg');
+  const _ok = await saveConfig('peer-device-msg');
+  if (!_ok) return;
   _renderPeerDeviceCard({});
 }
 
@@ -10537,6 +10595,61 @@ function _setSwitchProgressUI(pct, message, isError){
   if (fill) { fill.style.width = pct + '%'; fill.style.background = isError ? '#ff3d3d' : 'linear-gradient(90deg,#0094ff,#00e5ff)'; }
   if (pctEl) { pctEl.textContent = pct + '%'; pctEl.style.color = isError ? '#ff3d3d' : '#0094ff'; }
   if (msgEl) msgEl.textContent = message;
+}
+
+// ── AlliedNode 2 device card — same "friendlier UI over existing config"
+// pattern as the peer device card, but for the satellite-PC node (see
+// modules/remote_node.py). Unlike the peer device, this one has no
+// REMOVE (there must always be exactly one entry named "alliednode 2" for
+// the DEVICES widget's hardcoded row to have something to point at) and
+// no ADD flow — it always exists, defaulting to the pre-config hardcoded
+// values server-side if never touched. ──
+function _renderAn2DeviceCard(node){
+  const card = document.getElementById('an2-device-card');
+  const form = document.getElementById('an2-device-form');
+  if (!card || !form) return;
+  const nameEl = document.getElementById('an2-device-name');
+  const hpEl = document.getElementById('an2-device-hostport');
+  if (nameEl) nameEl.textContent = (node && node.label) || 'AlliedNode 2';
+  if (hpEl) hpEl.textContent = node ? `${node.host}:${node.port || 9797}` : '';
+  card.style.display = 'block';
+  form.style.display = 'none';
+}
+
+function an2DeviceEdit(){
+  document.getElementById('an2-device-card').style.display = 'none';
+  document.getElementById('an2-device-form').style.display = 'block';
+}
+
+function an2DeviceCancelEdit(){
+  document.getElementById('an2-device-form').style.display = 'none';
+  _renderAn2DeviceCard({
+    label: document.getElementById('cfg-an2-label')?.value,
+    host: document.getElementById('cfg-an2-host')?.value,
+    port: document.getElementById('cfg-an2-port')?.value,
+  });
+}
+
+async function an2DeviceSave(){
+  const hostEl = document.getElementById('cfg-an2-host');
+  const msg = document.getElementById('an2-device-msg');
+  if (!hostEl || !hostEl.value.trim()) {
+    if (msg) { msg.style.color = 'rgba(255,61,61,0.9)'; msg.textContent = 'Host is required.'; }
+    return;
+  }
+  const _ok = await saveConfig('an2-device-msg');
+  if (!_ok) return; // saveConfig already showed the real error — don't fake success on top of it
+  const labelVal = document.getElementById('cfg-an2-label')?.value.trim() || 'AlliedNode 2';
+  _renderAn2DeviceCard({
+    label: labelVal,
+    host: hostEl.value.trim(),
+    port: document.getElementById('cfg-an2-port')?.value,
+  });
+  // DEVICES widget's an2 row label was set once at page load — sync it
+  // directly, same fix as the peer device rename bug.
+  const devNameEl = document.getElementById('dev-node-name-an2');
+  if (devNameEl) devNameEl.textContent = labelVal;
+  if (DEVICE_NODES.an2) DEVICE_NODES.an2.label = labelVal;
 }
 
 async function switchMachine(target){
@@ -11848,6 +11961,19 @@ async function peerRefreshProcs() {
 
 setTimeout(_initPeerRow, 2500);
 setTimeout(_initTaskbarSwitch, 2500);
+setTimeout(_initAn2Label, 2500);
+
+async function _initAn2Label(){
+  try {
+    const r = await fetch(`${API}/settings`);
+    const d = await r.json();
+    const an2 = (d.settings && d.settings.allied_nodes && d.settings.allied_nodes['alliednode 2']) || null;
+    const label = (an2 && an2.label) || 'AlliedNode 2';
+    if (DEVICE_NODES.an2) DEVICE_NODES.an2.label = label;
+    const el = document.getElementById('dev-node-name-an2');
+    if (el) el.textContent = label;
+  } catch {}
+}
 setInterval(() => { if (!_peerExpanded) _peerCheckOnline(); }, 15000);
 
 connectWS();

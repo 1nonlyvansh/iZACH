@@ -1242,6 +1242,12 @@ def settings_post():
             # at boot. Nested object: {boot_interface, backend, ngrok,
             # whatsapp_bridge, n8n} — all bool, restart required to apply. ──
             "boot_terminals",
+            # ── AlliedNode 2 (satellite-PC remote control) — see
+            # modules/remote_node.py. Nested object keyed by lowercase node
+            # name (currently only "alliednode 2"): {label, host, port, mac}.
+            # Token deliberately excluded, same as dual_instance — lives in
+            # .env as ALLIEDNODE2_TOKEN instead. ──
+            "allied_nodes",
         }
         # Auto-promotion watchdog (see modules/instance_coordinator.py) needs
         # launchd to own the backend's process lifecycle to actually restart

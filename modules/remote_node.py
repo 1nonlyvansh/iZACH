@@ -5,15 +5,26 @@ Sends commands to registered remote nodes (e.g. AlliedNode 2).
 """
 
 import base64
+import os
+import json as _json
 import requests
 from pathlib import Path
 
 # ─── Node registry ────────────────────────────────────────────
-NODES: dict[str, dict] = {
+# Was a hardcoded dict here — now loaded from api_keys.json's "allied_nodes"
+# key (Settings UI's AlliedNode card writes there, same wholesale-accept
+# pattern as dual_instance/peer devices), with the original hardcoded
+# values kept as the fallback default so nothing breaks for anyone who
+# hasn't touched the new Settings card yet. Token is deliberately NOT part
+# of this config — same security posture as IZACH_PEER_TOKEN, it lives in
+# .env (ALLIEDNODE2_TOKEN) and is never written by the Settings UI.
+_API_KEYS_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "api_keys.json")
+
+_DEFAULT_NODES: dict[str, dict] = {
     "alliednode 2": {
+        "label": "AlliedNode 2",
         "host":  "192.168.0.137",
         "port":  9797,
-        "token": "izach-node-2026",
         "mac":   "F8-89-D2-00-DD-C9",  # Wi-Fi MAC (WoWLAN)
     },
 }
@@ -25,8 +36,26 @@ TIMEOUT_XFER   = 60  # seconds — file transfer
 
 # ─── Helpers ──────────────────────────────────────────────────
 
+def _load_nodes_config() -> dict:
+    try:
+        with open(_API_KEYS_PATH, encoding="utf-8") as f:
+            saved = (_json.load(f) or {}).get("allied_nodes")
+        if saved:
+            return saved
+    except Exception:
+        pass
+    return _DEFAULT_NODES
+
+
 def _node(name: str) -> dict | None:
-    return NODES.get(name.lower().strip())
+    key = name.lower().strip()
+    entry = _load_nodes_config().get(key)
+    if not entry:
+        return None
+    node = dict(entry)
+    env_key = key.replace(" ", "").upper() + "_TOKEN"  # "alliednode 2" -> ALLIEDNODE2_TOKEN
+    node["token"] = os.environ.get(env_key, "")
+    return node
 
 def _url(node: dict, path: str) -> str:
     return f"http://{node['host']}:{node['port']}{path}"
@@ -232,7 +261,7 @@ def wake_on_lan(node_name: str) -> dict:
     mac_clean = mac.replace(":", "").replace("-", "").replace(".", "")
     if len(mac_clean) != 12 or mac_clean == "000000000000":
         return _err(
-            "MAC address not set. Edit NODES['alliednode 2']['mac'] in modules/remote_node.py"
+            "MAC address not set. Set it in Settings -> Device Connection -> AlliedNode 2."
         )
     try:
         mac_bytes = bytes.fromhex(mac_clean)
