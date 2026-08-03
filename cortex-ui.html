@@ -2666,6 +2666,16 @@ body.spotlight-mode .pnl:not(.spotlighted) {
     <span class="dev-node-status" id="dev-status-an2">···</span>
     <span class="dev-node-arr" id="dev-arr-an2">▼</span>
   </div>
+  <!-- Dual-instance peer row (Mac<->Windows, Phase 3 — vitals/screenshot/
+       processes/media/power only, no file transfer or terminal, unlike
+       AlliedNode 2 above which is the satellite-PC receiver pattern) -->
+  <div class="dev-node-row" id="dev-row-peer" onclick="togglePeerExpand()" style="display:none;">
+    <div class="dev-node-dot" id="dev-dot-peer"></div>
+    <span class="dev-node-name" id="dev-node-name-peer">Peer</span>
+    <span class="dev-node-ip" id="dev-node-ip-peer"></span>
+    <span class="dev-node-status" id="dev-status-peer">···</span>
+    <span class="dev-node-arr" id="dev-arr-peer">▼</span>
+  </div>
   <!-- Expandable section -->
   <div class="dev-exp" id="dev-exp-an2">
     <div style="padding:8px 12px 0;">
@@ -2764,6 +2774,70 @@ body.spotlight-mode .pnl:not(.spotlighted) {
         <label class="dev-file-lbl" for="dev-file-in-an2">CHOOSE FILE</label>
         <input type="file" id="dev-file-in-an2" style="display:none;" onchange="devUploadFile('an2',this)">
         <span id="dev-file-status-an2" style="font-size:7px;color:rgba(0,148,255,0.38);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Peer expandable section — no terminal, no file transfer (deliberate
+       Phase 3 scope cut, matches boot_daemon.py's /control/* surface) -->
+  <div class="dev-exp" id="dev-exp-peer">
+    <div style="padding:8px 12px 0;">
+      <div style="font-size:7px;letter-spacing:.3em;color:rgba(0,148,255,0.32);margin-bottom:6px;">VITALS</div>
+      <div class="dev-vital-row"><span>CPU</span><span id="dev-cpu-peer">—</span></div>
+      <div class="dev-mini-bar"><div class="dev-mini-bar-f" id="dev-bar-cpu-peer" style="width:0%"></div></div>
+      <div class="dev-vital-row"><span>RAM</span><span id="dev-ram-peer">—</span></div>
+      <div class="dev-mini-bar"><div class="dev-mini-bar-f" id="dev-bar-ram-peer" style="width:0%"></div></div>
+      <div class="dev-vital-row"><span>DISK</span><span id="dev-disk-peer">—</span></div>
+      <div class="dev-mini-bar"><div class="dev-mini-bar-f" id="dev-bar-disk-peer" style="width:0%"></div></div>
+      <div class="dev-vital-row"><span>BATTERY</span><span id="dev-batt-peer">—</span></div>
+      <div id="dev-detail-peer" style="font-size:7px;color:rgba(0,148,255,0.55);letter-spacing:.08em;margin-top:2px;"></div>
+    </div>
+    <div class="dev-sep"></div>
+    <div style="padding:4px 12px 6px;">
+      <div style="font-size:7px;letter-spacing:.3em;color:rgba(0,148,255,0.32);margin-bottom:5px;">MEDIA</div>
+      <div style="display:flex;gap:5px;">
+        <button class="dev-mc" onclick="peerControl('prev_track')">⏮</button>
+        <button class="dev-mc" onclick="peerControl('play_pause')">⏯</button>
+        <button class="dev-mc" onclick="peerControl('next_track')">⏭</button>
+        <button class="dev-mc" onclick="peerControl('volume_down')">🔉</button>
+        <button class="dev-mc" onclick="peerControl('volume_up')">🔊</button>
+        <button class="dev-mc" onclick="peerControl('mute')">🔇</button>
+      </div>
+    </div>
+    <div class="dev-sep"></div>
+    <div style="padding:4px 12px 10px;">
+      <div style="font-size:7px;letter-spacing:.3em;color:rgba(0,148,255,0.32);margin-bottom:5px;">POWER</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;">
+        <button class="dev-pw" style="border-color:rgba(74,144,164,0.4);color:rgba(74,144,164,0.9);" onclick="peerPower('lock')">Lock</button>
+        <button class="dev-pw" style="border-color:rgba(74,144,164,0.4);color:rgba(74,144,164,0.9);" onclick="peerPower('sleep')">Sleep</button>
+        <button class="dev-pw" style="border-color:rgba(255,179,0,0.45);color:rgba(255,179,0,0.9);" onclick="peerPower('restart')">Restart</button>
+        <button class="dev-pw" style="border-color:rgba(255,61,61,0.45);color:rgba(255,61,61,0.9);" onclick="peerPower('shutdown')">Shutdown</button>
+      </div>
+    </div>
+    <div class="dev-sep"></div>
+
+    <!-- Screenshot -->
+    <div style="padding:4px 12px 6px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px;">
+        <div style="font-size:7px;letter-spacing:.3em;color:rgba(0,148,255,0.32);">SCREENSHOT</div>
+        <button class="dev-action-btn" id="dev-snap-btn-peer" onclick="peerScreenshot()">SNAP</button>
+      </div>
+      <div id="dev-snap-peer" style="display:none;">
+        <img id="dev-snap-img-peer" src="" alt="" style="width:100%;border-radius:2px;cursor:pointer;border:1px solid rgba(0,148,255,0.12);" onclick="window.open(this.src,'_blank')" title="Click to open full size">
+        <div id="dev-snap-ts-peer" style="font-size:6px;color:rgba(0,148,255,0.60);letter-spacing:.1em;margin-top:2px;text-align:right;"></div>
+      </div>
+    </div>
+    <div class="dev-sep"></div>
+
+    <!-- Processes -->
+    <div style="padding:4px 12px 10px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+        <div style="font-size:7px;letter-spacing:.3em;color:rgba(0,148,255,0.32);">PROCESSES</div>
+        <button class="dev-action-btn" onclick="peerRefreshProcs()">↻ REFRESH</button>
+      </div>
+      <div id="dev-procs-peer" style="max-height:120px;overflow-y:auto;">
+        <div style="font-size:7px;color:rgba(0,148,255,0.50);letter-spacing:.1em;">CLICK ↻ REFRESH TO LOAD</div>
       </div>
     </div>
 
@@ -11275,8 +11349,8 @@ async function nodeWol(nid) {
       body: JSON.stringify({node: node.id}),
     });
     const d = await r.json();
-    toast(d.ok ? 'Magic packet sent — AlliedNode 2 waking up...' : `WOL failed: ${d.error}`);
-  } catch { toast('WOL request failed.'); }
+    showToast(d.ok ? 'Magic packet sent — AlliedNode 2 waking up...' : `WOL failed: ${d.error}`);
+  } catch { showToast('WOL request failed.'); }
 }
 
 async function devScreenshot(nid) {
@@ -11294,9 +11368,9 @@ async function devScreenshot(nid) {
       if (wrap) wrap.style.display = 'block';
       if (ts) ts.textContent = new Date().toLocaleTimeString();
     } else {
-      toast(`Screenshot: ${d.error || 'failed'}`);
+      showToast(`Screenshot: ${d.error || 'failed'}`);
     }
-  } catch { toast('Screenshot request failed.'); }
+  } catch { showToast('Screenshot request failed.'); }
   if (btn) { btn.textContent = 'SNAP'; btn.disabled = false; }
 }
 
@@ -11407,6 +11481,160 @@ Object.keys(DEVICE_NODES).forEach(nid => {
   setTimeout(checkOnline, 2000); // defer 2s after page load
   setInterval(checkOnline, 15000);
 });
+
+// ════════════════════════════════════════════════════
+// DEVICES — dual-instance peer (Mac<->Windows) remote control, Phase 3.
+// Separate from the AlliedNode 2 block above on purpose: this proxies
+// through /peer/* (server keeps IZACH_PEER_TOKEN, browser never sees
+// it) rather than /nodes/*, and deliberately has no terminal/file-
+// transfer — see boot_daemon.py's /control/* routes for the same cut.
+// ════════════════════════════════════════════════════
+let _peerExpanded = false;
+let _peerPoller = null;
+let _peerLabel = 'Peer';
+
+async function _initPeerRow() {
+  try {
+    const r = await fetch(`${API}/peer/local`);
+    const d = await r.json();
+    const row = document.getElementById('dev-row-peer');
+    if (!d.ok || !d.configured) { if (row) row.style.display = 'none'; return; }
+    if (row) row.style.display = 'flex';
+    const peer = d.peer;
+    _peerLabel = peer ? peer.platform : 'Peer';
+    const nameEl = document.getElementById('dev-node-name-peer');
+    if (nameEl) nameEl.textContent = _peerLabel;
+    _peerCheckOnline();
+  } catch {}
+}
+
+async function _peerCheckOnline() {
+  try {
+    const r = await fetch(`${API}/peer/vitals`);
+    const d = await r.json();
+    const dot = document.getElementById('dev-dot-peer');
+    const sl  = document.getElementById('dev-status-peer');
+    if (d.ok) {
+      if (dot && !_peerExpanded) dot.className = 'dev-node-dot on';
+      if (sl  && !_peerExpanded) { sl.textContent = 'ONLINE'; sl.style.color = '#00c853'; }
+      if (_peerExpanded) _renderPeerVitals(d);
+    } else {
+      if (dot) dot.className = 'dev-node-dot off';
+      if (sl)  { sl.textContent = 'OFFLINE'; sl.style.color = '#ff3d3d'; }
+    }
+  } catch {
+    const dot = document.getElementById('dev-dot-peer');
+    const sl  = document.getElementById('dev-status-peer');
+    if (dot) dot.className = 'dev-node-dot off';
+    if (sl)  { sl.textContent = 'OFFLINE'; sl.style.color = '#ff3d3d'; }
+  }
+}
+
+function _renderPeerVitals(d) {
+  const cpu  = Math.round(d.cpu_percent  || 0);
+  const ram  = Math.round(d.ram_percent  || 0);
+  const disk = Math.round(d.disk_percent || 0);
+  const set = (id, text) => { const el=document.getElementById(id); if(el) el.textContent=text; };
+  const bar = (id, pct) => {
+    const el=document.getElementById(id);
+    if(el){ el.style.width=pct+'%'; el.style.background=_devVitalColor(pct); }
+  };
+  set('dev-cpu-peer',  cpu  + '%');
+  set('dev-ram-peer',  ram  + '%');
+  set('dev-disk-peer', disk + '%');
+  bar('dev-bar-cpu-peer',  cpu);
+  bar('dev-bar-ram-peer',  ram);
+  bar('dev-bar-disk-peer', disk);
+  set('dev-batt-peer', d.battery_percent != null ? `${d.battery_percent}%${d.battery_charging ? ' ⚡' : ''}` : 'N/A');
+  set('dev-detail-peer', `RAM ${d.ram_used_gb}/${d.ram_total_gb}GB · Disk ${d.disk_used_gb}/${d.disk_total_gb}GB`);
+}
+
+function togglePeerExpand() {
+  _peerExpanded = !_peerExpanded;
+  const exp = document.getElementById('dev-exp-peer');
+  const arr = document.getElementById('dev-arr-peer');
+  if (exp) exp.classList.toggle('open', _peerExpanded);
+  if (arr) arr.textContent = _peerExpanded ? '▲' : '▼';
+  if (_peerExpanded) {
+    _peerCheckOnline();
+    if (!_peerPoller) _peerPoller = setInterval(_peerCheckOnline, 12000);
+  } else if (_peerPoller) {
+    clearInterval(_peerPoller); _peerPoller = null;
+  }
+}
+
+async function peerControl(action) {
+  try {
+    const r = await fetch(`${API}/peer/media`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({action}),
+    });
+    const d = await r.json();
+    if (!d.ok) showToast(`${_peerLabel}: ${d.error || d.message || 'failed'}`);
+  } catch { showToast(`${_peerLabel}: request failed.`); }
+}
+
+async function peerPower(action) {
+  const _labels = {lock:'lock', sleep:'sleep', restart:'restart', shutdown:'shut down'};
+  if (!confirm(`${_labels[action] || action} ${_peerLabel}?`)) return;
+  try {
+    const r = await fetch(`${API}/peer/power`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({action}),
+    });
+    const d = await r.json();
+    showToast(`${_peerLabel}: ${d.message || (d.ok ? 'done' : 'failed')}`);
+  } catch { showToast(`${_peerLabel}: request failed.`); }
+}
+
+async function peerScreenshot() {
+  const btn = document.getElementById('dev-snap-btn-peer');
+  if (btn) { btn.textContent = '···'; btn.disabled = true; }
+  try {
+    const r = await fetch(`${API}/peer/screenshot`);
+    const d = await r.json();
+    if (d.ok && d.screenshot) {
+      const img = document.getElementById('dev-snap-img-peer');
+      const wrap = document.getElementById('dev-snap-peer');
+      const ts = document.getElementById('dev-snap-ts-peer');
+      if (img) img.src = `data:image/jpeg;base64,${d.screenshot}`;
+      if (wrap) wrap.style.display = 'block';
+      if (ts) ts.textContent = new Date().toLocaleTimeString();
+    } else {
+      showToast(`Screenshot: ${d.error || 'failed'}`);
+    }
+  } catch { showToast('Screenshot request failed.'); }
+  if (btn) { btn.textContent = 'SNAP'; btn.disabled = false; }
+}
+
+async function peerRefreshProcs() {
+  const c = document.getElementById('dev-procs-peer');
+  if (!c) return;
+  c.innerHTML = '<div style="font-size:7px;color:rgba(0,148,255,0.3);">LOADING...</div>';
+  try {
+    const r = await fetch(`${API}/peer/processes`);
+    const d = await r.json();
+    if (d.ok && d.processes) {
+      c.innerHTML = '';
+      d.processes.forEach(p => {
+        const row = document.createElement('div');
+        row.className = 'dev-proc-row';
+        const mem = (p.memory_percent || 0).toFixed(1);
+        const cpu = (p.cpu_percent || 0).toFixed(1);
+        row.innerHTML =
+          `<span class="dev-proc-name" title="${p.name}">${p.name}</span>` +
+          `<span class="dev-proc-mem">C:${cpu}% M:${mem}%</span>`;
+        c.appendChild(row);
+      });
+      if (!d.processes.length) c.innerHTML = '<div style="font-size:7px;color:rgba(0,148,255,0.50);">No processes returned</div>';
+    } else {
+      c.innerHTML = `<div style="font-size:7px;color:#ff3d3d;">${d.error||'Error'}</div>`;
+    }
+  } catch { c.innerHTML = '<div style="font-size:7px;color:#ff3d3d;">Request failed</div>'; }
+}
+
+setTimeout(_initPeerRow, 2500);
+setInterval(() => { if (!_peerExpanded) _peerCheckOnline(); }, 15000);
 
 connectWS();
 

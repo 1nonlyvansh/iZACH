@@ -53,6 +53,12 @@ def is_configured() -> bool:
     return bool(cfg.get("enabled") and cfg.get("peer_host"))
 
 
+def get_peer_host() -> str | None:
+    """Public accessor for peer_control.py — avoids reaching into the
+    private _load_config() from another module."""
+    return _load_config().get("peer_host") or None
+
+
 def get_role() -> str:
     with _ROLE_LOCK:
         return _role

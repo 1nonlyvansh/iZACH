@@ -1995,6 +1995,64 @@ def switch_machine():
 
 
 # ─────────────────────────────────────────────────────────────
+# Peer machine remote control (Phase 3) — proxies to the peer's
+# boot_daemon.py /control/* routes. Local-only, called by Cortex/Forge
+# UI; keeps IZACH_PEER_TOKEN server-side (see modules/peer_control.py).
+# Same deliberate scope cut as boot_daemon.py: vitals/screenshot/
+# processes/media/power only, no file/exec.
+# ─────────────────────────────────────────────────────────────
+
+def _peer_host_or_400():
+    from modules.instance_coordinator import get_peer_host
+    host = get_peer_host()
+    if not host:
+        return None, (jsonify({"ok": False, "error": "No peer configured"}), 400)
+    return host, None
+
+
+@ui_bp.route("/peer/vitals", methods=["GET"])
+def peer_vitals():
+    host, err = _peer_host_or_400()
+    if err: return err
+    from modules.peer_control import get_vitals
+    return jsonify(get_vitals(host))
+
+
+@ui_bp.route("/peer/processes", methods=["GET"])
+def peer_processes():
+    host, err = _peer_host_or_400()
+    if err: return err
+    from modules.peer_control import get_processes
+    return jsonify(get_processes(host))
+
+
+@ui_bp.route("/peer/screenshot", methods=["GET"])
+def peer_screenshot():
+    host, err = _peer_host_or_400()
+    if err: return err
+    from modules.peer_control import get_screenshot_b64
+    return jsonify(get_screenshot_b64(host))
+
+
+@ui_bp.route("/peer/media", methods=["POST"])
+def peer_media():
+    host, err = _peer_host_or_400()
+    if err: return err
+    data = request.get_json(silent=True) or {}
+    from modules.peer_control import media
+    return jsonify(media(host, data.get("action", "")))
+
+
+@ui_bp.route("/peer/power", methods=["POST"])
+def peer_power():
+    host, err = _peer_host_or_400()
+    if err: return err
+    data = request.get_json(silent=True) or {}
+    from modules.peer_control import power
+    return jsonify(power(host, data.get("action", ""), int(data.get("delay_seconds") or 0)))
+
+
+# ─────────────────────────────────────────────────────────────
 # GET  /websites         — list custom websites
 # POST /websites         — add {name, url}
 # DELETE /websites/<key> — remove by key (lowercased name)
