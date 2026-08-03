@@ -1997,6 +1997,18 @@ def switch_machine():
     return jsonify({"ok": ok, "message": msg})
 
 
+@ui_bp.route("/switch_status", methods=["GET"])
+def switch_status():
+    """Polled by the UI WHILE a /switch_machine POST is still in flight
+    (main.py's Flask app runs threaded=True specifically so this works) —
+    real stage/percent from switch_to_peer() itself, not a client-side fake
+    animation. Not meaningful once this process has exited (switch
+    completed and shut down), which is fine — the UI closes itself before
+    that'd ever matter."""
+    from modules.instance_coordinator import get_switch_progress
+    return jsonify(get_switch_progress())
+
+
 # ─────────────────────────────────────────────────────────────
 # Peer machine remote control (Phase 3) — proxies to the peer's
 # boot_daemon.py /control/* routes. Local-only, called by Cortex/Forge

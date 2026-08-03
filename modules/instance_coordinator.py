@@ -283,6 +283,25 @@ def _exit_after_delay(seconds: float = 2.0):
     os._exit(0)
 
 
+# ── Real-time switch progress — polled by the UI (GET /switch_status)
+# while the blocking /switch_machine POST is still in flight, so the
+# progress bar reflects actual stages/elapsed time, not a fake client-side
+# animation. main.py's Flask app runs threaded=True specifically so this
+# polling request is served concurrently with the long-running POST. ──
+_SWITCH_LOCK = threading.Lock()
+_switch_progress = {"active": False, "stage": "idle", "message": "", "percent": 0}
+
+
+def _set_switch_progress(stage: str, message: str, percent: int, active: bool = True):
+    with _SWITCH_LOCK:
+        _switch_progress.update(stage=stage, message=message, percent=percent, active=active)
+
+
+def get_switch_progress() -> dict:
+    with _SWITCH_LOCK:
+        return dict(_switch_progress)
+
+
 def switch_to_peer(target_platform: str) -> tuple[bool, str]:
     """The "Switch to Windows/Mac" button — unlike initiate_handoff() (which
     only works if the peer is ALREADY running, and leaves this machine's own
@@ -300,14 +319,21 @@ def switch_to_peer(target_platform: str) -> tuple[bool, str]:
     if target_platform.lower() in my_platform:
         return False, f"This machine is already the {get_platform_name()} instance."
 
+    _set_switch_progress("checking", "Checking peer status...", 5)
+
     if check_peer(cfg) is None:
         # Peer's not running at all — boot it via its daemon first.
+        _set_switch_progress("booting_peer", "Booting iZACH on the other machine...", 15)
         ok, msg = _boot_peer(cfg)
         if not ok:
+            _set_switch_progress("failed", msg, 0, active=False)
             return False, msg
         if not _wait_for_peer_healthy(cfg, timeout=90):
-            return False, "Peer didn't come up healthy within 90s — this machine stays primary, nothing was shut down."
+            msg = "Peer didn't come up healthy within 90s — this machine stays primary, nothing was shut down."
+            _set_switch_progress("failed", msg, 0, active=False)
+            return False, msg
 
+    _set_switch_progress("handing_off", "Handing off control...", 85)
     try:
         import requests
         r = requests.post(
@@ -315,11 +341,16 @@ def switch_to_peer(target_platform: str) -> tuple[bool, str]:
             headers={"X-iZACH-Peer-Token": _PEER_TOKEN}, timeout=5,
         )
         if r.status_code != 200 or not r.json().get("ok"):
-            return False, "Peer came up but rejected the handoff request — this machine stays primary."
+            msg = "Peer came up but rejected the handoff request — this machine stays primary."
+            _set_switch_progress("failed", msg, 0, active=False)
+            return False, msg
     except Exception:
-        return False, "Peer came up but became unreachable during handoff — this machine stays primary."
+        msg = "Peer came up but became unreachable during handoff — this machine stays primary."
+        _set_switch_progress("failed", msg, 0, active=False)
+        return False, msg
 
     become_secondary("switched to peer")
+    _set_switch_progress("done", "Device Transfer Successful", 100, active=False)
     threading.Thread(target=_exit_after_delay, daemon=True).start()
     return True, "Switched — the peer machine is now primary, this one is shutting down."
 
@@ -345,10 +376,21 @@ def _boot_peer(cfg: dict) -> tuple[bool, str]:
 
 
 def _wait_for_peer_healthy(cfg: dict, timeout: int = 90) -> bool:
-    deadline = time.time() + timeout
+    start = time.time()
+    deadline = start + timeout
     while time.time() < deadline:
         if check_peer(cfg) is not None:
             return True
+        # Real elapsed-time-based progress, not a fake animation — this is
+        # the up-to-90s stretch of the whole switch, so it gets the bulk of
+        # the progress bar's range (15%-80%) rather than jumping straight
+        # from "booting" to "handing off" with nothing in between.
+        elapsed_pct = min(1.0, (time.time() - start) / timeout)
+        _set_switch_progress(
+            "waiting_healthy",
+            "Waiting for the other machine to come online...",
+            15 + int(elapsed_pct * 65),
+        )
         time.sleep(3)
     return False
 

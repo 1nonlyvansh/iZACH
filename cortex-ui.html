@@ -688,6 +688,24 @@ body.cam-mode #chud { opacity:1; }
   opacity:0; pointer-events:none; transition:opacity .2s;
 }
 #cache-modal.show { opacity:1; pointer-events:all; }
+#switch-progress-modal {
+  position:fixed; inset:0; z-index:10003;
+  background:rgba(1,4,18,0.92); backdrop-filter:blur(10px);
+  display:flex; align-items:center; justify-content:center;
+  opacity:0; pointer-events:none; transition:opacity .2s;
+}
+#switch-progress-modal.show { opacity:1; pointer-events:all; }
+#switch-progress-box {
+  background:rgba(2,8,24,0.98); border:1px solid rgba(0,148,255,0.25);
+  width:400px; padding:26px 28px; box-shadow:0 0 80px rgba(0,148,255,0.08);
+  text-align:center;
+}
+#switch-progress-title { font-family:'Share Tech Mono',monospace; font-size:10px; letter-spacing:.35em; color:rgba(0,148,255,0.85); margin-bottom:18px; }
+#switch-progress-track { width:100%; height:4px; background:rgba(0,148,255,0.1); border-radius:2px; overflow:hidden; margin-bottom:10px; }
+#switch-progress-fill { height:100%; width:0%; background:linear-gradient(90deg,#0094ff,#00e5ff); transition:width .4s ease; }
+#switch-progress-pct { font-family:'Share Tech Mono',monospace; font-size:16px; color:#0094ff; margin-bottom:8px; }
+#switch-progress-msg { font-size:9px; letter-spacing:.08em; color:rgba(0,148,255,0.6); min-height:14px; }
+#switch-progress-dismiss { display:none; margin-top:16px; }
 #cache-box {
   background:rgba(2,8,24,0.98); border:1px solid rgba(0,148,255,0.2);
   width:460px; box-shadow:0 0 60px rgba(0,0,0,0.8);
@@ -2045,7 +2063,6 @@ body.spotlight-mode .pnl:not(.spotlighted) {
             <button class="sp-action-btn" onclick="switchMachine('windows')" style="flex:1;">SWITCH TO WINDOWS</button>
             <button class="sp-action-btn" onclick="switchMachine('mac')" style="flex:1;">SWITCH TO MAC</button>
           </div>
-          <span class="sp-save-msg" id="switch-machine-msg" style="display:block;margin-top:6px;"></span>
         </div>
         <div class="sp-divider"></div>
         <div class="sp-sec">
@@ -2609,6 +2626,17 @@ body.spotlight-mode .pnl:not(.spotlighted) {
       </div>
     </div>
 
+  </div>
+</div>
+
+<!-- SWITCH MACHINE PROGRESS MODAL -->
+<div id="switch-progress-modal">
+  <div id="switch-progress-box">
+    <div id="switch-progress-title">SWITCHING DEVICE</div>
+    <div id="switch-progress-track"><div id="switch-progress-fill"></div></div>
+    <div id="switch-progress-pct">0%</div>
+    <div id="switch-progress-msg">Starting...</div>
+    <button class="sp-action-btn" id="switch-progress-dismiss" onclick="document.getElementById('switch-progress-modal').classList.remove('show')">DISMISS</button>
   </div>
 </div>
 
@@ -10500,19 +10528,55 @@ async function peerDeviceRemove(){
   _renderPeerDeviceCard({});
 }
 
+let _switchPoller = null;
+
+function _setSwitchProgressUI(pct, message, isError){
+  const fill = document.getElementById('switch-progress-fill');
+  const pctEl = document.getElementById('switch-progress-pct');
+  const msgEl = document.getElementById('switch-progress-msg');
+  if (fill) { fill.style.width = pct + '%'; fill.style.background = isError ? '#ff3d3d' : 'linear-gradient(90deg,#0094ff,#00e5ff)'; }
+  if (pctEl) { pctEl.textContent = pct + '%'; pctEl.style.color = isError ? '#ff3d3d' : '#0094ff'; }
+  if (msgEl) msgEl.textContent = message;
+}
+
 async function switchMachine(target){
-  const msg=document.getElementById('switch-machine-msg');
   if(!confirm(`Switch iZACH to ${target==='windows'?'Windows':'Mac'}? This boots it there if needed, then shuts down here once it's confirmed healthy.`)) return;
-  if(msg){ msg.style.color='rgba(0,148,255,0.7)'; msg.textContent='Switching — this can take up to a minute if the other machine needs to boot...'; }
+
+  const modal = document.getElementById('switch-progress-modal');
+  const dismissBtn = document.getElementById('switch-progress-dismiss');
+  if (dismissBtn) dismissBtn.style.display = 'none';
+  _setSwitchProgressUI(0, 'Starting...', false);
+  if (modal) modal.classList.add('show');
+
+  // Real backend-reported progress, polled while the POST below is still
+  // in flight — main.py's Flask app runs threaded=True specifically so
+  // this works. Not a fake client-side animation.
+  if (_switchPoller) clearInterval(_switchPoller);
+  _switchPoller = setInterval(async () => {
+    try {
+      const r = await fetch(API + '/switch_status');
+      const d = await r.json();
+      if (d.stage && d.stage !== 'idle') _setSwitchProgressUI(d.percent || 0, d.message || '', d.stage === 'failed');
+    } catch { /* peer/local process may already be mid-exit near the end — ignore, the POST's own response is authoritative */ }
+  }, 800);
+
   try{
-    const r=await fetch(API+'/switch_machine',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({target})});
-    const d=await r.json();
-    if(msg){
-      msg.style.color = d.ok ? 'rgba(29,185,84,0.9)' : 'rgba(255,61,61,0.9)';
-      msg.textContent = d.message || (d.ok ? 'Switched.' : 'Switch failed.');
+    const r = await fetch(API+'/switch_machine',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({target})});
+    const d = await r.json();
+    clearInterval(_switchPoller); _switchPoller = null;
+    if (d.ok) {
+      _setSwitchProgressUI(100, 'Device Transfer Successful', false);
+      setTimeout(() => {
+        if (window.electronAPI && window.electronAPI.close) window.electronAPI.close();
+      }, 1800);
+    } else {
+      _setSwitchProgressUI(0, d.message || 'Switch failed.', true);
+      if (dismissBtn) dismissBtn.style.display = 'inline-block';
     }
   }catch(e){
-    if(msg){ msg.style.color='rgba(255,61,61,0.9)'; msg.textContent='Connection error — this machine was not touched.'; }
+    clearInterval(_switchPoller); _switchPoller = null;
+    _setSwitchProgressUI(0, 'Connection error — this machine was not touched.', true);
+    if (dismissBtn) dismissBtn.style.display = 'inline-block';
   }
 }
 
