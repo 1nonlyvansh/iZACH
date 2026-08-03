@@ -2694,7 +2694,11 @@ body.spotlight-mode .pnl:not(.spotlighted) {
   </div>
   <!-- Dual-instance peer row (Mac<->Windows, Phase 3 — vitals/screenshot/
        processes/media/power only, no file transfer or terminal, unlike
-       AlliedNode 2 above which is the satellite-PC receiver pattern) -->
+       AlliedNode 2 above which is the satellite-PC receiver pattern).
+       Stronger divider than the usual dev-sep — when both AlliedNode 2
+       and Peer are expanded at once their content otherwise runs
+       together with no clear "new device starts here" break. -->
+  <div id="dev-sep-peer" style="display:none;height:2px;background:linear-gradient(90deg,transparent,rgba(0,148,255,0.35),transparent);margin:2px 0 4px;"></div>
   <div class="dev-node-row" id="dev-row-peer" onclick="togglePeerExpand()" style="display:none;">
     <div class="dev-node-dot" id="dev-dot-peer"></div>
     <span class="dev-node-name" id="dev-node-name-peer">Peer</span>
@@ -10469,11 +10473,18 @@ async function peerDeviceSave(){
   const togDual = document.getElementById('tog-dual-enabled');
   if (togDual) togDual.classList.add('on');
   await saveConfig('peer-device-msg');
+  const savedLabel = document.getElementById('cfg-peer-label')?.value;
   _renderPeerDeviceCard({
     peer_host: hostEl.value.trim(),
     peer_port: document.getElementById('cfg-peer-port')?.value,
-    peer_label: document.getElementById('cfg-peer-label')?.value,
+    peer_label: savedLabel,
   });
+  // DEVICES widget's peer row was set once at page load and never told
+  // about a rename that happens afterward here — sync it directly instead
+  // of waiting for a full reload.
+  _peerLabel = savedLabel || _peerLabel;
+  const devNameEl = document.getElementById('dev-node-name-peer');
+  if (devNameEl) devNameEl.textContent = _peerLabel;
 }
 
 async function peerDeviceRemove(){
@@ -11626,13 +11637,16 @@ async function _initPeerRow() {
     const r = await fetch(`${API}/peer/local`);
     const d = await r.json();
     const row = document.getElementById('dev-row-peer');
+    const sep = document.getElementById('dev-sep-peer');
     _peerConfigured = !!(d.ok && d.configured);
     if (!_peerConfigured) {
       if (row) row.style.display = 'none';
+      if (sep) sep.style.display = 'none';
       _updateTaskbarSwitchBtn(false);
       return;
     }
     if (row) row.style.display = 'flex';
+    if (sep) sep.style.display = 'block';
     const peer = d.peer;
     _peerLabel = d.peer_label || (peer ? peer.platform : 'Peer');
     const nameEl = document.getElementById('dev-node-name-peer');
