@@ -1232,9 +1232,11 @@ def settings_post():
             "email_watch_keywords", "email_track_orders",
             # ── Dual-instance (Windows+macOS) coordination — see
             # modules/instance_coordinator.py. Nested object:
-            # {enabled, peer_host, peer_port, primary_pin, auto_promote_enabled,
-            #  auto_promote_timeout_minutes}. The shared secret (IZACH_PEER_TOKEN)
-            # lives in .env via /api-keys instead, same as every other secret. ──
+            # {enabled, peer_host, peer_port, peer_label, primary_pin,
+            #  auto_promote_enabled, auto_promote_timeout_minutes}. peer_label
+            # is a purely cosmetic display name, no code reads it except the
+            # Settings UI itself. The shared secret (IZACH_PEER_TOKEN) lives in
+            # .env via /api-keys instead, same as every other secret. ──
             "dual_instance",
             # ── Boot Settings tab — which services launch_izach.py starts
             # at boot. Nested object: {boot_interface, backend, ngrok,
@@ -1946,11 +1948,12 @@ def peer_local():
     the Cortex UI to show a 'iZACH is already running on <device>' banner
     when this instance is Secondary Connector. Not called by the peer
     machine itself, unlike /peer/status."""
-    from modules.instance_coordinator import get_role, get_peer_info, is_configured
+    from modules.instance_coordinator import get_role, get_peer_info, is_configured, get_peer_label
     return jsonify({
         "ok": True,
         "configured": is_configured(),
         "role": get_role(),
+        "peer_label": get_peer_label(),
         "peer": get_peer_info(),
     })
 

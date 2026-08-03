@@ -59,6 +59,13 @@ def get_peer_host() -> str | None:
     return _load_config().get("peer_host") or None
 
 
+def get_peer_label() -> str | None:
+    """User-set display name for the peer device (Settings UI's peer-device
+    card), purely cosmetic — falls back to the peer's reported platform
+    name wherever it's used, never a functional identifier."""
+    return _load_config().get("peer_label") or None
+
+
 def get_role() -> str:
     with _ROLE_LOCK:
         return _role

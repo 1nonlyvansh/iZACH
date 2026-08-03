@@ -1498,6 +1498,9 @@ body.spotlight-mode .pnl:not(.spotlighted) {
     <button class="tb-btn" id="tb-idle"     onclick="setMode('idle')"            title="IDLE MODE">
       <span class="tb-ic">◉</span><span class="tb-lbl">IDLE</span>
     </button>
+    <button class="tb-btn" id="tb-switch" onclick="taskbarSwitchMachine()" title="Switch iZACH to the other machine" style="opacity:0.25;pointer-events:none;transition:opacity .2s;">
+      <span class="tb-ic">⇄</span><span class="tb-lbl" id="tb-switch-lbl">SWITCH</span>
+    </button>
     <button class="tb-btn" id="tb-browser"  onclick="togWgt('p-browser')"        title="BROWSER">
       <span class="tb-ic">🌐</span><span class="tb-lbl">BROWSER</span>
     </button>
@@ -1987,11 +1990,34 @@ body.spotlight-mode .pnl:not(.spotlighted) {
             <span>Enable Dual-Instance Coordination</span>
             <div class="cfg-tog" id="tog-dual-enabled" onclick="cfgToggle('tog-dual-enabled','dual_enabled')"></div>
           </div>
-          <div class="cfg-label" style="margin-top:10px;">PEER HOST (the other machine's LAN IP)</div>
-          <input class="cfg-inp" id="cfg-peer-host" placeholder="e.g. 192.168.0.50" autocomplete="off">
-          <div class="cfg-label" style="margin-top:8px;">PEER PORT</div>
-          <input class="cfg-inp" id="cfg-peer-port" placeholder="5050" autocomplete="off">
-          <div style="font-size:7px;color:rgba(0,148,255,0.60);margin-top:3px;letter-spacing:.06em;">Shared secret token: Settings → Keys &amp; ID → DUAL-INSTANCE PEER TOKEN — must match on both machines.</div>
+          <div class="cfg-label" style="margin-top:10px;">PEER DEVICE</div>
+          <div id="peer-device-card" style="display:none;border:1px solid rgba(0,148,255,0.15);border-radius:4px;padding:9px 11px;margin-top:6px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+              <div style="min-width:0;">
+                <div id="peer-device-name" style="font-size:10px;color:#0094ff;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"></div>
+                <div id="peer-device-hostport" style="font-size:7px;color:rgba(0,148,255,0.5);margin-top:2px;letter-spacing:.05em;"></div>
+              </div>
+              <div style="display:flex;gap:6px;flex-shrink:0;">
+                <button class="sp-action-btn" onclick="peerDeviceEdit()">EDIT</button>
+                <button class="sp-action-btn" style="border-color:rgba(255,61,61,0.4);color:rgba(255,61,61,0.8);" onclick="peerDeviceRemove()">REMOVE</button>
+              </div>
+            </div>
+          </div>
+          <button class="sp-action-btn" id="peer-add-btn" style="display:none;margin-top:6px;" onclick="peerDeviceEdit()">+ ADD PEER DEVICE</button>
+          <div id="peer-device-form" style="display:none;margin-top:8px;">
+            <div class="cfg-label">DEVICE NAME</div>
+            <input class="cfg-inp" id="cfg-peer-label" placeholder="e.g. My Windows PC" autocomplete="off">
+            <div class="cfg-label" style="margin-top:8px;">HOST (the other machine's LAN IP)</div>
+            <input class="cfg-inp" id="cfg-peer-host" placeholder="e.g. 192.168.0.50" autocomplete="off">
+            <div class="cfg-label" style="margin-top:8px;">PORT</div>
+            <input class="cfg-inp" id="cfg-peer-port" placeholder="5050" autocomplete="off">
+            <div style="font-size:7px;color:rgba(0,148,255,0.60);margin-top:3px;letter-spacing:.06em;">Shared secret token: Settings → Keys &amp; ID → DUAL-INSTANCE PEER TOKEN — must match on both machines.</div>
+            <div style="display:flex;gap:8px;margin-top:8px;align-items:center;">
+              <button class="sp-action-btn" onclick="peerDeviceSave()">SAVE DEVICE</button>
+              <button class="sp-action-btn" onclick="peerDeviceCancelEdit()">CANCEL</button>
+              <span class="sp-save-msg" id="peer-device-msg"></span>
+            </div>
+          </div>
           <div class="cfg-label" style="margin-top:10px;">PRIMARY PIN</div>
           <select class="cfg-sel" id="cfg-primary-pin">
             <option value="auto">Auto — whichever starts first wins</option>
@@ -10064,9 +10090,11 @@ async function loadConfig(){
     const togAP=document.getElementById('tog-auto-promote'); if(togAP) togAP.classList.toggle('on',!!di.auto_promote_enabled);
     const peerHost=document.getElementById('cfg-peer-host'); if(peerHost && di.peer_host) peerHost.value=di.peer_host;
     const peerPort=document.getElementById('cfg-peer-port'); if(peerPort) peerPort.value=di.peer_port||5050;
+    const peerLabel=document.getElementById('cfg-peer-label'); if(peerLabel) peerLabel.value=di.peer_label||'';
     const primaryPin=document.getElementById('cfg-primary-pin'); if(primaryPin && di.primary_pin) primaryPin.value=di.primary_pin;
     const apTimeout=document.getElementById('cfg-auto-promote-timeout'); if(apTimeout) apTimeout.value=di.auto_promote_timeout_minutes||5;
     _dualInstanceLoaded=true;
+    _renderPeerDeviceCard(di);
     // Toggles
     const togMap={
       'wake_word_enabled':['tog-wake', !!(s.wake_word_enabled)],
@@ -10339,10 +10367,12 @@ async function saveConfig(msgId){
     const peerPortEl=document.getElementById('cfg-peer-port');
     const primaryPinEl=document.getElementById('cfg-primary-pin');
     const apTimeoutEl=document.getElementById('cfg-auto-promote-timeout');
+    const peerLabelEl=document.getElementById('cfg-peer-label');
     payload.dual_instance={
       enabled: !!_cfgBools['dual_enabled'],
       peer_host: peerHostEl ? peerHostEl.value.trim() : '',
       peer_port: peerPortEl && peerPortEl.value ? Number(peerPortEl.value) : 5050,
+      peer_label: peerLabelEl ? peerLabelEl.value.trim() : '',
       primary_pin: primaryPinEl ? primaryPinEl.value : 'auto',
       auto_promote_enabled: !!_cfgBools['auto_promote_enabled'],
       auto_promote_timeout_minutes: apTimeoutEl && apTimeoutEl.value ? Number(apTimeoutEl.value) : 5,
@@ -10385,6 +10415,78 @@ async function checkPeerConnection(){
     if(msg) msg.textContent='Connection error.';
   }
   setTimeout(()=>{ if(msg) msg.textContent=''; },8000);
+}
+
+// ── Peer device card (Device Connection tab) — friendlier UI over the
+// same dual_instance.peer_host/peer_port/peer_label fields; no new
+// architecture, still exactly one peer (Mac<->Windows). ──
+function _renderPeerDeviceCard(di){
+  const card = document.getElementById('peer-device-card');
+  const addBtn = document.getElementById('peer-add-btn');
+  const form = document.getElementById('peer-device-form');
+  if (!card || !addBtn || !form) return;
+  if (di && di.peer_host) {
+    const nameEl = document.getElementById('peer-device-name');
+    const hpEl = document.getElementById('peer-device-hostport');
+    if (nameEl) nameEl.textContent = di.peer_label || 'Peer Device';
+    if (hpEl) hpEl.textContent = `${di.peer_host}:${di.peer_port || 5050}`;
+    card.style.display = 'block';
+    addBtn.style.display = 'none';
+    form.style.display = 'none';
+  } else {
+    card.style.display = 'none';
+    addBtn.style.display = 'block';
+    form.style.display = 'none';
+  }
+}
+
+function peerDeviceEdit(){
+  document.getElementById('peer-device-card').style.display = 'none';
+  document.getElementById('peer-add-btn').style.display = 'none';
+  document.getElementById('peer-device-form').style.display = 'block';
+}
+
+function peerDeviceCancelEdit(){
+  document.getElementById('peer-device-form').style.display = 'none';
+  const hostEl = document.getElementById('cfg-peer-host');
+  _renderPeerDeviceCard({
+    peer_host: hostEl ? hostEl.value.trim() : '',
+    peer_port: document.getElementById('cfg-peer-port')?.value,
+    peer_label: document.getElementById('cfg-peer-label')?.value,
+  });
+}
+
+async function peerDeviceSave(){
+  const hostEl = document.getElementById('cfg-peer-host');
+  const msg = document.getElementById('peer-device-msg');
+  if (!hostEl || !hostEl.value.trim()) {
+    if (msg) { msg.style.color = 'rgba(255,61,61,0.9)'; msg.textContent = 'Host is required.'; }
+    return;
+  }
+  // Adding a device implies turning dual-instance on — otherwise a freshly
+  // filled-in host silently does nothing until the user finds the toggle.
+  _cfgBools['dual_enabled'] = true;
+  const togDual = document.getElementById('tog-dual-enabled');
+  if (togDual) togDual.classList.add('on');
+  await saveConfig('peer-device-msg');
+  _renderPeerDeviceCard({
+    peer_host: hostEl.value.trim(),
+    peer_port: document.getElementById('cfg-peer-port')?.value,
+    peer_label: document.getElementById('cfg-peer-label')?.value,
+  });
+}
+
+async function peerDeviceRemove(){
+  if (!confirm('Remove this peer device? Dual-instance coordination and remote control will stop working until you add one again.')) return;
+  const hostEl = document.getElementById('cfg-peer-host');
+  const labelEl = document.getElementById('cfg-peer-label');
+  if (hostEl) hostEl.value = '';
+  if (labelEl) labelEl.value = '';
+  _cfgBools['dual_enabled'] = false;
+  const togDual = document.getElementById('tog-dual-enabled');
+  if (togDual) togDual.classList.remove('on');
+  await saveConfig('peer-device-msg');
+  _renderPeerDeviceCard({});
 }
 
 async function switchMachine(target){
@@ -11492,16 +11594,47 @@ Object.keys(DEVICE_NODES).forEach(nid => {
 let _peerExpanded = false;
 let _peerPoller = null;
 let _peerLabel = 'Peer';
+let _peerConfigured = false;
+let _tbSwitchTarget = null; // 'windows' or 'mac' — the OTHER platform from this one
+
+async function _initTaskbarSwitch() {
+  try {
+    const r = await fetch(`${API}/peer/status`);
+    const d = await r.json();
+    const myPlatform = (d.platform || '').toLowerCase();
+    _tbSwitchTarget = myPlatform.includes('mac') ? 'windows' : 'mac';
+    const btn = document.getElementById('tb-switch');
+    if (btn) btn.title = `Switch iZACH to ${_tbSwitchTarget === 'windows' ? 'Windows' : 'Mac'}`;
+  } catch {}
+}
+
+function _updateTaskbarSwitchBtn(reachable) {
+  const btn = document.getElementById('tb-switch');
+  if (!btn) return;
+  const ready = _peerConfigured && reachable;
+  btn.style.opacity = ready ? '1' : '0.25';
+  btn.style.pointerEvents = ready ? 'auto' : 'none';
+}
+
+async function taskbarSwitchMachine() {
+  if (!_tbSwitchTarget) return;
+  switchMachine(_tbSwitchTarget);
+}
 
 async function _initPeerRow() {
   try {
     const r = await fetch(`${API}/peer/local`);
     const d = await r.json();
     const row = document.getElementById('dev-row-peer');
-    if (!d.ok || !d.configured) { if (row) row.style.display = 'none'; return; }
+    _peerConfigured = !!(d.ok && d.configured);
+    if (!_peerConfigured) {
+      if (row) row.style.display = 'none';
+      _updateTaskbarSwitchBtn(false);
+      return;
+    }
     if (row) row.style.display = 'flex';
     const peer = d.peer;
-    _peerLabel = peer ? peer.platform : 'Peer';
+    _peerLabel = d.peer_label || (peer ? peer.platform : 'Peer');
     const nameEl = document.getElementById('dev-node-name-peer');
     if (nameEl) nameEl.textContent = _peerLabel;
     _peerCheckOnline();
@@ -11514,6 +11647,7 @@ async function _peerCheckOnline() {
     const d = await r.json();
     const dot = document.getElementById('dev-dot-peer');
     const sl  = document.getElementById('dev-status-peer');
+    _updateTaskbarSwitchBtn(!!d.ok);
     if (d.ok) {
       if (dot && !_peerExpanded) dot.className = 'dev-node-dot on';
       if (sl  && !_peerExpanded) { sl.textContent = 'ONLINE'; sl.style.color = '#00c853'; }
@@ -11525,6 +11659,7 @@ async function _peerCheckOnline() {
   } catch {
     const dot = document.getElementById('dev-dot-peer');
     const sl  = document.getElementById('dev-status-peer');
+    _updateTaskbarSwitchBtn(false);
     if (dot) dot.className = 'dev-node-dot off';
     if (sl)  { sl.textContent = 'OFFLINE'; sl.style.color = '#ff3d3d'; }
   }
@@ -11634,6 +11769,7 @@ async function peerRefreshProcs() {
 }
 
 setTimeout(_initPeerRow, 2500);
+setTimeout(_initTaskbarSwitch, 2500);
 setInterval(() => { if (!_peerExpanded) _peerCheckOnline(); }, 15000);
 
 connectWS();
