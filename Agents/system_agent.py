@@ -294,19 +294,23 @@ class SystemAgent:
         peer machine (Mac<->Windows switchable install, see
         modules/instance_coordinator.py), NOT AlliedNode 2 (a separate,
         unrelated satellite PC handled by modules/remote_node.py)."""
-        from modules.instance_coordinator import is_configured, check_peer, get_peer_label
+        from modules.instance_coordinator import is_configured, get_peer_host, get_peer_label
         if not is_configured():
             self.speak("No peer device is configured for cross-machine control.")
             return True
 
         label = get_peer_label() or target_platform.capitalize()
-        if check_peer() is None:
+        host = get_peer_host()
+        from modules.peer_control import daemon_reachable, open_app as _peer_open_app
+        # open_app executes through the peer's boot_daemon.py (port 5052),
+        # which stays up independently of its main iZACH backend — so gate
+        # on THAT, not check_peer() (port 5050, a different service that
+        # can be down while the daemon that actually runs this is fine).
+        if not daemon_reachable(host):
             self.speak(f"{label} is not reachable.")
             return True
 
-        from modules.instance_coordinator import get_peer_host
-        from modules.peer_control import open_app as _peer_open_app
-        result = _peer_open_app(get_peer_host(), app)
+        result = _peer_open_app(host, app)
         if result.get("ok"):
             self.speak(f"Opened {app} on {label}.")
         else:

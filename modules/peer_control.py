@@ -24,6 +24,21 @@ def _headers() -> dict:
     return {"X-iZACH-Peer-Token": _PEER_TOKEN}
 
 
+def daemon_reachable(peer_host: str) -> bool:
+    """Pings the peer's boot_daemon.py (port 5052) directly, NOT its main
+    iZACH backend (port 5050, via instance_coordinator.check_peer()). The
+    daemon runs independently and stays up even when the peer's main iZACH
+    isn't — which is exactly the case open_app/vitals/screenshot/etc below
+    execute through, so that's the service whose reachability actually
+    matters for them. check_peer() answers a different question (is the
+    peer's main backend up, for role/handoff negotiation)."""
+    try:
+        r = requests.get(_url(peer_host, "/daemon/ping"), timeout=3)
+        return r.status_code == 200 and bool(r.json().get("ok"))
+    except Exception:
+        return False
+
+
 def get_vitals(peer_host: str) -> dict:
     try:
         r = requests.get(_url(peer_host, "/control/vitals"), headers=_headers(), timeout=_TIMEOUT)
