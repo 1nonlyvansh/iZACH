@@ -666,6 +666,17 @@ def listen():
             det = get_wake_detector()
             if det is not None:
                 if det.check_text(text):
+                    from modules.wake_word import strip_wake_word
+                    remainder = strip_wake_word(text)
+                    if remainder:
+                        # Command said in the same breath ("hey izach open
+                        # chrome") — extend the active window silently (no
+                        # "Yes?" prompt, that's for the wake-word-alone case)
+                        # and execute the remainder immediately.
+                        print(f"[WAKE WORD] Activated with command: {remainder!r}")
+                        det.extend_active()
+                        print(f"[HEARD] {remainder!r}")
+                        return remainder
                     print(f"[WAKE WORD] Activated by: {text!r}")
                     det.activate()
                     return "none"

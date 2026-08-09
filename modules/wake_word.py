@@ -80,6 +80,24 @@ class WakeWordDetector:
         return any(w in text for w in WAKE_WORDS)
 
 
+# Matches a leading wake-word phrase ("hey izach", "izach", "isaac", ...) so
+# a command said in the SAME breath ("hey izach open chrome") can be
+# extracted and executed immediately instead of being discarded — mirrors
+# command_chain.py's own leading-filler stripper (which handles the
+# wake-word-disabled/always-listening path), reused here for the
+# wake-word-enabled path in main.py's listen().
+import re as _re
+_PREFIX_ALT = "|".join(_re.escape(p) for p in sorted(_PREFIXES, key=len, reverse=True))
+_NAME_ALT   = "|".join(_re.escape(n) for n in sorted(_NAME_VARIANTS, key=len, reverse=True))
+_STRIP_RE = _re.compile(rf'^(?:(?:{_PREFIX_ALT})[,\s]+)*(?:{_NAME_ALT})\b[,\s]*', _re.IGNORECASE)
+
+
+def strip_wake_word(text: str) -> str:
+    """Remove a leading wake-word phrase from text, returning whatever
+    command follows (empty string if the wake word was said alone)."""
+    return _STRIP_RE.sub('', text, count=1).strip()
+
+
 _detector: Optional[WakeWordDetector] = None
 
 

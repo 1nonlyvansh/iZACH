@@ -3,6 +3,19 @@ const qrcode = require('qrcode-terminal');
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
+
+// whatsapp-web.js drives a real (puppeteer) Chrome browser rather than
+// talking to WhatsApp's multi-device socket protocol directly, so WhatsApp's
+// own Linked Devices list identifies it by parsing this User-Agent string —
+// there's no "set custom device name" option here (that's a Baileys-library
+// feature, a different WA client entirely). The library's default UA
+// hardcodes "Macintosh" regardless of host OS, which is why both Mac and
+// Windows installs showed "Google Chrome (macOS)". At minimum, use a UA that
+// matches the actual host platform so the two machines are distinguishable.
+const WA_USER_AGENT = os.platform() === 'win32'
+    ? 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/101.0.4951.67 Safari/537.36'
+    : 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/101.0.4951.67 Safari/537.36';
 
 const SESSION_PATH = path.join(__dirname, '.wwebjs_auth');
 const STARTUP_TIME = Math.floor(Date.now() / 1000); // Unix timestamp in seconds
@@ -67,9 +80,39 @@ function _recoverFromStaleClient(client, reason) {
 // way to recover short of manually deleting the session directory by hand.
 const INIT_TIMEOUT_MS = 90000;
 
+// Chromium leaves SingletonLock/SingletonCookie/SingletonSocket files in the
+// profile dir while running; a clean browser.close() removes them, but an
+// ungraceful process kill (e.g. the desktop UI's own pkill/taskkill on
+// window close — see izach-ui/electron/main.cjs) can leave them behind.
+// On next boot, Chromium sees the stale lock and refuses to reuse the
+// profile ("already running"), which previously fell straight through to
+// the full-session wipe below — forcing a QR rescan even though the actual
+// WhatsApp auth in the profile was still perfectly valid. Removing just the
+// lock files (safe — they're always fine to delete when nothing's actually
+// using the profile) fixes reconnection without discarding the session.
+function _clearStaleChromiumLocks() {
+    const lockNames = ['SingletonLock', 'SingletonCookie', 'SingletonSocket'];
+    function walk(dir) {
+        let entries;
+        try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch (e) { return; }
+        for (const entry of entries) {
+            const full = path.join(dir, entry.name);
+            if (entry.isDirectory()) {
+                walk(full);
+            } else if (lockNames.includes(entry.name)) {
+                try { fs.unlinkSync(full); console.log(`[BRIDGE] Cleared stale lock: ${full}`); }
+                catch (e) { /* not present or already gone — fine */ }
+            }
+        }
+    }
+    walk(SESSION_PATH);
+}
+
 function createClient() {
+    _clearStaleChromiumLocks();
     const client = new Client({
         authStrategy: new LocalAuth(),
+        userAgent: WA_USER_AGENT,
         puppeteer: {
             headless: true,
             args: ['--no-sandbox', '--disable-setuid-sandbox']

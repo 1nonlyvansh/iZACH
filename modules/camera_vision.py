@@ -429,18 +429,18 @@ def _groq_vision(b64: str, question: str) -> str | None:
             data = resp.json() or {}
             choices = data.get("choices") or []
             if not choices:
-                logger.debug(f"[VISION] Groq 200 but no choices: {str(data)[:200]}")
+                print(f"[VISION] Groq 200 but no choices: {str(data)[:200]}")
                 return None
             msg = (choices[0] or {}).get("message") or {}
             content = msg.get("content")
             if not content:
-                logger.debug(f"[VISION] Groq 200 but no message.content: {str(data)[:200]}")
+                print(f"[VISION] Groq 200 but no message.content: {str(data)[:200]}")
                 return None
             return content.strip()
-        logger.debug(f"[VISION] Groq {resp.status_code}: {resp.text[:200]}")
+        print(f"[VISION] Groq {resp.status_code}: {resp.text[:200]}")
         return None
     except Exception as e:
-        logger.debug(f"[VISION] Groq error: {e}")
+        print(f"[VISION] Groq error: {e}")
         return None
 
 
@@ -475,7 +475,7 @@ def _gemini_vision(b64: str, question: str) -> str | None:
             return response.text.strip()
         return None
     except Exception as e:
-        logger.debug(f"[VISION] Gemini error: {e}")
+        print(f"[VISION] Gemini error: {e}")
         return None
 
 
@@ -515,10 +515,10 @@ def _openrouter_vision(b64: str, question: str) -> str | None:
         if resp.status_code == 200:
             data = resp.json()
             return data["choices"][0]["message"]["content"].strip()
-        logger.debug(f"[VISION] OpenRouter {resp.status_code}: {resp.text[:200]}")
+        print(f"[VISION] OpenRouter {resp.status_code}: {resp.text[:200]}")
         return None
     except Exception as e:
-        logger.debug(f"[VISION] OpenRouter error: {e}")
+        print(f"[VISION] OpenRouter error: {e}")
         return None
 
 
@@ -526,6 +526,9 @@ def _openrouter_vision(b64: str, question: str) -> str | None:
 
 def _ask_vision(b64: str, question: str) -> str:
     """Try providers in order; return first successful response."""
+    if not (GROQ_KEY or any(GEMINI_KEYS) or OPENROUTER_KEY):
+        print("[VISION] No vision API keys set at all (GROQ_VISION_KEY/GROQ_API_KEY, "
+              "GEMINI_VISION_KEY_1-3/GEMINI_KEY_1-3, OPENROUTER_API_KEY all empty).")
     for name, fn in [
         ("Groq", _groq_vision),
         ("Gemini", _gemini_vision),
@@ -533,9 +536,9 @@ def _ask_vision(b64: str, question: str) -> str:
     ]:
         result = fn(b64, question)
         if result:
-            logger.debug(f"[VISION] Answered by {name}")
+            print(f"[VISION] Answered by {name}")
             return result
-        logger.debug(f"[VISION] {name} failed, trying next provider")
+        print(f"[VISION] {name} failed, trying next provider")
     return "Camera vision unavailable — all providers failed. Check API keys."
 
 

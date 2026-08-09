@@ -7657,7 +7657,12 @@ function stopSpeakHeartbeat(){
 function handleWS(d){
   // TTS lifecycle events for reliable mode switching + heartbeat
   if(d.type==='tts_start'){
-    setMode('speak'); resetActivity();
+    // Stay on the Optics/camera screen while iZACH answers a vision
+    // question ("what do you see on camera") instead of yanking the user
+    // back to the speak screen (which also stops the camera stream) —
+    // only switch to the speak screen when not already viewing the feed.
+    if(currentMode!=='cam') setMode('speak');
+    resetActivity();
     triggerSpeakHeartbeat(d.word_count||10);
     return;
   }
@@ -7675,7 +7680,8 @@ function handleWS(d){
       addFeedItem('CHAT',(d.text||'').substring(0,40));
       const sub=document.getElementById('ssub');
       if(sub) sub.textContent=(d.text||'').substring(0,52);
-      setMode('speak'); resetActivity();
+      if(currentMode!=='cam') setMode('speak');
+      resetActivity();
     } else if(d.sender==='YOU'){
       el.className='cm u'; el.textContent=d.text;
       c.appendChild(el); c.scrollTop=c.scrollHeight;
@@ -10117,7 +10123,9 @@ async function _loadMicDevicesSettings(){
     sel.innerHTML='<option value="">Default</option>';
     (d.devices||[]).forEach((dev,i)=>{
       const opt=document.createElement('option');
-      opt.value=i; opt.textContent=dev;
+      const label=typeof dev==='string'?dev:(dev.name||'Mic');
+      const idx=typeof dev==='object'&&dev.index!=null?dev.index:i;
+      opt.value=idx; opt.textContent=label;
       sel.appendChild(opt);
     });
     if(d.active!=null) sel.value=d.active;
