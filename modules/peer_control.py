@@ -64,6 +64,17 @@ def media(peer_host: str, action: str) -> dict:
         return {"ok": False, "error": str(e)}
 
 
+def open_app(peer_host: str, app: str) -> dict:
+    try:
+        r = requests.post(
+            _url(peer_host, "/control/open_app"), headers=_headers(),
+            json={"app": app}, timeout=_TIMEOUT,
+        )
+        return r.json()
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
 def power(peer_host: str, action: str, delay_seconds: int = 0) -> dict:
     try:
         r = requests.post(

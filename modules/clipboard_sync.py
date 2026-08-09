@@ -25,6 +25,15 @@ def init(speak_fn, chain_fn=None):
     _chain_fn = chain_fn
 
 
+def _notif_clipboard_enabled() -> bool:
+    try:
+        import json as _j
+        with open("api_keys.json") as _f:
+            return bool(_j.load(_f).get("notif_clipboard", True))
+    except Exception:
+        return True
+
+
 # ── Content classifier ────────────────────────────────────────
 
 _URL_RE    = re.compile(r'^https?://\S+', re.IGNORECASE)
@@ -186,7 +195,7 @@ def _push(text: str):
 
     # Smart clipboard suggestion
     content_type = _classify(text)
-    if content_type and _speak_fn:
+    if content_type and _speak_fn and _notif_clipboard_enabled():
         suggestion = _build_suggestion(content_type, text)
         if suggestion:
             _awaiting_clipboard_action = {"type": content_type, "text": text, "suggestion": suggestion}

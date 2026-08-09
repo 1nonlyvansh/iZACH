@@ -75,7 +75,7 @@ Output ONLY valid JSON — no other text:
 }}
 
 Intents (pick exactly one):
-- open_app          : open/launch/start an application or website
+- open_app          : open/launch/start an application or website. If the command names a specific machine ("open chrome IN WINDOWS", "open notepad ON MAC"), still intent=open_app (there IS an app_name) — just also set target_platform to "mac" or "windows" so it launches there instead of locally.
 - kill_app          : force quit/close/end/terminate an app or process
 - set_volume        : "set volume to X", "volume X percent"
 - adjust_volume     : "increase/raise/boost/lower/decrease/reduce volume" (delta: +10 or -10 default)
@@ -111,6 +111,7 @@ Rules:
 - shutdown/restart delay: "in 10 minutes" → 600, "now"/"immediately" → 0, no time specified → 0
 - app_name: extract the app name without open/close/kill verbs
 - "hand off"/"switch"/"move" + "to windows"/"to mac" (no app name, referring to the other computer) = switch_machine, NEVER open_app with app_name="windows"/"mac"
+- "open/launch <app> in/on windows/mac" (HAS an app name) = open_app with app_name=<app> AND target_platform set — this runs the app on the OTHER machine, distinct from switch_machine above which has no app name
 - Output ONLY the JSON object
 """
 
@@ -257,6 +258,15 @@ class SystemAgent:
         if not app:
             self.speak("Which app should I open?")
             return True
+
+        target_platform = (d.get("target_platform") or "").strip().lower()
+        if target_platform:
+            from modules.personality import get_platform_name
+            if target_platform not in get_platform_name().lower():
+                return self._open_app_on_peer(app, target_platform)
+            # target_platform matches THIS machine (e.g. "open chrome on mac"
+            # while already on Mac) — fall through to the normal local path.
+
         try:
             from modules.context_engine import handle_open_with_position, _APP_DIRECT_LAUNCH
             from modules.automation import is_app_installed
@@ -277,6 +287,30 @@ class SystemAgent:
                 self.speak(result)
         except Exception as e:
             self.speak(f"Couldn't open {app}: {e}")
+        return True
+
+    def _open_app_on_peer(self, app: str, target_platform: str) -> bool:
+        """Handles 'open <app> in windows/mac' — routes to the dual-instance
+        peer machine (Mac<->Windows switchable install, see
+        modules/instance_coordinator.py), NOT AlliedNode 2 (a separate,
+        unrelated satellite PC handled by modules/remote_node.py)."""
+        from modules.instance_coordinator import is_configured, check_peer, get_peer_label
+        if not is_configured():
+            self.speak("No peer device is configured for cross-machine control.")
+            return True
+
+        label = get_peer_label() or target_platform.capitalize()
+        if check_peer() is None:
+            self.speak(f"{label} is not reachable.")
+            return True
+
+        from modules.instance_coordinator import get_peer_host
+        from modules.peer_control import open_app as _peer_open_app
+        result = _peer_open_app(get_peer_host(), app)
+        if result.get("ok"):
+            self.speak(f"Opened {app} on {label}.")
+        else:
+            self.speak(f"Couldn't open {app} on {label}: {result.get('error', 'unknown error')}")
         return True
 
     def _kill_app(self, d: dict, cmd: str) -> bool:

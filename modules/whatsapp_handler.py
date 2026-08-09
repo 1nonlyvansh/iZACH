@@ -57,6 +57,14 @@ def _notif_whatsapp_enabled() -> bool:
     except Exception:
         return True
 
+def _notif_whatsapp_status_enabled() -> bool:
+    try:
+        import json as _j
+        with open("api_keys.json") as _f:
+            return bool(_j.load(_f).get("notif_whatsapp_status", True))
+    except Exception:
+        return True
+
 
 def init_whatsapp(speak, chain, ai_func=None):
     global _speak_func, _chain_func, _ai_func
@@ -182,7 +190,7 @@ def _monitor_connection():
         try:
             r = req.get("http://localhost:3000/health", timeout=3)
             status = r.json().get("status")
-            if status != "connected" and _speak_func:
+            if status != "connected" and _speak_func and _notif_whatsapp_status_enabled():
                 _speak_func("WhatsApp is not connected.")
         except Exception:
             pass  # Bridge offline but not our problem to announce — status route handles it
@@ -388,7 +396,7 @@ def whatsapp_status():
             broadcast({"type": "whatsapp_status", "connected": True, "qr": ""})
         except Exception:
             pass
-        if _speak_func:
+        if _speak_func and _notif_whatsapp_status_enabled():
             _speak_func("WhatsApp connected.")
     elif status == 'disconnected':
         _wa_state["connected"] = False
@@ -397,7 +405,7 @@ def whatsapp_status():
             broadcast({"type": "whatsapp_status", "connected": False, "qr": _wa_state.get("qr", "")})
         except Exception:
             pass
-        if _speak_func:
+        if _speak_func and _notif_whatsapp_status_enabled():
             _speak_func(f"{_OWNER}, WhatsApp disconnected.")
     return jsonify({'status': 'ok'})
 

@@ -112,16 +112,19 @@ def boot():
 
 
 # ─────────────────────────────────────────────────────────────
-# Phase 3 — Mac<->Windows remote control (read/power/media only).
-# Deliberately excludes file browse/upload/delete and arbitrary
+# Phase 3 — Mac<->Windows remote control (read/power/media/open-app only).
+# Deliberately excludes file browse/upload/delete and arbitrary shell
 # command execution/remote-input — that's node_receiver/receiver.py's
 # territory for the AlliedNode satellite-PC case, and bundling it here
-# would widen what a leaked IZACH_PEER_TOKEN could do. Everything below
-# reuses system_control_mac.py/system_control_windows.py functions
-# already built and tested elsewhere in this project — no new platform
-# logic, just an authenticated HTTP surface over what exists. Works
-# independently of whether main.py/iZACH itself is running, same as
-# /daemon/boot above.
+# would widen what a leaked IZACH_PEER_TOKEN could do. open_app below is
+# NOT a shell-exec escape hatch — it goes through modules/automation.py's
+# same installed-app-only launch path the local open_app voice command
+# already uses (Windows Search / macOS `open -a`), it can't run arbitrary
+# commands or paths. Everything below reuses system_control_mac.py/
+# system_control_windows.py/automation.py functions already built and
+# tested elsewhere in this project — no new platform logic, just an
+# authenticated HTTP surface over what exists. Works independently of
+# whether main.py/iZACH itself is running, same as /daemon/boot above.
 # ─────────────────────────────────────────────────────────────
 
 @app.route("/control/vitals", methods=["GET"])
@@ -239,6 +242,29 @@ def control_media():
             kb.release(_KEY_MAP[action])
             return jsonify({"ok": True, "message": action.replace("_", " ").title()})
         return jsonify({"ok": False, "error": "unsupported platform"}), 500
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/control/open_app", methods=["POST"])
+def control_open_app():
+    if not _authorized(request):
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+    data = request.get_json(silent=True) or {}
+    app_name = (data.get("app") or "").strip()
+    if not app_name:
+        return jsonify({"ok": False, "error": "app name required"}), 400
+    try:
+        # automation.open_app() does its own platform-appropriate validation
+        # internally (Windows: installed-app guard before typing into Windows
+        # Search; macOS: delegates to context_engine's `open -a` launcher) —
+        # not duplicated here, since a second is_app_installed() pre-check
+        # using the raw un-aliased name would false-reject apps automation.py
+        # already knows how to resolve (e.g. "chrome" only matches via the
+        # Windows registry App Paths scan, not the macOS .app bundle scan).
+        from modules.automation import open_app as _open_app_local
+        _open_app_local(app_name)
+        return jsonify({"ok": True, "message": f"Opened {app_name}"})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
 

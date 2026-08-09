@@ -2145,8 +2145,16 @@ body.spotlight-mode .pnl:not(.spotlighted) {
             <div class="cfg-tog on" id="tog-notif-perf" onclick="cfgToggle('tog-notif-perf','notif_performance')"></div>
           </div>
           <div class="cfg-toggle-row">
-            <span>WhatsApp Notifications</span>
+            <span>WhatsApp Message Notifications</span>
             <div class="cfg-tog on" id="tog-notif-wa" onclick="cfgToggle('tog-notif-wa','notif_whatsapp')"></div>
+          </div>
+          <div class="cfg-toggle-row">
+            <span>WhatsApp Connection Status</span>
+            <div class="cfg-tog on" id="tog-notif-wa-status" onclick="cfgToggle('tog-notif-wa-status','notif_whatsapp_status')"></div>
+          </div>
+          <div class="cfg-toggle-row">
+            <span>Clipboard Suggestions</span>
+            <div class="cfg-tog on" id="tog-notif-clip" onclick="cfgToggle('tog-notif-clip','notif_clipboard')"></div>
           </div>
           <div class="cfg-toggle-row">
             <span>Download Notifications</span>
@@ -10174,6 +10182,8 @@ async function loadConfig(){
       'safe_mode_enabled':['tog-safe', s.safe_mode_enabled!=null?!!s.safe_mode_enabled:true],
       'notif_performance':['tog-notif-perf', s.notif_performance!=null?!!s.notif_performance:true],
       'notif_whatsapp':['tog-notif-wa', s.notif_whatsapp!=null?!!s.notif_whatsapp:true],
+      'notif_whatsapp_status':['tog-notif-wa-status', s.notif_whatsapp_status!=null?!!s.notif_whatsapp_status:true],
+      'notif_clipboard':['tog-notif-clip', s.notif_clipboard!=null?!!s.notif_clipboard:true],
       'notif_downloads':['tog-notif-dl', s.notif_downloads!=null?!!s.notif_downloads:true],
       'command_history_enabled':['tog-cmd-hist', s.command_history_enabled!=null?!!s.command_history_enabled:true],
       'briefing_enabled':['tog-briefing', !!(s.briefing_enabled)],
@@ -10419,8 +10429,8 @@ async function saveConfig(msgId){
   if(screenAwareExcl) payload.screen_aware_excluded_apps = screenAwareExcl.value.split(',').map(s=>s.trim().toLowerCase()).filter(Boolean);
   // Boolean toggles
   const fsEl2=document.getElementById('cfg-font-size'); if(fsEl2) payload.font_size=Number(fsEl2.value);
-  ['wake_word_enabled','safe_mode_enabled','notif_performance','notif_whatsapp','notif_downloads','command_history_enabled','briefing_enabled','auto_dnd_before_meetings','proactive_enabled','pattern_automation_suggestions_enabled','screen_aware_enabled','email_agent_enabled','email_watch_otp','email_watch_replies','email_watch_keywords','email_track_orders']
-    .forEach(k=>{ payload[k]=_cfgBools[k]!=null?!!_cfgBools[k]:(['safe_mode_enabled','proactive_enabled','pattern_automation_suggestions_enabled','email_watch_otp','email_watch_replies','email_watch_keywords','email_track_orders'].includes(k)); });
+  ['wake_word_enabled','safe_mode_enabled','notif_performance','notif_whatsapp','notif_whatsapp_status','notif_clipboard','notif_downloads','command_history_enabled','briefing_enabled','auto_dnd_before_meetings','proactive_enabled','pattern_automation_suggestions_enabled','screen_aware_enabled','email_agent_enabled','email_watch_otp','email_watch_replies','email_watch_keywords','email_track_orders']
+    .forEach(k=>{ payload[k]=_cfgBools[k]!=null?!!_cfgBools[k]:(['safe_mode_enabled','proactive_enabled','pattern_automation_suggestions_enabled','notif_whatsapp_status','notif_clipboard','email_watch_otp','email_watch_replies','email_watch_keywords','email_track_orders'].includes(k)); });
   // Briefing items
   const briefItems={
     'brief-weather':'briefing_weather','brief-news':'briefing_news','brief-calendar':'briefing_calendar',

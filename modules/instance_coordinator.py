@@ -228,6 +228,48 @@ def become_secondary(reason: str = "demoted"):
         _role, _role_reason = "secondary", reason
 
 
+def restart_as_primary():
+    """Called (on a background thread) when this instance is promoted via
+    /peer/handoff while still running in lightweight Secondary Connector mode.
+    become_primary() alone only flips the in-memory role flag — the full
+    brain (command_chain/agents) is only ever built once, in main.py's
+    start_brain() startup branch — so a promoted-while-running Secondary
+    Connector would otherwise sit there answering "Backend not initialized"
+    forever.
+
+    Restarts ONLY main.py, not the full launch_izach.py pipeline — n8n,
+    ngrok, the WhatsApp bridge and (critically) the Electron UI are already
+    running from whatever originally booted this machine's Secondary
+    Connector instance. Re-running the whole launcher spawned a second,
+    duplicate Electron window pointed at the same single backend — closing
+    either one triggered Electron's window-all-closed handler and killed
+    the one shared backend out from under the other window. Restarting the
+    bare backend process leaves the existing Electron window(s)/WS bridge
+    alone; they just reconnect to the fresh primary once it's back up.
+
+    decide_role() in the fresh process correctly claims primary since the
+    peer that just handed off will already be reporting secondary (or be
+    offline) by the time it checks. main.py's own startup port-cleanup
+    handles the brief overlap while this process is still releasing
+    5050/5051."""
+    time.sleep(1.5)  # let the HTTP /peer/handoff response return to the caller first
+    try:
+        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        main_py = os.path.join(project_root, "main.py")
+        if IS_MAC:
+            python_bin = os.path.join(project_root, ".venv", "bin", "python3")
+            subprocess.Popen([python_bin, main_py], cwd=project_root, start_new_session=True)
+        elif IS_WINDOWS:
+            python_bin = os.path.join(project_root, ".venv", "Scripts", "python.exe")
+            subprocess.Popen(
+                [python_bin, main_py], cwd=project_root,
+                creationflags=subprocess.CREATE_NEW_CONSOLE,
+            )
+    except Exception as e:
+        print(f"[DUAL-INSTANCE] restart_as_primary failed to spawn replacement: {e}")
+    os._exit(0)
+
+
 def verify_peer_token(token: str) -> bool:
     return bool(_PEER_TOKEN) and token == _PEER_TOKEN
 

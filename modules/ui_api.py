@@ -1196,7 +1196,8 @@ def settings_post():
         allowed = {
             "wake_word_enabled", "voice", "tts_speed",
             "response_style", "response_verbosity", "safe_mode_enabled",
-            "notif_performance", "notif_whatsapp", "notif_downloads",
+            "notif_performance", "notif_whatsapp", "notif_whatsapp_status",
+            "notif_clipboard", "notif_downloads",
             "command_history_enabled", "log_retention_days",
             "theme", "language", "ui", "screensaver_timeout",
             "ask_ui_on_boot", "command_only",
@@ -1970,18 +1971,20 @@ def peer_handoff():
         return jsonify({"ok": False, "error": "Unauthorized"}), 401
     data = request.get_json(silent=True) or {}
     action = data.get("action", "")
-    from modules.instance_coordinator import become_primary, become_secondary
+    from modules.instance_coordinator import become_primary, become_secondary, restart_as_primary
     if action == "promote":
         become_primary("promoted via handoff from peer")
-        # This only flips the in-memory role flag — the actual full-brain
-        # command_chain/agents only ever get built once, in start_brain()'s
-        # startup branch. A machine promoted while already running as
-        # Secondary Connector stays in that lightweight mode (no chain_fn)
-        # until restarted, so it must be told that explicitly — without
-        # this, commands here just silently 503 with "Backend not
-        # initialized" and look broken instead of "needs a restart."
-        if _speak_fn:
-            _speak_fn("This device has been promoted to primary. Restart iZACH here to activate full functionality.")
+        # A machine promoted while already running as Secondary Connector
+        # (no chain_fn — the full brain only ever gets built once, in
+        # start_brain()'s startup branch) can't just flip the role flag and
+        # call it done — it'd sit there answering "Backend not initialized"
+        # forever. Actually restart it into a fresh, fully-primary process.
+        if _chain_fn is None:
+            if _speak_fn:
+                _speak_fn("This device has been promoted to primary. Restarting iZACH here now.")
+            threading.Thread(target=restart_as_primary, daemon=True).start()
+        elif _speak_fn:
+            _speak_fn("This device has been promoted to primary.")
         return jsonify({"ok": True, "role": "primary"})
     if action == "demote":
         become_secondary("demoted via handoff to peer")
@@ -2020,7 +2023,8 @@ def switch_status():
 # boot_daemon.py /control/* routes. Local-only, called by Cortex/Forge
 # UI; keeps IZACH_PEER_TOKEN server-side (see modules/peer_control.py).
 # Same deliberate scope cut as boot_daemon.py: vitals/screenshot/
-# processes/media/power only, no file/exec.
+# processes/media/power/open_app only, no file browse/upload or
+# arbitrary shell exec.
 # ─────────────────────────────────────────────────────────────
 
 def _peer_host_or_400():
@@ -2071,6 +2075,18 @@ def peer_power():
     data = request.get_json(silent=True) or {}
     from modules.peer_control import power
     return jsonify(power(host, data.get("action", ""), int(data.get("delay_seconds") or 0)))
+
+
+@ui_bp.route("/peer/open_app", methods=["POST"])
+def peer_open_app():
+    host, err = _peer_host_or_400()
+    if err: return err
+    data = request.get_json(silent=True) or {}
+    app_name = (data.get("app") or "").strip()
+    if not app_name:
+        return jsonify({"ok": False, "error": "app name required"}), 400
+    from modules.peer_control import open_app
+    return jsonify(open_app(host, app_name))
 
 
 # ─────────────────────────────────────────────────────────────
