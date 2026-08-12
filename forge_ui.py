@@ -2295,19 +2295,28 @@ class SettingsPage(tk.Frame):
     def _build_api_section(self):
         card = self._section("API KEYS")
 
+        # Was reading/writing api_keys.json under keys like "GROQ_KEY" —
+        # every real consumer (main.py, spotify_controller.py, etc.) only
+        # ever reads these from .env via os.getenv(), so nothing here ever
+        # actually took effect, "restart to apply" or not. Now goes through
+        # the same GET/POST /api-keys endpoint modules/ui_api.py already
+        # exposes (writes .env, hot-reloads live clients where it can).
         info = tk.Label(card,
-                        text="Changes are saved to memory only. Restart iZACH to apply.",
+                        text="Most keys hot-reload immediately. A few (marked below) need a restart.",
                         bg=BG_CARD, fg=AMBER, font=("Consolas", 8))
         info.pack(anchor="w", padx=12, pady=(0, 8))
 
         self._api_entries = {}
+        self._api_loaded_values = {}
 
-        for label, key in [("Groq API Key", "GROQ_KEY"),
+        for label, key in [("Groq API Key", "GROQ_API_KEY"),
                             ("Gemini Key 1", "GEMINI_KEY_1"),
                             ("Gemini Key 2", "GEMINI_KEY_2"),
                             ("Gemini Key 3", "GEMINI_KEY_3"),
                             ("Spotify Client ID", "SPOTIPY_CLIENT_ID"),
-                            ("Spotify Client Secret", "SPOTIPY_CLIENT_SECRET")]:
+                            ("Spotify Client Secret", "SPOTIPY_CLIENT_SECRET"),
+                            ("Dual-Instance Peer Token", "IZACH_PEER_TOKEN"),
+                            ("AlliedNode2 Token", "ALLIEDNODE2_TOKEN")]:
             row = tk.Frame(card, bg=BG_CARD)
             row.pack(fill="x", padx=12, pady=2)
             tk.Label(row, text=f"{label:<24}", bg=BG_CARD, fg=TEXT_SEC,
@@ -2329,48 +2338,60 @@ class SettingsPage(tk.Frame):
                       padx=4).pack(side="left")
             self._api_entries[key] = entry
 
+        self._api_keys_msg_lbl = tk.Label(card, text="", bg=BG_CARD, fg=TEXT_SEC, font=("Consolas", 8))
         tk.Button(card, text="SAVE API KEYS",
                   bg=CYAN_DARK, fg=CYAN,
                   font=("Consolas", 9, "bold"),
                   relief="flat", cursor="hand2",
                   command=self._save_api_keys,
-                  padx=14, pady=4).pack(anchor="w", padx=12, pady=(6, 10))
+                  padx=14, pady=4).pack(anchor="w", padx=12, pady=(6, 4))
+        self._api_keys_msg_lbl.pack(anchor="w", padx=12, pady=(0, 10))
 
         self._load_api_keys()
 
     def _load_api_keys(self):
-        try:
-            import json
-            path = os.path.join(os.path.dirname(__file__), "api_keys.json")
-            if os.path.exists(path):
-                with open(path) as f:
-                    keys = json.load(f)
+        def _work():
+            try:
+                d = requests.get(f"{_API}/api-keys", timeout=5).json()
+                keys = d.get("keys", {}) if d.get("ok") else {}
+            except Exception:
+                keys = {}
+            def _apply():
                 for k, entry in self._api_entries.items():
-                    if k in keys:
-                        entry.delete(0, "end")
-                        entry.insert(0, keys[k])
-        except Exception:
-            pass
+                    # GET returns masked values ("abcd••••••") — shown so the
+                    # user can see a key is set, but NOT resubmitted on save
+                    # unless actually edited (see _save_api_keys).
+                    val = keys.get(k, "")
+                    self._api_loaded_values[k] = val
+                    entry.delete(0, "end")
+                    entry.insert(0, val)
+            self._safe_after(0, _apply)
+        threading.Thread(target=_work, daemon=True).start()
 
     def _save_api_keys(self):
-        import json
-        path = os.path.join(os.path.dirname(__file__), "api_keys.json")
-        # Read-merge-write — this used to blindly overwrite the whole file
-        # with ONLY these 6 key fields, silently wiping out every other
-        # setting (dual_instance, boot_terminals, memory, etc) on every save.
-        data = {}
-        if os.path.exists(path):
-            with open(path) as f:
-                data = json.load(f)
-        data.update({k: e.get() for k, e in self._api_entries.items()})
-        with open(path, "w") as f:
-            json.dump(data, f, indent=2)
-        self._saved_label = tk.Label(self._body, text="✓ API keys saved. Restart to apply.",
-                                     bg=BG_DEEP, fg=GREEN,
-                                     font=("Consolas", 9))
-        self._saved_label.pack(pady=4)
-        self._safe_after(3000, lambda: self._saved_label.destroy()
-                   if self._saved_label.winfo_exists() else None)
+        # Only send keys the user actually changed — resubmitting an
+        # untouched masked value ("abcd••••••") would overwrite the real
+        # secret with literal bullet characters.
+        payload = {k: e.get() for k, e in self._api_entries.items()
+                   if e.get() != self._api_loaded_values.get(k, "")}
+        if not payload:
+            self._api_keys_msg_lbl.config(text="No changes to save.", fg=TEXT_SEC)
+            return
+        self._api_keys_msg_lbl.config(text="Saving…", fg=TEXT_SEC)
+        def _work():
+            try:
+                r = requests.post(f"{_API}/api-keys", json=payload, timeout=8)
+                ok = r.status_code == 200
+            except Exception:
+                ok = False
+            def _apply():
+                if ok:
+                    self._api_keys_msg_lbl.config(text="✓ Saved.", fg=GREEN)
+                    self._load_api_keys()
+                else:
+                    self._api_keys_msg_lbl.config(text="Save failed — connection error.", fg=RED)
+            self._safe_after(0, _apply)
+        threading.Thread(target=_work, daemon=True).start()
 
     # ── Voice Section ──
     def _build_voice_section(self):
@@ -3168,20 +3189,73 @@ class SettingsPage(tk.Frame):
                       bg=BG_CARD, fg=TEXT_SEC, selectcolor=BG_DEEP, activebackground=BG_CARD,
                       font=("Consolas", 8)).pack(side="left")
 
-        host_row = tk.Frame(card, bg=BG_CARD)
-        host_row.pack(fill="x", padx=12, pady=4)
-        tk.Label(host_row, text="Peer Host", bg=BG_CARD, fg=TEXT_PRI,
-                 font=("Consolas", 9), width=14, anchor="w").pack(side="left")
-        self._peer_host_entry = tk.Entry(host_row, bg=BG_DEEP, fg=CYAN, insertbackground=CYAN,
+        # Peer Device card — friendlier UI over the same
+        # dual_instance.peer_host/peer_port/peer_label fields; no new
+        # architecture, still exactly one peer. Mirrors cortex-ui.html's
+        # _renderPeerDeviceCard()/peerDeviceEdit()/peerDeviceSave()/
+        # peerDeviceRemove(). Exactly one of (info card / add button /
+        # form) is visible at a time via pack()/pack_forget().
+        tk.Label(card, text="PEER DEVICE", bg=BG_CARD, fg=TEXT_PRI,
+                 font=("Consolas", 9, "bold")).pack(anchor="w", padx=12, pady=(4, 4))
+
+        self._peer_device_card = tk.Frame(card, bg=BG_CARD, highlightthickness=1,
+                                          highlightbackground=BORDER_HI)
+        info_row = tk.Frame(self._peer_device_card, bg=BG_CARD)
+        info_row.pack(fill="x", padx=10, pady=8)
+        name_col = tk.Frame(info_row, bg=BG_CARD)
+        name_col.pack(side="left", fill="x", expand=True)
+        self._peer_device_name_lbl = tk.Label(name_col, text="", bg=BG_CARD, fg=CYAN,
+                                              font=("Consolas", 10, "bold"), anchor="w")
+        self._peer_device_name_lbl.pack(fill="x")
+        self._peer_device_hostport_lbl = tk.Label(name_col, text="", bg=BG_CARD, fg=TEXT_SEC,
+                                                  font=("Consolas", 8), anchor="w")
+        self._peer_device_hostport_lbl.pack(fill="x")
+        btn_col = tk.Frame(info_row, bg=BG_CARD)
+        btn_col.pack(side="right")
+        tk.Button(btn_col, text="EDIT", command=self._peer_device_edit,
+                 bg=BG_PANEL, fg=TEXT_SEC, font=("Consolas", 8, "bold"),
+                 relief="flat", cursor="hand2", padx=8, pady=3).pack(side="left", padx=(0, 6))
+        tk.Button(btn_col, text="REMOVE", command=self._peer_device_remove,
+                 bg="#2a0000", fg=RED, font=("Consolas", 8, "bold"),
+                 relief="flat", cursor="hand2", padx=8, pady=3).pack(side="left")
+
+        self._peer_device_add_btn = tk.Button(card, text="+ ADD PEER DEVICE", command=self._peer_device_edit,
+                 bg=BG_PANEL, fg=CYAN, font=("Consolas", 8, "bold"),
+                 relief="flat", cursor="hand2", padx=10, pady=4)
+
+        self._peer_device_form = tk.Frame(card, bg=BG_CARD)
+        tk.Label(self._peer_device_form, text="Device Name", bg=BG_CARD, fg=TEXT_PRI,
+                 font=("Consolas", 9), width=14, anchor="w").grid(row=0, column=0, sticky="w", pady=3)
+        self._peer_label_entry = tk.Entry(self._peer_device_form, bg=BG_DEEP, fg=CYAN, insertbackground=CYAN,
                                           font=("Consolas", 9), relief="flat",
-                                          highlightthickness=1, highlightbackground=BORDER_HI, width=18)
-        self._peer_host_entry.pack(side="left", padx=(4, 12), ipady=3)
-        tk.Label(host_row, text="Port", bg=BG_CARD, fg=TEXT_PRI,
-                 font=("Consolas", 9)).pack(side="left")
-        self._peer_port_entry = tk.Entry(host_row, bg=BG_DEEP, fg=CYAN, insertbackground=CYAN,
+                                          highlightthickness=1, highlightbackground=BORDER_HI, width=22)
+        self._peer_label_entry.grid(row=0, column=1, sticky="w", padx=(4, 0), ipady=3)
+        tk.Label(self._peer_device_form, text="Host (LAN IP)", bg=BG_CARD, fg=TEXT_PRI,
+                 font=("Consolas", 9), width=14, anchor="w").grid(row=1, column=0, sticky="w", pady=3)
+        self._peer_host_entry = tk.Entry(self._peer_device_form, bg=BG_DEEP, fg=CYAN, insertbackground=CYAN,
+                                          font=("Consolas", 9), relief="flat",
+                                          highlightthickness=1, highlightbackground=BORDER_HI, width=22)
+        self._peer_host_entry.grid(row=1, column=1, sticky="w", padx=(4, 0), ipady=3)
+        tk.Label(self._peer_device_form, text="Port", bg=BG_CARD, fg=TEXT_PRI,
+                 font=("Consolas", 9), width=14, anchor="w").grid(row=2, column=0, sticky="w", pady=3)
+        self._peer_port_entry = tk.Entry(self._peer_device_form, bg=BG_DEEP, fg=CYAN, insertbackground=CYAN,
                                           font=("Consolas", 9), relief="flat",
                                           highlightthickness=1, highlightbackground=BORDER_HI, width=8)
-        self._peer_port_entry.pack(side="left", padx=(4, 0), ipady=3)
+        self._peer_port_entry.grid(row=2, column=1, sticky="w", padx=(4, 0), ipady=3)
+        tk.Label(self._peer_device_form,
+                 text="Shared secret token: Settings → Keys & ID → Dual-Instance Peer\nToken — must match on both machines.",
+                 bg=BG_CARD, fg=TEXT_SEC, font=("Consolas", 7), justify="left").grid(
+            row=3, column=0, columnspan=2, sticky="w", pady=(4, 6))
+        form_btn_row = tk.Frame(self._peer_device_form, bg=BG_CARD)
+        form_btn_row.grid(row=4, column=0, columnspan=2, sticky="w")
+        tk.Button(form_btn_row, text="SAVE DEVICE", command=self._peer_device_save,
+                 bg=CYAN_DARK, fg=CYAN, font=("Consolas", 8, "bold"),
+                 relief="flat", cursor="hand2", padx=10, pady=3).pack(side="left")
+        tk.Button(form_btn_row, text="CANCEL", command=self._peer_device_cancel_edit,
+                 bg=BG_PANEL, fg=TEXT_SEC, font=("Consolas", 8, "bold"),
+                 relief="flat", cursor="hand2", padx=10, pady=3).pack(side="left", padx=(6, 0))
+        self._peer_device_msg_lbl = tk.Label(form_btn_row, text="", bg=BG_CARD, fg=TEXT_SEC, font=("Consolas", 8))
+        self._peer_device_msg_lbl.pack(side="left", padx=(10, 0))
 
         pin_row = tk.Frame(card, bg=BG_CARD)
         pin_row.pack(fill="x", padx=12, pady=4)
@@ -3221,8 +3295,191 @@ class SettingsPage(tk.Frame):
                  bg=BG_PANEL, fg=TEXT_SEC, font=("Consolas", 8, "bold"),
                  relief="flat", cursor="hand2", padx=8, pady=3).pack(side="left", padx=(12, 0))
 
+        tk.Frame(card, bg=BG_CARD, height=10).pack()
+        tk.Label(card, text="SWITCH MACHINE", bg=BG_CARD, fg=TEXT_PRI,
+                 font=("Consolas", 9, "bold")).pack(anchor="w", padx=12)
+        tk.Label(card,
+                 text="Boots iZACH on the other machine if it's not already running, waits\n"
+                      "for it to come up healthy, then hands off and shuts down here. Nothing\n"
+                      "here is touched if the peer can't be reached.",
+                 bg=BG_CARD, fg=TEXT_SEC, font=("Consolas", 8), justify="left").pack(
+            anchor="w", padx=12, pady=(2, 6))
+        switch_row = tk.Frame(card, bg=BG_CARD)
+        switch_row.pack(fill="x", padx=12)
+        tk.Button(switch_row, text="SWITCH TO WINDOWS", command=lambda: self._switch_machine("windows"),
+                 bg=BG_PANEL, fg=TEXT_SEC, font=("Consolas", 8, "bold"),
+                 relief="flat", cursor="hand2", padx=8, pady=3).pack(side="left")
+        tk.Button(switch_row, text="SWITCH TO MAC", command=lambda: self._switch_machine("mac"),
+                 bg=BG_PANEL, fg=TEXT_SEC, font=("Consolas", 8, "bold"),
+                 relief="flat", cursor="hand2", padx=8, pady=3).pack(side="left", padx=(8, 0))
+        # Real backend-reported progress (GET /switch_status), polled while
+        # the POST /switch_machine below is still in flight — main.py's
+        # Flask app runs threaded=True specifically so this works, same as
+        # Cortex's _setSwitchProgressUI()/switchMachine(). Not a fake
+        # client-side animation.
+        self._switch_progress_canvas = tk.Canvas(card, width=300, height=8, bg=BG_DEEP,
+                                                  highlightthickness=1, highlightbackground=BORDER_HI)
+        self._switch_progress_fill = self._switch_progress_canvas.create_rectangle(
+            0, 0, 0, 8, fill=CYAN, width=0)
+        self._switch_machine_lbl = tk.Label(card, text="", bg=BG_CARD, fg=TEXT_SEC,
+                                            font=("Consolas", 8))
+        self._switch_machine_lbl.pack(anchor="w", padx=12, pady=(6, 4))
+        self._switch_poller_active = False
+
         tk.Frame(card, bg=BG_CARD, height=8).pack()
         self._load_dual_instance()
+
+        # Peer Device Control sub-card — Phase 3 remote control (vitals/
+        # media/power/screenshot/processes), proxied server-side through
+        # /peer/* so IZACH_PEER_TOKEN never reaches this UI. No terminal,
+        # no file transfer — same deliberate scope cut as boot_daemon.py's
+        # /control/* routes. Card is shown/hidden based on whether
+        # dual_instance is actually configured (see _load_peer_local).
+        self._peer_label = "Peer"
+        peer_card = self._section("PEER DEVICE CONTROL")
+        self._peer_card_frame = peer_card
+
+        peer_hdr = tk.Frame(peer_card, bg=BG_CARD)
+        peer_hdr.pack(fill="x", padx=12, pady=(0, 8))
+        self._peer_dot_lbl = tk.Label(peer_hdr, text="●", bg=BG_CARD, fg=TEXT_SEC, font=("Consolas", 11))
+        self._peer_dot_lbl.pack(side="left")
+        self._peer_name_lbl = tk.Label(peer_hdr, text=" Peer — checking…", bg=BG_CARD, fg=TEXT_SEC,
+                                       font=("Consolas", 9, "bold"))
+        self._peer_name_lbl.pack(side="left", padx=(2, 0))
+        tk.Button(peer_hdr, text="↻ REFRESH", command=self._refresh_peer_vitals,
+                 bg=BG_PANEL, fg=TEXT_SEC, font=("Consolas", 8, "bold"),
+                 relief="flat", cursor="hand2", padx=8, pady=3).pack(side="right")
+
+        tk.Label(peer_card, text="VITALS", bg=BG_CARD, fg=CYAN_DIM, font=("Consolas", 7)).pack(
+            anchor="w", padx=12)
+        vitals_row = tk.Frame(peer_card, bg=BG_CARD)
+        vitals_row.pack(fill="x", padx=12, pady=(2, 8))
+        self._peer_cpu_lbl = tk.Label(vitals_row, text="CPU —", bg=BG_CARD, fg=TEXT_PRI, font=("Consolas", 8))
+        self._peer_cpu_lbl.pack(side="left", padx=(0, 10))
+        self._peer_ram_lbl = tk.Label(vitals_row, text="RAM —", bg=BG_CARD, fg=TEXT_PRI, font=("Consolas", 8))
+        self._peer_ram_lbl.pack(side="left", padx=(0, 10))
+        self._peer_disk_lbl = tk.Label(vitals_row, text="DISK —", bg=BG_CARD, fg=TEXT_PRI, font=("Consolas", 8))
+        self._peer_disk_lbl.pack(side="left", padx=(0, 10))
+        self._peer_batt_lbl = tk.Label(vitals_row, text="BATT —", bg=BG_CARD, fg=TEXT_PRI, font=("Consolas", 8))
+        self._peer_batt_lbl.pack(side="left")
+
+        tk.Label(peer_card, text="MEDIA", bg=BG_CARD, fg=CYAN_DIM, font=("Consolas", 7)).pack(
+            anchor="w", padx=12)
+        media_row = tk.Frame(peer_card, bg=BG_CARD)
+        media_row.pack(fill="x", padx=12, pady=(2, 8))
+        for label, action in [("⏮", "prev_track"), ("⏯", "play_pause"), ("⏭", "next_track"),
+                              ("🔉", "volume_down"), ("🔊", "volume_up"), ("🔇", "mute")]:
+            tk.Button(media_row, text=label, command=lambda a=action: self._peer_media(a),
+                     bg=BG_PANEL, fg=CYAN, font=("Consolas", 10),
+                     relief="flat", cursor="hand2", padx=6, pady=2).pack(side="left", padx=(0, 4))
+
+        tk.Label(peer_card, text="POWER", bg=BG_CARD, fg=CYAN_DIM, font=("Consolas", 7)).pack(
+            anchor="w", padx=12)
+        power_row = tk.Frame(peer_card, bg=BG_CARD)
+        power_row.pack(fill="x", padx=12, pady=(2, 8))
+        power_btns = [("Lock", "lock", CYAN), ("Sleep", "sleep", CYAN),
+                     ("Restart", "restart", AMBER), ("Shutdown", "shutdown", RED)]
+        for label, action, color in power_btns:
+            tk.Button(power_row, text=label, command=lambda a=action, l=label: self._peer_power(a, l),
+                     bg=BG_PANEL, fg=color, font=("Consolas", 8, "bold"),
+                     relief="flat", cursor="hand2", padx=8, pady=3).pack(side="left", padx=(0, 6))
+
+        snap_hdr = tk.Frame(peer_card, bg=BG_CARD)
+        snap_hdr.pack(fill="x", padx=12, pady=(0, 4))
+        tk.Label(snap_hdr, text="SCREENSHOT", bg=BG_CARD, fg=CYAN_DIM, font=("Consolas", 7)).pack(side="left")
+        tk.Button(snap_hdr, text="SNAP", command=self._peer_screenshot,
+                 bg=BG_PANEL, fg=TEXT_SEC, font=("Consolas", 8, "bold"),
+                 relief="flat", cursor="hand2", padx=8, pady=2).pack(side="right")
+        self._peer_snap_lbl = tk.Label(peer_card, bg=BG_CARD)
+        self._peer_snap_lbl.pack(padx=12, pady=(0, 8))
+
+        procs_hdr = tk.Frame(peer_card, bg=BG_CARD)
+        procs_hdr.pack(fill="x", padx=12, pady=(0, 4))
+        tk.Label(procs_hdr, text="PROCESSES", bg=BG_CARD, fg=CYAN_DIM, font=("Consolas", 7)).pack(side="left")
+        tk.Button(procs_hdr, text="↻ REFRESH", command=self._peer_refresh_procs,
+                 bg=BG_PANEL, fg=TEXT_SEC, font=("Consolas", 8, "bold"),
+                 relief="flat", cursor="hand2", padx=8, pady=2).pack(side="right")
+        procs_frame = tk.Frame(peer_card, bg=BG_CARD)
+        procs_frame.pack(fill="both", padx=12, pady=(0, 8))
+        procs_sb = tk.Scrollbar(procs_frame, bg=BG_CARD, troughcolor=BORDER)
+        procs_sb.pack(side="right", fill="y")
+        self._peer_procs_text = tk.Text(procs_frame, height=8, bg="#010814", fg="#60b8d0",
+                                        font=("Consolas", 8), relief="flat", wrap="none",
+                                        highlightthickness=1, highlightbackground=BORDER_HI,
+                                        state="disabled", yscrollcommand=procs_sb.set)
+        self._peer_procs_text.pack(side="left", fill="both", expand=True)
+        procs_sb.config(command=self._peer_procs_text.yview)
+
+        self._load_peer_local()
+
+        # AlliedNode 2 card — same "friendlier UI over existing config"
+        # pattern as the Peer Device card above, but for the satellite-PC
+        # node (modules/remote_node.py). Unlike the peer device, this one
+        # has no REMOVE (there must always be exactly one entry named
+        # "alliednode 2" for the DEVICES widget's hardcoded row to point
+        # at) and no ADD flow — it always exists, defaulting to the
+        # pre-config hardcoded values server-side if never touched.
+        an2_card = self._section("ALLIEDNODE 2")
+        tk.Label(an2_card,
+                 text="The satellite PC controllable from the DEVICES widget — separate from\n"
+                      "the dual-instance peer above. Shared secret token: Settings → Keys & ID\n"
+                      "→ ALLIEDNODE2 TOKEN.",
+                 bg=BG_CARD, fg=TEXT_SEC, font=("Consolas", 8), justify="left").pack(
+            anchor="w", padx=12, pady=(0, 8))
+
+        self._an2_device_card = tk.Frame(an2_card, bg=BG_CARD, highlightthickness=1,
+                                         highlightbackground=BORDER_HI)
+        an2_info_row = tk.Frame(self._an2_device_card, bg=BG_CARD)
+        an2_info_row.pack(fill="x", padx=10, pady=8)
+        an2_name_col = tk.Frame(an2_info_row, bg=BG_CARD)
+        an2_name_col.pack(side="left", fill="x", expand=True)
+        self._an2_device_name_lbl = tk.Label(an2_name_col, text="", bg=BG_CARD, fg=CYAN,
+                                             font=("Consolas", 10, "bold"), anchor="w")
+        self._an2_device_name_lbl.pack(fill="x")
+        self._an2_device_hostport_lbl = tk.Label(an2_name_col, text="", bg=BG_CARD, fg=TEXT_SEC,
+                                                 font=("Consolas", 8), anchor="w")
+        self._an2_device_hostport_lbl.pack(fill="x")
+        tk.Button(an2_info_row, text="EDIT", command=self._an2_device_edit,
+                 bg=BG_PANEL, fg=TEXT_SEC, font=("Consolas", 8, "bold"),
+                 relief="flat", cursor="hand2", padx=8, pady=3).pack(side="right")
+
+        self._an2_device_form = tk.Frame(an2_card, bg=BG_CARD)
+        tk.Label(self._an2_device_form, text="Device Name", bg=BG_CARD, fg=TEXT_PRI,
+                 font=("Consolas", 9), width=14, anchor="w").grid(row=0, column=0, sticky="w", pady=3)
+        self._an2_label_entry = tk.Entry(self._an2_device_form, bg=BG_DEEP, fg=CYAN, insertbackground=CYAN,
+                                         font=("Consolas", 9), relief="flat",
+                                         highlightthickness=1, highlightbackground=BORDER_HI, width=22)
+        self._an2_label_entry.grid(row=0, column=1, sticky="w", padx=(4, 0), ipady=3)
+        tk.Label(self._an2_device_form, text="Host (LAN IP)", bg=BG_CARD, fg=TEXT_PRI,
+                 font=("Consolas", 9), width=14, anchor="w").grid(row=1, column=0, sticky="w", pady=3)
+        self._an2_host_entry = tk.Entry(self._an2_device_form, bg=BG_DEEP, fg=CYAN, insertbackground=CYAN,
+                                        font=("Consolas", 9), relief="flat",
+                                        highlightthickness=1, highlightbackground=BORDER_HI, width=22)
+        self._an2_host_entry.grid(row=1, column=1, sticky="w", padx=(4, 0), ipady=3)
+        tk.Label(self._an2_device_form, text="Port", bg=BG_CARD, fg=TEXT_PRI,
+                 font=("Consolas", 9), width=14, anchor="w").grid(row=2, column=0, sticky="w", pady=3)
+        self._an2_port_entry = tk.Entry(self._an2_device_form, bg=BG_DEEP, fg=CYAN, insertbackground=CYAN,
+                                        font=("Consolas", 9), relief="flat",
+                                        highlightthickness=1, highlightbackground=BORDER_HI, width=8)
+        self._an2_port_entry.grid(row=2, column=1, sticky="w", padx=(4, 0), ipady=3)
+        tk.Label(self._an2_device_form, text="MAC Address (WoL)", bg=BG_CARD, fg=TEXT_PRI,
+                 font=("Consolas", 9), width=14, anchor="w").grid(row=3, column=0, sticky="w", pady=3)
+        self._an2_mac_entry = tk.Entry(self._an2_device_form, bg=BG_DEEP, fg=CYAN, insertbackground=CYAN,
+                                       font=("Consolas", 9), relief="flat",
+                                       highlightthickness=1, highlightbackground=BORDER_HI, width=22)
+        self._an2_mac_entry.grid(row=3, column=1, sticky="w", padx=(4, 0), ipady=3)
+        an2_form_btn_row = tk.Frame(self._an2_device_form, bg=BG_CARD)
+        an2_form_btn_row.grid(row=4, column=0, columnspan=2, sticky="w", pady=(6, 0))
+        tk.Button(an2_form_btn_row, text="SAVE DEVICE", command=self._an2_device_save,
+                 bg=CYAN_DARK, fg=CYAN, font=("Consolas", 8, "bold"),
+                 relief="flat", cursor="hand2", padx=10, pady=3).pack(side="left")
+        tk.Button(an2_form_btn_row, text="CANCEL", command=self._an2_device_cancel_edit,
+                 bg=BG_PANEL, fg=TEXT_SEC, font=("Consolas", 8, "bold"),
+                 relief="flat", cursor="hand2", padx=10, pady=3).pack(side="left", padx=(6, 0))
+        self._an2_device_msg_lbl = tk.Label(an2_form_btn_row, text="", bg=BG_CARD, fg=TEXT_SEC, font=("Consolas", 8))
+        self._an2_device_msg_lbl.pack(side="left", padx=(10, 0))
+
+        self._load_an2_device()
 
         # Mobile Phone sub-card
         phone_card = self._section("MOBILE PHONE")
@@ -3257,6 +3514,8 @@ class SettingsPage(tk.Frame):
             def _apply():
                 try:
                     self._dual_enabled_var.set(bool(di.get("enabled")))
+                    self._peer_label_entry.delete(0, "end")
+                    self._peer_label_entry.insert(0, di.get("peer_label", "") or "")
                     self._peer_host_entry.delete(0, "end")
                     self._peer_host_entry.insert(0, di.get("peer_host", "") or "")
                     self._peer_port_entry.delete(0, "end")
@@ -3265,6 +3524,7 @@ class SettingsPage(tk.Frame):
                     self._auto_promote_var.set(bool(di.get("auto_promote_enabled")))
                     self._auto_promote_timeout_entry.delete(0, "end")
                     self._auto_promote_timeout_entry.insert(0, str(di.get("auto_promote_timeout_minutes", 5)))
+                    self._render_peer_device_card()
                 except Exception:
                     pass
             self._safe_after(0, _apply)
@@ -3283,11 +3543,187 @@ class SettingsPage(tk.Frame):
             "enabled": self._dual_enabled_var.get(),
             "peer_host": self._peer_host_entry.get().strip(),
             "peer_port": port,
+            "peer_label": self._peer_label_entry.get().strip(),
             "primary_pin": self._primary_pin_var.get(),
             "auto_promote_enabled": self._auto_promote_var.get(),
             "auto_promote_timeout_minutes": timeout,
         }}
         self._settings_post(payload)
+
+    # ── Peer Device card (Device Connection) — friendlier UI over the
+    # same dual_instance.peer_host/peer_port/peer_label fields. Mirrors
+    # cortex-ui.html's _renderPeerDeviceCard()/peerDeviceEdit()/
+    # peerDeviceSave()/peerDeviceRemove(). ──
+    def _render_peer_device_card(self):
+        host = self._peer_host_entry.get().strip()
+        self._peer_device_form.pack_forget()
+        if host:
+            label = self._peer_label_entry.get().strip() or "Peer Device"
+            port = self._peer_port_entry.get().strip() or "5050"
+            self._peer_device_name_lbl.config(text=label)
+            self._peer_device_hostport_lbl.config(text=f"{host}:{port}")
+            self._peer_device_add_btn.pack_forget()
+            self._peer_device_card.pack(fill="x", padx=12, pady=(0, 8))
+        else:
+            self._peer_device_card.pack_forget()
+            self._peer_device_add_btn.pack(anchor="w", padx=12, pady=(0, 8))
+
+    def _peer_device_edit(self):
+        self._peer_device_card.pack_forget()
+        self._peer_device_add_btn.pack_forget()
+        self._peer_device_msg_lbl.config(text="", fg=TEXT_SEC)
+        self._peer_device_form.pack(fill="x", padx=12, pady=(0, 8))
+
+    def _peer_device_cancel_edit(self):
+        self._peer_device_form.pack_forget()
+        self._render_peer_device_card()
+
+    def _peer_device_save(self):
+        host = self._peer_host_entry.get().strip()
+        if not host:
+            self._peer_device_msg_lbl.config(text="Host is required.", fg=RED)
+            return
+        # Adding a device implies turning dual-instance on — otherwise a
+        # freshly filled-in host silently does nothing until the user
+        # finds the toggle further down.
+        self._dual_enabled_var.set(True)
+        try:
+            port = int(self._peer_port_entry.get().strip() or 5050)
+        except ValueError:
+            port = 5050
+        try:
+            timeout = int(self._auto_promote_timeout_entry.get().strip() or 5)
+        except ValueError:
+            timeout = 5
+        payload = {"dual_instance": {
+            "enabled": True,
+            "peer_host": host,
+            "peer_port": port,
+            "peer_label": self._peer_label_entry.get().strip(),
+            "primary_pin": self._primary_pin_var.get(),
+            "auto_promote_enabled": self._auto_promote_var.get(),
+            "auto_promote_timeout_minutes": timeout,
+        }}
+        self._peer_device_msg_lbl.config(text="Saving…", fg=TEXT_SEC)
+        def _work():
+            try:
+                requests.post(f"{_API}/settings", json=payload, timeout=8)
+                ok = True
+            except Exception:
+                ok = False
+            def _apply():
+                if ok:
+                    self._peer_device_form.pack_forget()
+                    self._render_peer_device_card()
+                else:
+                    self._peer_device_msg_lbl.config(text="Save failed — connection error.", fg=RED)
+            self._safe_after(0, _apply)
+        threading.Thread(target=_work, daemon=True).start()
+
+    def _peer_device_remove(self):
+        def _do():
+            self._peer_host_entry.delete(0, "end")
+            self._peer_label_entry.delete(0, "end")
+            self._dual_enabled_var.set(False)
+            try:
+                port = int(self._peer_port_entry.get().strip() or 5050)
+            except ValueError:
+                port = 5050
+            try:
+                timeout = int(self._auto_promote_timeout_entry.get().strip() or 5)
+            except ValueError:
+                timeout = 5
+            payload = {"dual_instance": {
+                "enabled": False,
+                "peer_host": "",
+                "peer_port": port,
+                "peer_label": "",
+                "primary_pin": self._primary_pin_var.get(),
+                "auto_promote_enabled": self._auto_promote_var.get(),
+                "auto_promote_timeout_minutes": timeout,
+            }}
+            self._settings_post(payload)
+            self._render_peer_device_card()
+        self._confirm_dialog(
+            "Remove peer device",
+            "Remove this peer device? Dual-instance coordination and remote control "
+            "will stop working until you add one again.",
+            _do)
+
+    # ── AlliedNode 2 device card — see modules/remote_node.py; no ADD/
+    # REMOVE flow, always exists (defaults server-side to the pre-config
+    # hardcoded values if never touched). Mirrors cortex-ui.html's
+    # _renderAn2DeviceCard()/an2DeviceEdit()/an2DeviceSave(). ──
+    def _render_an2_device_card(self):
+        label = self._an2_label_entry.get().strip() or "AlliedNode 2"
+        host = self._an2_host_entry.get().strip()
+        port = self._an2_port_entry.get().strip() or "9797"
+        self._an2_device_form.pack_forget()
+        self._an2_device_name_lbl.config(text=label)
+        self._an2_device_hostport_lbl.config(text=f"{host}:{port}" if host else "")
+        self._an2_device_card.pack(fill="x", padx=12, pady=(0, 8))
+
+    def _an2_device_edit(self):
+        self._an2_device_card.pack_forget()
+        self._an2_device_msg_lbl.config(text="", fg=TEXT_SEC)
+        self._an2_device_form.pack(fill="x", padx=12, pady=(0, 8))
+
+    def _an2_device_cancel_edit(self):
+        self._an2_device_form.pack_forget()
+        self._render_an2_device_card()
+
+    def _load_an2_device(self):
+        def _work():
+            d = self._settings_get()
+            an2 = {}
+            if d and d.get("ok"):
+                an2 = ((d.get("settings") or {}).get("allied_nodes") or {}).get("alliednode 2") or {}
+            def _apply():
+                try:
+                    self._an2_label_entry.delete(0, "end")
+                    self._an2_label_entry.insert(0, an2.get("label", "") or "AlliedNode 2")
+                    self._an2_host_entry.delete(0, "end")
+                    self._an2_host_entry.insert(0, an2.get("host", "") or "")
+                    self._an2_port_entry.delete(0, "end")
+                    self._an2_port_entry.insert(0, str(an2.get("port", 9797)))
+                    self._an2_mac_entry.delete(0, "end")
+                    self._an2_mac_entry.insert(0, an2.get("mac", "") or "")
+                    self._render_an2_device_card()
+                except Exception:
+                    pass
+            self._safe_after(0, _apply)
+        threading.Thread(target=_work, daemon=True).start()
+
+    def _an2_device_save(self):
+        host = self._an2_host_entry.get().strip()
+        if not host:
+            self._an2_device_msg_lbl.config(text="Host is required.", fg=RED)
+            return
+        try:
+            port = int(self._an2_port_entry.get().strip() or 9797)
+        except ValueError:
+            port = 9797
+        payload = {"allied_nodes": {"alliednode 2": {
+            "label": self._an2_label_entry.get().strip() or "AlliedNode 2",
+            "host": host,
+            "port": port,
+            "mac": self._an2_mac_entry.get().strip(),
+        }}}
+        self._an2_device_msg_lbl.config(text="Saving…", fg=TEXT_SEC)
+        def _work():
+            try:
+                r = requests.post(f"{_API}/settings", json=payload, timeout=8)
+                ok = r.status_code == 200
+            except Exception:
+                ok = False
+            def _apply():
+                if ok:
+                    self._an2_device_form.pack_forget()
+                    self._render_an2_device_card()
+                else:
+                    self._an2_device_msg_lbl.config(text="Save failed — connection error.", fg=RED)
+            self._safe_after(0, _apply)
+        threading.Thread(target=_work, daemon=True).start()
 
     def _test_peer_connection(self):
         try:
@@ -3311,6 +3747,220 @@ class SettingsPage(tk.Frame):
                             text=f"● REACHABLE — {p.get('platform','?')} ({p.get('hostname','?')})", fg=GREEN)
                     else:
                         self._peer_status_lbl.config(text="● UNREACHABLE", fg=RED)
+                except Exception:
+                    pass
+            self._safe_after(0, _apply)
+        threading.Thread(target=_work, daemon=True).start()
+
+    def _set_switch_progress_ui(self, pct, message, is_error):
+        try:
+            self._switch_progress_canvas.coords(self._switch_progress_fill, 0, 0, 300 * (pct / 100.0), 8)
+            self._switch_progress_canvas.itemconfig(self._switch_progress_fill, fill=(RED if is_error else CYAN))
+            self._switch_machine_lbl.config(text=f"{pct}% — {message}" if message else f"{pct}%",
+                                            fg=(RED if is_error else TEXT_SEC))
+        except Exception:
+            pass
+
+    def _switch_status_poll_loop(self):
+        while self._switch_poller_active:
+            try:
+                d = requests.get(f"{_API}/switch_status", timeout=3).json()
+                if d.get("stage") and d.get("stage") != "idle":
+                    stage, pct, msg = d.get("stage"), d.get("percent") or 0, d.get("message") or ""
+                    self._safe_after(0, lambda p=pct, m=msg, e=(stage == "failed"): self._set_switch_progress_ui(p, m, e))
+            except Exception:
+                pass  # peer/local process may already be mid-exit near the end — the POST's own response is authoritative
+            time.sleep(0.8)
+
+    def _switch_machine(self, target):
+        def _do():
+            self._switch_progress_canvas.pack(anchor="w", padx=12, pady=(4, 0))
+            self._set_switch_progress_ui(0, "Starting...", False)
+            self._switch_poller_active = True
+            threading.Thread(target=self._switch_status_poll_loop, daemon=True).start()
+
+            def _work():
+                try:
+                    d = requests.post(f"{_API}/switch_machine", json={"target": target}, timeout=95).json()
+                except Exception:
+                    d = {"ok": False, "message": "Connection error — this machine was not touched."}
+                self._switch_poller_active = False
+                def _apply():
+                    if d.get("ok"):
+                        self._set_switch_progress_ui(100, "Device Transfer Successful", False)
+                        # Same mechanism Tkinter's own default WM_DELETE_WINDOW
+                        # handler uses when no override is registered (there
+                        # is none on self.root in JarvisUI) — winfo_toplevel()
+                        # resolves to that root regardless of how deep this
+                        # frame is nested, so this destroys the actual Forge
+                        # window, matching Cortex's window.electronAPI.close().
+                        self._safe_after(1800, lambda: self.winfo_toplevel().destroy())
+                    else:
+                        self._set_switch_progress_ui(0, d.get("message") or "Switch failed.", True)
+                self._safe_after(0, _apply)
+            threading.Thread(target=_work, daemon=True).start()
+
+        self._confirm_dialog(
+            "Switch machine",
+            f"Switch iZACH to {'Windows' if target == 'windows' else 'Mac'}? This boots it there if "
+            "needed, then shuts down here once it's confirmed healthy.",
+            _do)
+
+    # ── Peer Device Control (Phase 3) ──────────────────────────
+    def _confirm_dialog(self, title, text, on_yes):
+        # Toplevel + explicit buttons, not tkinter.messagebox — same
+        # WebView2/pythonnet GIL-corruption reason as BrowserWindow's
+        # _notify/_prompt_text (messagebox's blocking wait_window() loop
+        # crashes once WebView2 is active in this process).
+        win = tk.Toplevel(self)
+        win.title(title)
+        win.configure(bg=BG_PANEL)
+        win.geometry("340x140")
+        tk.Label(win, text=text, bg=BG_PANEL, fg=TEXT_PRI, font=("Consolas", 9),
+                wraplength=300, justify="left").pack(padx=16, pady=16, expand=True)
+        state = {"done": False}
+        def _finish(v):
+            if state["done"]:
+                return
+            state["done"] = True
+            win.destroy()
+            if v:
+                on_yes()
+        btn_row = tk.Frame(win, bg=BG_PANEL)
+        btn_row.pack(pady=(0, 14))
+        tk.Button(btn_row, text="YES", command=lambda: _finish(True),
+                 bg="#2a0000", fg=RED, font=("Consolas", 9, "bold"), relief="flat",
+                 cursor="hand2", padx=14, pady=5).pack(side="left", padx=6)
+        tk.Button(btn_row, text="CANCEL", command=lambda: _finish(False),
+                 bg=BG_CARD, fg=TEXT_SEC, font=("Consolas", 9, "bold"), relief="flat",
+                 cursor="hand2", padx=14, pady=5).pack(side="left", padx=6)
+        win.protocol("WM_DELETE_WINDOW", lambda: _finish(False))
+
+    def _load_peer_local(self):
+        def _work():
+            try:
+                d = requests.get(f"{_API}/peer/local", timeout=5).json()
+            except Exception:
+                d = {"ok": False}
+            def _apply():
+                try:
+                    configured = bool(d.get("ok") and d.get("configured"))
+                    if not configured:
+                        self._peer_card_frame.pack_forget()
+                        return
+                    peer = d.get("peer") or {}
+                    self._peer_label = (peer.get("platform") or "Peer").capitalize()
+                    self._peer_name_lbl.config(text=f" {self._peer_label} — checking…")
+                    self._refresh_peer_vitals()
+                except Exception:
+                    pass
+            self._safe_after(0, _apply)
+        threading.Thread(target=_work, daemon=True).start()
+
+    def _refresh_peer_vitals(self):
+        def _work():
+            try:
+                d = requests.get(f"{_API}/peer/vitals", timeout=8).json()
+            except Exception:
+                d = {"ok": False}
+            def _apply():
+                try:
+                    if d.get("ok"):
+                        self._peer_dot_lbl.config(fg=GREEN)
+                        self._peer_name_lbl.config(text=f" {self._peer_label} — ONLINE")
+                        self._peer_cpu_lbl.config(text=f"CPU {round(d.get('cpu_percent') or 0)}%")
+                        self._peer_ram_lbl.config(text=f"RAM {round(d.get('ram_percent') or 0)}%")
+                        self._peer_disk_lbl.config(text=f"DISK {round(d.get('disk_percent') or 0)}%")
+                        batt = d.get("battery_percent")
+                        batt_txt = f"BATT {batt}%{' ⚡' if d.get('battery_charging') else ''}" if batt is not None else "BATT N/A"
+                        self._peer_batt_lbl.config(text=batt_txt)
+                    else:
+                        self._peer_dot_lbl.config(fg=RED)
+                        self._peer_name_lbl.config(text=f" {self._peer_label} — OFFLINE")
+                except Exception:
+                    pass
+            self._safe_after(0, _apply)
+        threading.Thread(target=_work, daemon=True).start()
+
+    def _peer_media(self, action):
+        def _work():
+            try:
+                d = requests.post(f"{_API}/peer/media", json={"action": action}, timeout=8).json()
+            except Exception:
+                d = {"ok": False, "error": "request failed"}
+            if not d.get("ok"):
+                def _apply():
+                    try:
+                        self._peer_name_lbl.config(text=f" {self._peer_label}: {d.get('error') or d.get('message') or 'failed'}")
+                    except Exception:
+                        pass
+                self._safe_after(0, _apply)
+        threading.Thread(target=_work, daemon=True).start()
+
+    def _peer_power(self, action, label):
+        def _do():
+            def _work():
+                try:
+                    d = requests.post(f"{_API}/peer/power", json={"action": action}, timeout=8).json()
+                except Exception:
+                    d = {"ok": False, "message": "request failed"}
+                def _apply():
+                    try:
+                        self._peer_name_lbl.config(
+                            text=f" {self._peer_label}: {d.get('message') or ('done' if d.get('ok') else 'failed')}")
+                    except Exception:
+                        pass
+                self._safe_after(0, _apply)
+            threading.Thread(target=_work, daemon=True).start()
+        self._confirm_dialog("Confirm", f"{label} {self._peer_label}?", _do)
+
+    def _peer_screenshot(self):
+        def _work():
+            try:
+                d = requests.get(f"{_API}/peer/screenshot", timeout=15).json()
+            except Exception:
+                d = {"ok": False, "error": "request failed"}
+            photo = None
+            if d.get("ok") and d.get("screenshot"):
+                try:
+                    import base64, io
+                    img = Image.open(io.BytesIO(base64.b64decode(d["screenshot"])))
+                    w = 320
+                    h = int(img.height * (w / img.width))
+                    img = img.resize((w, h))
+                    photo = ImageTk.PhotoImage(img)
+                except Exception:
+                    photo = None
+            def _apply():
+                try:
+                    if photo is not None:
+                        self._peer_snap_lbl.config(image=photo, text="")
+                        self._peer_snap_lbl.image = photo  # keep a reference, Tk drops it otherwise
+                    else:
+                        self._peer_snap_lbl.config(text=d.get("error") or "Screenshot failed", fg=RED, image="")
+                except Exception:
+                    pass
+            self._safe_after(0, _apply)
+        threading.Thread(target=_work, daemon=True).start()
+
+    def _peer_refresh_procs(self):
+        def _work():
+            try:
+                d = requests.get(f"{_API}/peer/processes", timeout=8).json()
+            except Exception:
+                d = {"ok": False, "error": "request failed"}
+            def _apply():
+                try:
+                    self._peer_procs_text.config(state="normal")
+                    self._peer_procs_text.delete("1.0", "end")
+                    if d.get("ok") and d.get("processes"):
+                        for p in d["processes"]:
+                            self._peer_procs_text.insert(
+                                "end",
+                                f"{p.get('name',''):<28} C:{p.get('cpu_percent',0):.1f}% M:{p.get('memory_percent',0):.1f}%\n")
+                    else:
+                        self._peer_procs_text.insert("end", d.get("error") or "No processes returned")
+                    self._peer_procs_text.config(state="disabled")
                 except Exception:
                     pass
             self._safe_after(0, _apply)
@@ -4057,7 +4707,7 @@ class SettingsPage(tk.Frame):
         ptt_row = tk.Frame(card, bg=BG_CARD)
         ptt_row.pack(fill="x", padx=12, pady=4)
         self._ptt_var = tk.BooleanVar(value=False)
-        tk.Checkbutton(ptt_row, text="Push-to-Talk Mode (hold hotkey to talk)", variable=self._ptt_var,
+        tk.Checkbutton(ptt_row, text="Push-to-Talk Mode (coming soon — hotkey toggles regardless for now)", variable=self._ptt_var,
                       bg=BG_CARD, fg=TEXT_SEC, selectcolor=BG_DEEP, activebackground=BG_CARD,
                       font=("Consolas", 8)).pack(side="left")
         tk.Frame(card, bg=BG_CARD, height=6).pack()

@@ -77,6 +77,8 @@ class OrchestratorAgent:
                     max_keepalive_connections=1,
                 )
             ),
+            timeout=10.0,
+            max_retries=1,
         )
 
     def reload_key(self, groq_key: str):

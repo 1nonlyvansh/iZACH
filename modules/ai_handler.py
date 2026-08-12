@@ -31,7 +31,8 @@ def _check_internet() -> bool:
 
 class AIProvider:
     def __init__(self, groq_key, gemini_keys, anthropic_key: str = ""):
-        self.groq_client = Groq(api_key=groq_key, http_client=httpx.Client(limits=_HTTP_LIMITS))
+        self.groq_client = Groq(api_key=groq_key, http_client=httpx.Client(limits=_HTTP_LIMITS),
+                                 timeout=15.0, max_retries=1)
         self.gemini_keys = gemini_keys
         self.current_gem_idx = 0
         self.gemini_client = None
@@ -44,7 +45,8 @@ class AIProvider:
         """Hot-swap API keys at runtime. Rebuilds underlying clients."""
         if groq_key:
             try:
-                self.groq_client = Groq(api_key=groq_key, http_client=httpx.Client(limits=_HTTP_LIMITS))
+                self.groq_client = Groq(api_key=groq_key, http_client=httpx.Client(limits=_HTTP_LIMITS),
+                                 timeout=15.0, max_retries=1)
                 print(f"[AIProvider] Groq client rebuilt with new key ({groq_key[:8]}...).")
             except Exception as e:
                 print(f"[AIProvider] Groq reload failed: {e}")

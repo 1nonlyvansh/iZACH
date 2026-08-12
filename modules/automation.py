@@ -202,11 +202,15 @@ def open_app(app_name: str):
         _logger.warning(f"[open_app] '{app_name}' not found in installed apps — blocked.")
         return None
 
-    pyautogui.press('win')
-    time.sleep(0.5)
-    pyautogui.write(resolved, interval=0.1)
-    time.sleep(0.5)
-    pyautogui.press('enter')
+    try:
+        pyautogui.press('win')
+        time.sleep(0.5)
+        pyautogui.write(resolved, interval=0.1)
+        time.sleep(0.5)
+        pyautogui.press('enter')
+    except Exception as _oe:
+        _logger.warning(f"[open_app] pyautogui sequence failed for {resolved!r}: {type(_oe).__name__}: {_oe}")
+        raise
 
     return get_active_window_safe(app_name)
 

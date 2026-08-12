@@ -582,6 +582,37 @@ def ui_command():
 # FIX: use interval=0.1 so CPU is never 0
 # ─────────────────────────────────────────────────────────────
 
+# GPU reading needs an nvidia-smi subprocess spawn — expensive on Windows
+# (~50-200ms+ process creation) and this route gets polled every 4-5s by
+# both UIs at once (multiple electron.exe helper processes = multiple
+# concurrent pollers). Spawning nvidia-smi fresh on every single call let
+# concurrent requests queue up behind process-creation contention, causing
+# some /status calls to hang long enough to time out client-side — which
+# read as "CPU/RAM stuck at 0" in the UI even though the backend usually
+# had good data. Cache the GPU reading briefly instead of re-spawning.
+_gpu_cache = {"value": 0.0, "ts": 0.0}
+_GPU_CACHE_TTL = 3.0  # seconds
+
+
+def _get_gpu_percent() -> float:
+    now = time.time()
+    if now - _gpu_cache["ts"] < _GPU_CACHE_TTL:
+        return _gpu_cache["value"]
+    value = 0.0
+    try:
+        import subprocess as _sp
+        out = _sp.check_output(
+            ["nvidia-smi", "--query-gpu=utilization.gpu", "--format=csv,noheader,nounits"],
+            stderr=_sp.DEVNULL, timeout=2
+        ).decode().strip()
+        value = round(float(out.split("\n")[0]), 1)
+    except Exception:
+        pass
+    _gpu_cache["value"] = value
+    _gpu_cache["ts"] = now
+    return value
+
+
 @ui_bp.route("/status", methods=["GET"])
 def ui_status():
     try:
@@ -598,34 +629,32 @@ def ui_status():
         except Exception:
             pass
 
-        # Check WhatsApp bridge
+        # Check WhatsApp bridge — explicit 127.0.0.1, not "localhost": Windows
+        # resolves localhost to the IPv6 loopback ([::1]) first, and nothing
+        # answers there even when the IPv4 service is genuinely up, so every
+        # call here paid up to the full timeout before falling back. Same
+        # root cause launch_izach.py's ngrok target already had to work
+        # around. Timeout also cut from 2s to 0.4s — this is a same-machine
+        # loopback ping, not a real network call; a down service should fail
+        # fast, not eat a meaningful chunk of every /status request.
         wa_online = False
         try:
             import requests as _req
-            r = _req.get("http://localhost:3000/health", timeout=2)
+            r = _req.get("http://127.0.0.1:3000/health", timeout=0.4)
             wa_online = r.json().get("status") == "connected"
         except Exception:
             pass
 
-        # Check MMA agent
+        # Check MMA agent — same fix as WhatsApp above.
         mma_online = False
         try:
             import requests as _req
-            r = _req.get("http://localhost:6060/health", timeout=2)
+            r = _req.get("http://127.0.0.1:6060/health", timeout=0.4)
             mma_online = r.status_code == 200
         except Exception:
             pass
 
-        gpu = 0.0
-        try:
-            import subprocess as _sp
-            out = _sp.check_output(
-                ["nvidia-smi", "--query-gpu=utilization.gpu", "--format=csv,noheader,nounits"],
-                stderr=_sp.DEVNULL, timeout=2
-            ).decode().strip()
-            gpu = round(float(out.split("\n")[0]), 1)
-        except Exception:
-            pass
+        gpu = _get_gpu_percent()
 
         pc_name = ""
         try:
@@ -1321,6 +1350,9 @@ _MUTABLE_KEYS = [
     # Dual-instance (Windows+macOS) shared secret — must be identical in
     # both machines' .env files. See modules/instance_coordinator.py.
     "IZACH_PEER_TOKEN",
+    # AlliedNode 2 satellite-PC shared secret — must match AlliedNode 2's
+    # own token. See modules/remote_node.py.
+    "ALLIEDNODE2_TOKEN",
 ]
 _ENV_FILE = ".env"
 
@@ -2987,6 +3019,16 @@ def mic_devices():
                     name = raw_name.decode("utf-8", errors="replace").strip()
                 else:
                     name = str(raw_name).strip()
+
+                # PortAudio's Windows ctypes binding sometimes decodes genuinely
+                # UTF-8 device names (e.g. "Intel®") as Latin-1 before Python
+                # ever sees them, producing mojibake ("IntelÂ®"). Re-encoding
+                # as Latin-1 and decoding as UTF-8 undoes exactly that — a
+                # no-op for plain-ASCII names, which just round-trip unchanged.
+                try:
+                    name = name.encode("latin-1").decode("utf-8")
+                except (UnicodeDecodeError, UnicodeEncodeError):
+                    pass
 
                 # Skip empty / placeholder names like "Input ()"
                 if not name or name in ("Input ()", "Microphone ()"):

@@ -1859,7 +1859,7 @@ body.spotlight-mode .pnl:not(.spotlighted) {
             <option value="50">Very Fast (+50%)</option>
           </select>
           <div class="cfg-toggle-row" style="margin-top:10px;">
-            <span>Wake Word "Hey iZACH"</span>
+            <span>Wake Word "Hey iZACH" (restart required)</span>
             <div class="cfg-tog" id="tog-wake" onclick="cfgToggle('tog-wake','wake_word_enabled')"></div>
           </div>
           <div class="cfg-label" style="margin-top:10px;">NICKNAME (restart required)</div>
@@ -1987,7 +1987,7 @@ body.spotlight-mode .pnl:not(.spotlighted) {
           </div>
           <div class="cfg-label" style="margin-top:10px;">OPACITY</div>
           <input type="range" min="20" max="100" value="88" id="cfg-tb-opacity" style="width:100%;accent-color:#0094ff;"
-            oninput="document.getElementById('tb-inner').style.opacity=this.value/100">
+            oninput="document.getElementById('tb-inner').style.opacity=this.value/100; localStorage.setItem('tbOpacity',this.value)">
           <div class="cfg-label" style="margin-top:10px;">RESET POSITION &amp; SIZE</div>
           <button class="sp-action-btn" onclick="resetTaskbar()">RESET TASKBAR</button>
         </div>
@@ -2444,6 +2444,14 @@ body.spotlight-mode .pnl:not(.spotlighted) {
           <div class="cfg-label">SHARED SECRET</div>
           <input class="cfg-inp" id="kf-peer-token" type="password" placeholder="Not set" autocomplete="off">
           <div style="font-size:7px;color:rgba(0,148,255,0.60);margin-top:3px;letter-spacing:.06em;">Must be the exact same value on both your Windows and Mac installs — set once, copy to the other machine's .env. Used by the Settings → MULTI-DEVICE section.</div>
+        </div>
+
+        <div class="sp-divider"></div>
+        <div class="sp-sec">
+          <div class="sp-sec-title">ALLIEDNODE2 TOKEN</div>
+          <div class="cfg-label">SHARED SECRET</div>
+          <input class="cfg-inp" id="kf-an2-token" type="password" placeholder="Not set" autocomplete="off">
+          <div style="font-size:7px;color:rgba(0,148,255,0.60);margin-top:3px;letter-spacing:.06em;">Must match AlliedNode 2's own token exactly. Used by the Settings → Device Connection → ALLIEDNODE 2 card.</div>
         </div>
 
       </div>
@@ -7460,6 +7468,11 @@ function analysePerfLog(){
 
 // ── Custom device pickers (upward-opening) ───────────
 let _micDevices=[], _camDevices=[], _selMic=0, _selCam='';
+// _micDeviceIndexes[i] = the REAL backend device index for _micDevices[i] —
+// these differ once the backend has skipped any noise devices (virtual
+// mappers, loopback, etc — see ui_api.py's mic_devices()), so the picker's
+// array position can't be sent to /mic/select directly.
+let _micDeviceIndexes=[];
 
 function _buildPicker(pickerId, items, currentIdx, onSelect){
   const p=document.getElementById(pickerId); if(!p)return;
@@ -7493,29 +7506,28 @@ document.addEventListener('click',e=>{
 function loadMicDevices(){
   fetch(API+'/mic/devices').then(r=>r.json()).then(d=>{
     const devs=d.devices||[];
-    _selMic=d.active!=null?d.active:(d.current||0);
     if(!devs.length){
-      _micDevices=['Default'];
+      _micDevices=['Default']; _micDeviceIndexes=[null]; _selMic=0;
       _buildPicker('dev-picker-mic',_micDevices,0,()=>{});
       return;
     }
     _micDevices=devs.map(dev=>typeof dev==='string'?dev:(dev.name||'Mic'));
+    _micDeviceIndexes=devs.map(dev=>typeof dev==='string'?null:dev.index);
+    const activeReal=d.active!=null?d.active:(d.current!=null?d.current:null);
+    const foundAt=activeReal!=null?_micDeviceIndexes.indexOf(activeReal):-1;
+    _selMic=foundAt>=0?foundAt:0;
     const curLabel=(_micDevices[_selMic]||'MIC').substring(0,18);
     const cur=document.getElementById('dev-mic-cur');
     if(cur) cur.textContent=curLabel;
     _buildPicker('dev-picker-mic',_micDevices.map(n=>n.substring(0,30)),_selMic,(i,label)=>{
       _selMic=i;
       const c=document.getElementById('dev-mic-cur'); if(c) c.textContent=label.substring(0,18);
-      fetch(API+'/mic/select',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({index:i})}).catch(()=>{});
+      fetch(API+'/mic/select',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({index:_micDeviceIndexes[i]})}).catch(()=>{});
     });
   }).catch(()=>{
-    _micDevices=['Default'];
+    _micDevices=['Default']; _micDeviceIndexes=[null];
     _buildPicker('dev-picker-mic',['Default'],0,()=>{});
   });
-}
-
-function selectMicDevice(idx){
-  fetch(API+'/mic/select',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({index:parseInt(idx)})}).catch(()=>{});
 }
 
 function loadCamDevices(forceRefresh){
@@ -10083,6 +10095,26 @@ if(localStorage.getItem('tbAutoHide')==='1'){
   const tog=document.getElementById('tog-tb-autohide');
   if(tog) tog.classList.add('on');
 }
+// Restore labels + opacity on load — both saved to localStorage on change
+// (cfgToggleTbLabels / the opacity slider's oninput above) but, unlike
+// auto-hide above, were never actually read back on boot — visibly worked
+// in the moment, silently reset every reload.
+if(localStorage.getItem('tbLabels')==='1'){
+  const tog=document.getElementById('tog-tb-labels');
+  if(tog) tog.classList.add('on');
+  document.querySelectorAll('.tb-btn').forEach(b=>{
+    b.style.fontSize='11px'; b.style.width='auto'; b.style.padding='0 10px';
+  });
+}
+{
+  const savedOpacity=localStorage.getItem('tbOpacity');
+  if(savedOpacity!=null){
+    const slider=document.getElementById('cfg-tb-opacity');
+    const inner=document.getElementById('tb-inner');
+    if(slider) slider.value=savedOpacity;
+    if(inner) inner.style.opacity=savedOpacity/100;
+  }
+}
 
 // ── Screensaver / inactivity timer ───────────────────
 let _ssMinutes=5,_ssTimerId=null;
@@ -10121,11 +10153,14 @@ async function _loadMicDevicesSettings(){
     const r=await fetch(API+'/mic/devices'); const d=await r.json();
     const sel=document.getElementById('cfg-mic'); if(!sel) return;
     sel.innerHTML='<option value="">Default</option>';
-    (d.devices||[]).forEach((dev,i)=>{
+    (d.devices||[]).forEach(dev=>{
+      // Backend returns {index, name} objects — dev.index is the REAL
+      // device index (may skip numbers if noise devices were filtered
+      // out server-side), not the array position. Sending the array
+      // position here selected the wrong physical mic.
       const opt=document.createElement('option');
-      const label=typeof dev==='string'?dev:(dev.name||'Mic');
-      const idx=typeof dev==='object'&&dev.index!=null?dev.index:i;
-      opt.value=idx; opt.textContent=label;
+      if(typeof dev==='string'){ opt.value=''; opt.textContent=dev; }
+      else{ opt.value=dev.index; opt.textContent=dev.name||('Mic '+dev.index); }
       sel.appendChild(opt);
     });
     if(d.active!=null) sel.value=d.active;
@@ -10382,6 +10417,7 @@ const _KEY_FIELD_MAP = {
   EDAMAM_APP_ID:       'kf-ed-id',
   EDAMAM_APP_KEY:      'kf-ed-key',
   IZACH_PEER_TOKEN:    'kf-peer-token',
+  ALLIEDNODE2_TOKEN:   'kf-an2-token',
 };
 async function loadKeysTab(){
   try{

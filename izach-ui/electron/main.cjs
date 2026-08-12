@@ -485,7 +485,13 @@ app.on('window-all-closed', () => {
     // (any other Python app/venv/IDE process the user has open dies too).
     // Filter by command line instead, same specificity as the Mac branch's
     // pkill -f below (matches main.py's exact path, not just the exe name).
-    const backendMainWin = path.join(PROJECT_ROOT, 'main.py').replace(/\\/g, '\\\\')
+    // NOTE: no backslash-doubling here — unlike a regex or a POSIX shell
+    // pattern, PowerShell's -like operator has no escape character, so \ is
+    // just a literal path separator. Doubling it (as an earlier version of
+    // this fix did) makes the pattern require \\ where Win32_Process's real
+    // CommandLine only ever has \, so it silently matched nothing — verified
+    // by testing both forms against real backend processes.
+    const backendMainWin = path.join(PROJECT_ROOT, 'main.py')
     const psKill = `Get-CimInstance Win32_Process -Filter "Name='python.exe'" | ` +
       `Where-Object { $_.CommandLine -like '*${backendMainWin}*' } | ` +
       `ForEach-Object { Stop-Process -Id $_.ProcessId -Force }`

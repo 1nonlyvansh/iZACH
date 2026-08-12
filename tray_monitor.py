@@ -35,6 +35,7 @@ import subprocess
 import urllib.request
 
 import pystray
+import psutil
 from PIL import Image, ImageDraw
 
 from modules.platform_utils import IS_WINDOWS, IS_MAC
@@ -197,6 +198,7 @@ def _watcher():
                 if _icon is not None:
                     _icon.icon  = _make_icon(new)
                     _icon.title = _TITLE.get(new, "iZACH")
+                    _icon.menu  = _build_menu()
                     _icon.update_menu()
         except Exception:
             pass
@@ -341,8 +343,49 @@ def _open_ui(mode):
     threading.Thread(target=_run, daemon=True).start()
 
 
+def _kill_izach_stack():
+    """Kill every iZACH-related process this monitor doesn't own itself:
+    the Python backend (main.py, both the venv launcher stub and its real
+    base-interpreter child), whatsapp_bridge.js, n8n (and its task-runner
+    child), and ngrok. Matched by cmdline substring, not by blanket image
+    name, so unrelated python/node processes on the machine are untouched."""
+    self_pid = os.getpid()
+    needles = ("main.py", "whatsapp_bridge.js", "n8n", "ngrok")
+    for proc in psutil.process_iter(["pid", "cmdline"]):
+        if proc.info["pid"] == self_pid:
+            continue
+        try:
+            cmdline = " ".join(proc.info["cmdline"] or [])
+        except Exception:
+            continue
+        if not cmdline:
+            continue
+        if any(n in cmdline for n in needles):
+            try:
+                proc.terminate()
+            except Exception:
+                pass
+    # Give processes a moment to exit cleanly, then force-kill stragglers.
+    time.sleep(1.5)
+    for proc in psutil.process_iter(["pid", "cmdline"]):
+        if proc.info["pid"] == self_pid:
+            continue
+        try:
+            cmdline = " ".join(proc.info["cmdline"] or [])
+        except Exception:
+            continue
+        if cmdline and any(n in cmdline for n in needles):
+            try:
+                proc.kill()
+            except Exception:
+                pass
+
+
 def _quit(icon, item):
-    icon.stop()
+    def _run():
+        _kill_izach_stack()
+        icon.stop()
+    threading.Thread(target=_run, daemon=True).start()
 
 
 # ── Menu ──────────────────────────────────────────────────────
@@ -362,11 +405,12 @@ def _build_menu():
         try: return _http_get_json("/mic").get("mic_active", True)
         except: return True
 
-    # ── Quit iZACH (backend + monitor) ───────────────────────────
+    # ── Quit iZACH (backend + whatsapp/n8n/ngrok + monitor) ──────
     def _quit_izach(icon, item):
         def _run():
             _http_post("/shutdown")
-            time.sleep(2)
+            time.sleep(1)
+            _kill_izach_stack()
             icon.stop()
         threading.Thread(target=_run, daemon=True).start()
 
@@ -417,12 +461,12 @@ def _build_menu():
 
 # ── Main ──────────────────────────────────────────────────────
 def main():
-    global _icon
-    _state_now = _probe()
+    global _icon, _state
+    _state = _probe()
     _icon = pystray.Icon(
         "iZACH-Monitor",
-        _make_icon(_state_now),
-        _TITLE.get(_state_now, "iZACH"),
+        _make_icon(_state),
+        _TITLE.get(_state, "iZACH"),
         _build_menu(),
     )
     threading.Thread(target=_watcher, daemon=True, name="MonitorWatcher").start()

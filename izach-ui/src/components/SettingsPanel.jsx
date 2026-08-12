@@ -1240,7 +1240,13 @@ function KeysTab() {
       {KEY_GROUPS.map(({ section, fields }) => (
         <div key={section}>
           <SectionHeader label={section} />
-          {section === 'SPOTIFY' && <SpotifyConnectRow />}
+          {section === 'SPOTIFY' && (
+            <div style={{ padding: '0 20px 8px' }}>
+              <p style={{ color: '#1a4a5a', fontFamily: "'JetBrains Mono'", fontSize: '9px', margin: 0 }}>
+                Connect/disconnect your account → <strong style={{ color: '#00e5ff' }}>CONNECTED SERVICES</strong> tab
+              </p>
+            </div>
+          )}
           {fields.map(({ key, label, hint, password }) => (
             <div key={key} style={{ padding: '0 20px 10px' }}>
               <p style={labelStyle}>{label}</p>
@@ -1279,40 +1285,29 @@ function KeysTab() {
   )
 }
 
-// ── Settings Section ──────────────────────────────────────────
-function GeneralSection({ settings, onSave }) {
+// ── Personalisation Section — Voice & Audio + AI Behaviour + Proactive ──
+function PersonalisationSection({ settings, onSave }) {
   const [form, setForm] = useState({
-    wake_word_enabled:        settings.wake_word_enabled        ?? false,
-    voice:                    settings.voice                    ?? 'en-US-ChristopherNeural',
-    tts_speed:                settings.tts_speed                ?? 0,
-    response_style:           settings.response_style           ?? 'casual',
-    response_verbosity:       settings.response_verbosity       ?? 'balanced',
-    safe_mode_enabled:        settings.safe_mode_enabled        ?? true,
-    notif_performance:        settings.notif_performance        ?? true,
-    notif_whatsapp:           settings.notif_whatsapp           ?? true,
-    notif_downloads:          settings.notif_downloads          ?? true,
-    command_history_enabled:  settings.command_history_enabled  ?? true,
-    log_retention_days:       settings.log_retention_days       ?? 30,
-    morning_briefing_time:    settings.morning_briefing_time    ?? '08:00',
-    briefing_enabled:         settings.briefing_enabled         ?? false,
-    briefing_greeting:        settings.briefing_greeting        ?? true,
-    briefing_news:            settings.briefing_news            ?? false,
-    briefing_gold_rate:       settings.briefing_gold_rate       ?? false,
-    briefing_silver_rate:     settings.briefing_silver_rate     ?? false,
-    briefing_weather:         settings.briefing_weather         ?? true,
-    briefing_battery_status:  settings.briefing_battery_status  ?? true,
-    briefing_battery_health:  settings.briefing_battery_health  ?? false,
-    briefing_ram:             settings.briefing_ram             ?? true,
-    briefing_events:          settings.briefing_events          ?? true,
-    briefing_whatsapp:        settings.briefing_whatsapp        ?? false,
-    ui:                       settings.ui                       ?? 'classic',
-    _savedUi:                 settings.ui                       ?? 'classic',
-    font_size:                settings.font_size                ?? 13,
+    wake_word_enabled:                      settings.wake_word_enabled                      ?? false,
+    voice:                                   settings.voice                                   ?? 'en-US-ChristopherNeural',
+    tts_speed:                               settings.tts_speed                               ?? 0,
+    nickname:                                settings.nickname                                 ?? '',
+    response_style:                          settings.response_style                          ?? 'casual',
+    response_verbosity:                      settings.response_verbosity                      ?? 'balanced',
+    safe_mode_enabled:                       settings.safe_mode_enabled                       ?? true,
+    proactive_enabled:                       settings.proactive_enabled                       ?? true,
+    pattern_automation_suggestions_enabled:  settings.pattern_automation_suggestions_enabled  ?? true,
+    screen_aware_enabled:                    settings.screen_aware_enabled                    ?? false,
+    screen_aware_excluded_apps:              (settings.screen_aware_excluded_apps || []).join(', '),
   })
   const [dirty,      setDirty]      = useState(false)
   const [micDevices, setMicDevices] = useState([])
   const [activeMic,  setActiveMic]  = useState(null)
   const [micSaved,   setMicSaved]   = useState(false)
+  const [aliases,    setAliases]    = useState([])
+  const [aliasMsg,   setAliasMsg]   = useState('')
+  const [newTrigger, setNewTrigger] = useState('')
+  const [newCommand, setNewCommand] = useState('')
 
   useEffect(() => {
     fetch(`${BASE}/mic/devices`)
@@ -1320,6 +1315,14 @@ function GeneralSection({ settings, onSave }) {
       .then(d => { if (d.ok) { setMicDevices(d.devices || []); setActiveMic(d.active) } })
       .catch(() => {})
   }, [])
+
+  const loadAliases = useCallback(async () => {
+    try {
+      const d = await fetch(`${BASE}/aliases`).then(r => r.json())
+      setAliases(d.aliases || [])
+    } catch {}
+  }, [])
+  useEffect(() => { loadAliases() }, [loadAliases])
 
   function set(key, val) { setForm(f => ({ ...f, [key]: val })); setDirty(true) }
 
@@ -1333,7 +1336,39 @@ function GeneralSection({ settings, onSave }) {
     }).then(() => { setMicSaved(true); setTimeout(() => setMicSaved(false), 2000) }).catch(() => {})
   }
 
-  function handleSave() { onSave(form); setDirty(false) }
+  function handleSave() {
+    onSave({
+      ...form,
+      screen_aware_excluded_apps: form.screen_aware_excluded_apps.split(',').map(s => s.trim()).filter(Boolean),
+    })
+    setDirty(false)
+  }
+
+  const flashAlias = (t) => { setAliasMsg(t); setTimeout(() => setAliasMsg(''), 3500) }
+
+  async function addAlias() {
+    if (!newTrigger.trim() || !newCommand.trim()) return
+    try {
+      const r = await fetch(`${BASE}/aliases`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ trigger: newTrigger.trim(), command: newCommand.trim() }),
+      }).then(r => r.json())
+      if (r.ok) {
+        flashAlias('Alias added')
+        setNewTrigger(''); setNewCommand('')
+        loadAliases()
+      } else { flashAlias(r.error || 'Error') }
+    } catch { flashAlias('Failed to connect') }
+  }
+
+  async function deleteAlias(trigger) {
+    try {
+      const b64 = btoa(unescape(encodeURIComponent(trigger)))
+      await fetch(`${BASE}/aliases/${b64}`, { method: 'DELETE' })
+      loadAliases()
+    } catch {}
+  }
 
   const VOICES = [
     'en-US-ChristopherNeural', 'en-US-GuyNeural',
@@ -1342,17 +1377,21 @@ function GeneralSection({ settings, onSave }) {
 
   return (
     <div>
-
       {/* ── VOICE & AUDIO ─────────────────────────── */}
       <SectionHeader label="VOICE & AUDIO" />
-      <Toggle label="Wake Word Detection ('Hey iZACH')"              checked={form.wake_word_enabled}  onChange={v => set('wake_word_enabled', v)} />
+      <Toggle label="Wake Word Detection ('Hey iZACH')" checked={form.wake_word_enabled} onChange={v => set('wake_word_enabled', v)} />
+      <div style={{ padding: '4px 20px 10px' }}>
+        <p style={{ color: '#3a6070', fontFamily: "'Share Tech Mono'", fontSize: '9px', letterSpacing: '0.1em', marginBottom: 6 }}>
+          NICKNAME (also works as wake word, alongside "iZACH")
+        </p>
+        <Input value={form.nickname} onChange={v => set('nickname', v)} placeholder="e.g. Neo" />
+      </div>
       <SelectField
         label="TTS VOICE"
         value={form.voice}
         onChange={v => set('voice', v)}
         options={VOICES.map(v => ({ value: v, label: v }))}
       />
-
       <SelectField
         label="TTS SPEED"
         value={form.tts_speed}
@@ -1393,7 +1432,109 @@ function GeneralSection({ settings, onSave }) {
         </p>
       </div>
 
-      {/* ── INTERFACE ─────────────────────────────── */}
+      {/* ── AI BEHAVIOUR ──────────────────────────── */}
+      <SectionHeader label="AI BEHAVIOUR" />
+      <Toggle label="Safe Mode (confirm dangerous commands)" checked={form.safe_mode_enabled} onChange={v => set('safe_mode_enabled', v)} />
+      <SelectField
+        label="RESPONSE STYLE"
+        value={form.response_style}
+        onChange={v => set('response_style', v)}
+        options={[
+          { value: 'casual',       label: 'Casual (default — JARVIS-style)' },
+          { value: 'professional', label: 'Professional (formal, no humor)' },
+          { value: 'concise',      label: 'Concise (ultra-short answers)' },
+        ]}
+      />
+      <SelectField
+        label="RESPONSE VERBOSITY"
+        value={form.response_verbosity}
+        onChange={v => set('response_verbosity', v)}
+        options={[
+          { value: 'balanced', label: 'Balanced (default)' },
+          { value: 'brief',    label: 'Brief (1-2 sentences max)' },
+          { value: 'detailed', label: 'Detailed (thorough explanations)' },
+        ]}
+      />
+
+      {/* ── PROACTIVE AGENT ───────────────────────── */}
+      <SectionHeader label="PROACTIVE AGENT" />
+      <Toggle label="Proactive Agent (morning briefing, event alerts, idle nudges)" checked={form.proactive_enabled} onChange={v => set('proactive_enabled', v)} />
+      <Toggle label="Pattern Suggestions (offer to automate routines)"              checked={form.pattern_automation_suggestions_enabled} onChange={v => set('pattern_automation_suggestions_enabled', v)} />
+      <Toggle label="Screen-Aware Assist (reads active window text — off by default)" checked={form.screen_aware_enabled} onChange={v => set('screen_aware_enabled', v)} />
+      <div style={{ padding: '4px 20px 10px' }}>
+        <p style={{ color: '#3a6070', fontFamily: "'Share Tech Mono'", fontSize: '9px', letterSpacing: '0.1em', marginBottom: 6 }}>
+          SCREEN-AWARE EXCLUDED APPS
+        </p>
+        <Input value={form.screen_aware_excluded_apps} onChange={v => set('screen_aware_excluded_apps', v)} placeholder="keepass, keepassxc, 1password, bitwarden, lastpass" />
+        <p style={{ color: '#1a4a5a', fontFamily: "'JetBrains Mono'", fontSize: '9px', marginTop: 4 }}>
+          Comma-separated process names, checked before any OCR happens.
+        </p>
+      </div>
+
+      {dirty && (
+        <div style={{ padding: '8px 20px 16px' }}>
+          <Btn label="SAVE SETTINGS" onClick={handleSave} />
+          <p style={{ color: '#1a4a5a', fontFamily: "'JetBrains Mono'", fontSize: '9px', marginTop: 6 }}>
+            Voice &amp; AI settings apply instantly. Wake word toggle needs restart.
+          </p>
+        </div>
+      )}
+
+      {/* ── VOICE ALIASES ─────────────────────────── */}
+      <SectionHeader label="VOICE ALIASES" />
+      <div style={{ padding: '0 20px 8px' }}>
+        <p style={{ color: '#3a6070', fontFamily: "'JetBrains Mono'", fontSize: '9px', margin: 0, lineHeight: 1.6 }}>
+          Say the trigger phrase — iZACH runs the aliased command instead.
+        </p>
+      </div>
+      <Row>
+        <Input value={newTrigger} onChange={setNewTrigger} placeholder="Trigger (e.g. fire it up)" />
+        <Input value={newCommand} onChange={setNewCommand} placeholder="Command (e.g. play my gym playlist)" />
+        <Btn label="ADD" onClick={addAlias} />
+      </Row>
+      {aliasMsg && (
+        <div style={{ padding: '0 20px 6px', color: '#5a9ab0', fontFamily: "'JetBrains Mono'", fontSize: '9px' }}>
+          {aliasMsg}
+        </div>
+      )}
+      <div style={{ padding: '0 20px', maxHeight: 220, overflowY: 'auto' }}>
+        {aliases.length === 0 ? (
+          <p style={{ color: '#1a4a5a', fontFamily: "'JetBrains Mono'", fontSize: '10px', padding: '4px 0' }}>
+            No aliases yet.
+          </p>
+        ) : aliases.map(({ trigger, command, created }) => (
+          <div key={trigger} style={{
+            display: 'flex', alignItems: 'center', gap: 10, padding: '6px 8px', marginBottom: 4,
+            background: 'rgba(0,229,255,0.03)', border: '1px solid #0d2a3a', borderRadius: 4,
+          }}>
+            <div style={{ flex: 1, overflow: 'hidden' }}>
+              <span style={{ color: '#00e5ff', fontFamily: "'Share Tech Mono'", fontSize: '10px' }}>{trigger}</span>
+              <span style={{ color: '#3a6070', margin: '0 8px', fontSize: '10px' }}>→</span>
+              <span style={{ color: '#c8e8f0', fontFamily: "'JetBrains Mono'", fontSize: '10px' }}>{command}</span>
+            </div>
+            {created && <span style={{ color: '#1a4a5a', fontFamily: "'JetBrains Mono'", fontSize: '9px', flexShrink: 0 }}>{created}</span>}
+            <Btn label="✕" danger onClick={() => deleteAlias(trigger)} />
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ── Appearance Section — UI style + font size ─────────────────
+function AppearanceSection({ settings, onSave }) {
+  const [form, setForm] = useState({
+    ui:        settings.ui        ?? 'classic',
+    _savedUi:  settings.ui        ?? 'classic',
+    font_size: settings.font_size ?? 13,
+  })
+  const [dirty, setDirty] = useState(false)
+
+  function set(key, val) { setForm(f => ({ ...f, [key]: val })); setDirty(true) }
+  function handleSave() { onSave(form); setDirty(false) }
+
+  return (
+    <div>
       <SectionHeader label="INTERFACE" />
       <SelectField
         label="UI STYLE (restart to apply)"
@@ -1412,11 +1553,6 @@ function GeneralSection({ settings, onSave }) {
           </p>
         </div>
       )}
-      <div style={{ padding: '0 20px 8px' }}>
-        <p style={{ color: '#3a6070', fontFamily: "'JetBrains Mono'", fontSize: '9px' }}>
-          Hotkeys, battery auto-switch, toast notifications → <strong style={{ color: '#00e5ff' }}>BG MODE</strong> tab
-        </p>
-      </div>
       <SelectField
         label="FONT SIZE"
         value={form.font_size}
@@ -1437,54 +1573,108 @@ function GeneralSection({ settings, onSave }) {
           { value: 17, label: 'X-Large (17px)' },
         ]}
       />
+      <div style={{ padding: '0 20px 8px' }}>
+        <p style={{ color: '#3a6070', fontFamily: "'JetBrains Mono'", fontSize: '9px' }}>
+          Shared with Cortex UI (restart required to apply there).
+        </p>
+      </div>
+      {dirty && (
+        <div style={{ padding: '8px 20px 16px' }}>
+          <Btn label="SAVE SETTINGS" onClick={handleSave} />
+        </div>
+      )}
+    </div>
+  )
+}
 
-      {/* ── AI BEHAVIOUR ──────────────────────────── */}
-      <SectionHeader label="AI BEHAVIOUR" />
-      <Toggle label="Safe Mode (confirm dangerous commands)" checked={form.safe_mode_enabled} onChange={v => set('safe_mode_enabled', v)} />
+// ── Notifications and Announcements Section ────────────────────
+function NotificationsSection({ settings, onSave }) {
+  const [form, setForm] = useState({
+    notif_performance:        settings.notif_performance        ?? true,
+    notif_whatsapp:           settings.notif_whatsapp           ?? true,
+    notif_downloads:          settings.notif_downloads          ?? true,
+    toast_enabled:            settings.toast_enabled            ?? false,
+    toast_bg_only:            settings.toast_bg_only            ?? false,
+    auto_dnd_before_meetings: settings.auto_dnd_before_meetings ?? false,
+    auto_dnd_lead_minutes:    settings.auto_dnd_lead_minutes    ?? 5,
+    morning_briefing_time:    settings.morning_briefing_time    ?? '08:00',
+    briefing_enabled:         settings.briefing_enabled         ?? false,
+    briefing_greeting:        settings.briefing_greeting        ?? true,
+    briefing_news:            settings.briefing_news            ?? false,
+    briefing_gold_rate:       settings.briefing_gold_rate       ?? false,
+    briefing_silver_rate:     settings.briefing_silver_rate     ?? false,
+    briefing_weather:         settings.briefing_weather         ?? true,
+    briefing_battery_status:  settings.briefing_battery_status  ?? true,
+    briefing_battery_health:  settings.briefing_battery_health  ?? false,
+    briefing_ram:             settings.briefing_ram             ?? true,
+    briefing_events:          settings.briefing_events          ?? true,
+    briefing_whatsapp:        settings.briefing_whatsapp        ?? false,
+  })
+  const [dirty, setDirty] = useState(false)
+  const [feed,  setFeed]  = useState(null)
 
-      <SelectField
-        label="RESPONSE STYLE"
-        value={form.response_style}
-        onChange={v => set('response_style', v)}
-        options={[
-          { value: 'casual',       label: 'Casual (default — JARVIS-style)' },
-          { value: 'professional', label: 'Professional (formal, no humor)' },
-          { value: 'concise',      label: 'Concise (ultra-short answers)' },
-        ]}
-      />
+  function set(key, val) { setForm(f => ({ ...f, [key]: val })); setDirty(true) }
+  function handleSave() { onSave(form); setDirty(false) }
 
-      <SelectField
-        label="RESPONSE VERBOSITY"
-        value={form.response_verbosity}
-        onChange={v => set('response_verbosity', v)}
-        options={[
-          { value: 'balanced', label: 'Balanced (default)' },
-          { value: 'brief',    label: 'Brief (1-2 sentences max)' },
-          { value: 'detailed', label: 'Detailed (thorough explanations)' },
-        ]}
-      />
+  const loadFeed = useCallback(async () => {
+    try {
+      const d = await fetch(`${BASE}/notifications/feed?limit=8`).then(r => r.json())
+      setFeed(d.notifications || [])
+    } catch { setFeed(null) }
+  }, [])
+  useEffect(() => { loadFeed() }, [loadFeed])
 
-      {/* ── NOTIFICATIONS ─────────────────────────── */}
+  const srcIcon = { whatsapp: '💬', calendar: '📅', system: '⚠', email: '✉', alerts: '✉' }
+
+  return (
+    <div>
+      {/* ── LIVE FEED ──────────────────────────────── */}
+      <SectionHeader label="NOTIFICATIONS FEED" />
+      <div style={{ padding: '0 20px 6px' }}>
+        <p style={{ color: '#3a6070', fontFamily: "'JetBrains Mono'", fontSize: '9px', margin: 0 }}>
+          WhatsApp + Calendar + System + Email, ranked by priority
+        </p>
+      </div>
+      <div style={{ padding: '0 20px 10px' }}>
+        {feed === null ? (
+          <p style={{ color: '#1a4a5a', fontFamily: "'JetBrains Mono'", fontSize: '10px' }}>Could not load notifications.</p>
+        ) : feed.length === 0 ? (
+          <p style={{ color: '#1a4a5a', fontFamily: "'JetBrains Mono'", fontSize: '10px' }}>No notifications yet.</p>
+        ) : feed.map((n, i) => (
+          <div key={i} style={{ padding: '5px 8px', marginBottom: 4, background: 'rgba(0,229,255,0.03)', border: '1px solid #0d2a3a', borderRadius: 4 }}>
+            <div style={{ display: 'flex', gap: 6, alignItems: 'baseline' }}>
+              <span>{srcIcon[n.source] || '•'}</span>
+              <span style={{ color: '#c8e8f0', fontFamily: "'JetBrains Mono'", fontSize: '10px', flex: 1 }}>{n.title || ''}</span>
+              <span style={{ color: '#1a4a5a', fontFamily: "'Share Tech Mono'", fontSize: '9px' }}>
+                {n.ts ? new Date(n.ts * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
+              </span>
+            </div>
+            {n.body && <div style={{ color: '#5a9ab0', fontFamily: "'JetBrains Mono'", fontSize: '9px', marginTop: 2 }}>{(n.body || '').slice(0, 90)}</div>}
+          </div>
+        ))}
+        <Btn label="↻ REFRESH" onClick={loadFeed} />
+      </div>
+
+      {/* ── NOTIFICATIONS ──────────────────────────── */}
       <SectionHeader label="NOTIFICATIONS" />
       <Toggle label="Performance Alerts (CPU / RAM / Battery warnings)" checked={form.notif_performance} onChange={v => set('notif_performance', v)} />
       <Toggle label="WhatsApp notifications"                             checked={form.notif_whatsapp}    onChange={v => set('notif_whatsapp', v)} />
       <Toggle label="Download completion alerts"                         checked={form.notif_downloads}   onChange={v => set('notif_downloads', v)} />
+      <Toggle label="Windows Toast Notifications"                        checked={form.toast_enabled}     onChange={v => set('toast_enabled', v)} />
+      <Toggle label="Toast in Background Mode Only"                      checked={form.toast_bg_only}     onChange={v => set('toast_bg_only', v)} />
 
-      {/* ── PRIVACY ───────────────────────────────── */}
-      <SectionHeader label="PRIVACY" />
-      <Toggle label="Save command history to MongoDB" checked={form.command_history_enabled} onChange={v => set('command_history_enabled', v)} />
-
-      <SelectField
-        label="LOG RETENTION"
-        value={form.log_retention_days}
-        onChange={v => set('log_retention_days', Number(v))}
-        options={[
-          { value: 7,  label: '7 days' },
-          { value: 30, label: '30 days' },
-          { value: 90, label: '90 days' },
-          { value: 0,  label: 'Forever' },
-        ]}
-      />
+      {/* ── MEETINGS ────────────────────────────────── */}
+      <SectionHeader label="MEETINGS" />
+      <Toggle label="Auto-DND Before Calendar Meetings" checked={form.auto_dnd_before_meetings} onChange={v => set('auto_dnd_before_meetings', v)} />
+      <div style={{ padding: '4px 20px 10px' }}>
+        <p style={{ color: '#3a6070', fontFamily: "'Share Tech Mono'", fontSize: '9px', letterSpacing: '0.1em', marginBottom: 6 }}>
+          LEAD TIME (MINUTES)
+        </p>
+        <Input value={String(form.auto_dnd_lead_minutes)} onChange={v => set('auto_dnd_lead_minutes', Number(v) || 5)} placeholder="5" style={{ maxWidth: 80 }} />
+        <p style={{ color: '#1a4a5a', fontFamily: "'JetBrains Mono'", fontSize: '9px', marginTop: 4 }}>
+          Auto-enables DND a few minutes before a meeting starts, disables it when the meeting ends.
+        </p>
+      </div>
 
       {/* ── DAILY BRIEFING ────────────────────────── */}
       <BriefingSection form={form} set={set} />
@@ -1492,9 +1682,6 @@ function GeneralSection({ settings, onSave }) {
       {dirty && (
         <div style={{ padding: '8px 20px 16px' }}>
           <Btn label="SAVE SETTINGS" onClick={handleSave} />
-          <p style={{ color: '#1a4a5a', fontFamily: "'JetBrains Mono'", fontSize: '9px', marginTop: 6 }}>
-            Voice, AI, notifications &amp; privacy apply instantly. Wake word toggle needs restart.
-          </p>
         </div>
       )}
     </div>
@@ -2004,78 +2191,33 @@ function ContactsSection() {
   )
 }
 
-// ── Background Mode Section ───────────────────────────────────
-function BackgroundModeSection({ settings, onSave }) {
+// ── Boot Settings Section — interface mode + boot terminals ────
+function BootSettingsSection({ settings, onSave }) {
   const [form, setForm] = useState({
-    ui:                  settings.ui                  ?? 'classic',
-    _savedUi:            settings.ui                  ?? 'classic',
-    ask_ui_on_boot:      settings.ask_ui_on_boot      ?? false,
-    hotkey_bar:          settings.hotkey_bar          ?? 'ctrl+shift+space',
-    hotkey_mic:          settings.hotkey_mic          ?? 'ctrl+shift+m',
-    push_to_talk:        settings.push_to_talk        ?? false,
-    battery_auto_switch: settings.battery_auto_switch ?? false,
-    lid_close_trigger:   settings.lid_close_trigger   ?? false,
-    toast_enabled:       settings.toast_enabled       ?? false,
-    toast_bg_only:       settings.toast_bg_only       ?? false,
+    ui:             settings.ui             ?? 'classic',
+    _savedUi:       settings.ui             ?? 'classic',
+    ask_ui_on_boot: settings.ask_ui_on_boot ?? false,
+    boot_terminals: {
+      boot_interface:  settings.boot_terminals?.boot_interface  ?? true,
+      backend:         settings.boot_terminals?.backend         ?? true,
+      ngrok:           settings.boot_terminals?.ngrok           ?? true,
+      whatsapp_bridge: settings.boot_terminals?.whatsapp_bridge ?? true,
+      n8n:             settings.boot_terminals?.n8n             ?? true,
+    },
   })
   const [dirty, setDirty] = useState(false)
-  const [aliases, setAliases] = useState([])
-  const [aliasMsg, setAliasMsg] = useState('')
-  const [newTrigger, setNewTrigger] = useState('')
-  const [newCommand, setNewCommand] = useState('')
 
-  const set = (key, val) => { setForm(f => ({ ...f, [key]: val })); setDirty(true) }
+  const set     = (key, val) => { setForm(f => ({ ...f, [key]: val })); setDirty(true) }
+  const setTerm = (key, val) => { setForm(f => ({ ...f, boot_terminals: { ...f.boot_terminals, [key]: val } })); setDirty(true) }
   const handleSave = () => { onSave(form); setDirty(false) }
 
-  const flashAlias = (t) => { setAliasMsg(t); setTimeout(() => setAliasMsg(''), 3500) }
-
-  const loadAliases = useCallback(async () => {
-    try {
-      const d = await fetch(`${BASE}/aliases`).then(r => r.json())
-      setAliases(d.aliases || [])
-    } catch {}
-  }, [])
-
-  useEffect(() => { loadAliases() }, [loadAliases])
-
-  async function addAlias() {
-    if (!newTrigger.trim() || !newCommand.trim()) return
-    try {
-      const r = await fetch(`${BASE}/aliases`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ trigger: newTrigger.trim(), command: newCommand.trim() }),
-      }).then(r => r.json())
-      if (r.ok) {
-        flashAlias('Alias added')
-        setNewTrigger(''); setNewCommand('')
-        loadAliases()
-      } else { flashAlias(r.error || 'Error') }
-    } catch { flashAlias('Failed to connect') }
-  }
-
-  async function deleteAlias(trigger) {
-    try {
-      const b64 = btoa(unescape(encodeURIComponent(trigger)))
-      await fetch(`${BASE}/aliases/${b64}`, { method: 'DELETE' })
-      loadAliases()
-    } catch {}
-  }
-
-  async function exportChat(fmt) {
-    try {
-      const r = await fetch(`${BASE}/export-chat?format=${fmt}`)
-      const blob = await r.blob()
-      const url  = URL.createObjectURL(blob)
-      const a    = document.createElement('a')
-      a.href     = url
-      a.download = fmt === 'pdf' ? 'iZACH-chat-export.pdf' : 'iZACH-chat-export.txt'
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      URL.revokeObjectURL(url)
-    } catch {}
-  }
+  const TERMS = [
+    { key: 'boot_interface',  label: 'Boot Interface Terminal' },
+    { key: 'backend',         label: 'Python Backend Terminal' },
+    { key: 'ngrok',           label: 'Ngrok Terminal' },
+    { key: 'whatsapp_bridge', label: 'WhatsApp Bridge Terminal' },
+    { key: 'n8n',             label: 'n8n Terminal' },
+  ]
 
   return (
     <div>
@@ -2104,6 +2246,42 @@ function BackgroundModeSection({ settings, onSave }) {
         onChange={v => set('ask_ui_on_boot', v)}
       />
 
+      {/* ── BOOT TERMINALS ───────────────────────────── */}
+      <SectionHeader label="BOOT TERMINALS" />
+      <div style={{ padding: '0 20px 6px' }}>
+        <p style={{ color: '#3a6070', fontFamily: "'JetBrains Mono'", fontSize: '9px', margin: 0 }}>
+          Skip launching terminals for services you don't use.
+        </p>
+      </div>
+      {TERMS.map(({ key, label }) => (
+        <Toggle key={key} label={label} checked={form.boot_terminals[key]} onChange={v => setTerm(key, v)} />
+      ))}
+
+      {dirty && (
+        <div style={{ padding: '8px 20px 16px' }}>
+          <Btn label="SAVE BOOT SETTINGS" onClick={handleSave} />
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Advanced Section — overlays, hotkeys, power settings ───────
+function AdvancedSection({ settings, onSave }) {
+  const [form, setForm] = useState({
+    hotkey_bar:          settings.hotkey_bar          ?? 'ctrl+shift+space',
+    hotkey_mic:          settings.hotkey_mic          ?? 'ctrl+shift+m',
+    push_to_talk:        settings.push_to_talk        ?? false,
+    battery_auto_switch: settings.battery_auto_switch ?? false,
+    lid_close_trigger:   settings.lid_close_trigger   ?? false,
+  })
+  const [dirty, setDirty] = useState(false)
+
+  const set = (key, val) => { setForm(f => ({ ...f, [key]: val })); setDirty(true) }
+  const handleSave = () => { onSave(form); setDirty(false) }
+
+  return (
+    <div>
       {/* ── OVERLAYS ─────────────────────────────────── */}
       <SectionHeader label="OVERLAYS" />
       {[
@@ -2150,69 +2328,433 @@ function BackgroundModeSection({ settings, onSave }) {
         onChange={v => set('lid_close_trigger', v)}
       />
 
-      {/* ── NOTIFICATIONS ────────────────────────────── */}
-      <SectionHeader label="NOTIFICATIONS" />
-      <Toggle
-        label="Windows Toast Notifications"
-        checked={form.toast_enabled}
-        onChange={v => set('toast_enabled', v)}
-      />
-      <Toggle
-        label="Toast in Background Mode Only"
-        checked={form.toast_bg_only}
-        onChange={v => set('toast_bg_only', v)}
-      />
-
-      {/* ── EXPORT ───────────────────────────────────── */}
-      <SectionHeader label="EXPORT" />
-      <div style={{ padding: '0 20px 12px', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-        <Btn label="EXPORT CHAT (TXT)" onClick={() => exportChat('txt')} />
-        <Btn label="EXPORT CHAT (PDF)" onClick={() => exportChat('pdf')} />
-      </div>
-
-      {/* ── VOICE ALIASES ────────────────────────────── */}
-      <SectionHeader label="VOICE ALIASES" />
-      <div style={{ padding: '0 20px 8px' }}>
-        <p style={{ color: '#3a6070', fontFamily: "'JetBrains Mono'", fontSize: '9px', margin: 0, lineHeight: 1.6 }}>
-          Say the trigger phrase — iZACH runs the aliased command instead.
-        </p>
-      </div>
-      <Row>
-        <Input value={newTrigger} onChange={setNewTrigger} placeholder="Trigger (e.g. fire it up)" />
-        <Input value={newCommand} onChange={setNewCommand} placeholder="Command (e.g. play my gym playlist)" />
-        <Btn label="ADD" onClick={addAlias} />
-      </Row>
-      {aliasMsg && (
-        <div style={{ padding: '0 20px 6px', color: '#5a9ab0', fontFamily: "'JetBrains Mono'", fontSize: '9px' }}>
-          {aliasMsg}
-        </div>
-      )}
-      <div style={{ padding: '0 20px', maxHeight: 220, overflowY: 'auto' }}>
-        {aliases.length === 0 ? (
-          <p style={{ color: '#1a4a5a', fontFamily: "'JetBrains Mono'", fontSize: '10px', padding: '4px 0' }}>
-            No aliases yet.
-          </p>
-        ) : aliases.map(({ trigger, command, created }) => (
-          <div key={trigger} style={{
-            display: 'flex', alignItems: 'center', gap: 10, padding: '6px 8px', marginBottom: 4,
-            background: 'rgba(0,229,255,0.03)', border: '1px solid #0d2a3a', borderRadius: 4,
-          }}>
-            <div style={{ flex: 1, overflow: 'hidden' }}>
-              <span style={{ color: '#00e5ff', fontFamily: "'Share Tech Mono'", fontSize: '10px' }}>{trigger}</span>
-              <span style={{ color: '#3a6070', margin: '0 8px', fontSize: '10px' }}>→</span>
-              <span style={{ color: '#c8e8f0', fontFamily: "'JetBrains Mono'", fontSize: '10px' }}>{command}</span>
-            </div>
-            {created && <span style={{ color: '#1a4a5a', fontFamily: "'JetBrains Mono'", fontSize: '9px', flexShrink: 0 }}>{created}</span>}
-            <Btn label="✕" danger onClick={() => deleteAlias(trigger)} />
-          </div>
-        ))}
-      </div>
-
       {dirty && (
         <div style={{ padding: '8px 20px 16px' }}>
           <Btn label="SAVE SETTINGS" onClick={handleSave} />
         </div>
       )}
+    </div>
+  )
+}
+
+// ── Device Connection Section — dual-instance + mobile phone ───
+function DeviceConnectionSection({ settings, onSave }) {
+  // Backend /settings only accepts this whole thing as a single nested
+  // "dual_instance" object (see instance_coordinator.py's docstring) — flat
+  // top-level fields silently fail the POST allowlist and never persist,
+  // which is exactly why this toggle looked like it "turned off on its own":
+  // it never actually saved in the first place.
+  const di = settings.dual_instance || {}
+  const [form, setForm] = useState({
+    enabled:                     di.enabled                     ?? false,
+    peer_host:                   di.peer_host                   ?? '',
+    peer_port:                   di.peer_port                   ?? '',
+    primary_pin:                 di.primary_pin                 ?? 'auto',
+    auto_promote_enabled:        di.auto_promote_enabled         ?? false,
+    auto_promote_timeout_minutes: di.auto_promote_timeout_minutes ?? 5,
+  })
+  const [dirty,      setDirty]      = useState(false)
+  const [peerStatus, setPeerStatus] = useState(null)
+  const [testing,    setTesting]    = useState(false)
+  const [qr,         setQr]         = useState(null)
+  const [secret,     setSecret]     = useState('')
+
+  const set = (key, val) => { setForm(f => ({ ...f, [key]: val })); setDirty(true) }
+  const handleSave = () => { onSave({ dual_instance: form }); setDirty(false) }
+
+  const loadQr = useCallback(async () => {
+    try {
+      const d = await fetch(`${BASE}/connect/qr`).then(r => r.json())
+      setQr(d.qr_base64 ? `data:image/png;base64,${d.qr_base64}` : null)
+      setSecret(d.pairing_secret || '')
+    } catch { setQr(null) }
+  }, [])
+  useEffect(() => { loadQr() }, [loadQr])
+
+  async function testConnection() {
+    setTesting(true)
+    try {
+      const d = await fetch(`${BASE}/peer/check`).then(r => r.json())
+      setPeerStatus(d)
+    } catch { setPeerStatus({ ok: false, error: 'Not reachable' }) }
+    setTesting(false)
+  }
+
+  function copySecret() {
+    if (secret) navigator.clipboard.writeText(secret).catch(() => {})
+  }
+
+  return (
+    <div>
+      {/* ── MULTI-DEVICE (WINDOWS + MAC) ──────────────── */}
+      <SectionHeader label="MULTI-DEVICE (WINDOWS + MAC)" />
+      <div style={{ padding: '0 20px 8px' }}>
+        <p style={{ color: '#3a6070', fontFamily: "'JetBrains Mono'", fontSize: '9px', margin: 0, lineHeight: 1.6 }}>
+          Run iZACH on two machines — whichever starts second detects the other and offers Secondary Connector mode instead of a duplicate brain.
+        </p>
+      </div>
+      <Toggle label="Enable Dual-Instance Coordination" checked={form.enabled} onChange={v => set('enabled', v)} />
+      <Row>
+        <Input value={form.peer_host} onChange={v => set('peer_host', v)} placeholder="Peer host (e.g. 192.168.1.20)" />
+        <Input value={String(form.peer_port)} onChange={v => set('peer_port', v)} placeholder="Port" style={{ maxWidth: 100 }} />
+      </Row>
+      <SelectField
+        label="PRIMARY PIN"
+        value={form.primary_pin}
+        onChange={v => set('primary_pin', v)}
+        options={[
+          { value: 'auto',            label: 'Auto' },
+          { value: 'always_mac',      label: 'Prefer Mac' },
+          { value: 'always_windows',  label: 'Prefer Windows' },
+        ]}
+      />
+      <Toggle label="Auto-Promote if Primary Goes Offline" checked={form.auto_promote_enabled} onChange={v => set('auto_promote_enabled', v)} />
+      <div style={{ padding: '4px 20px 10px' }}>
+        <p style={{ color: '#3a6070', fontFamily: "'Share Tech Mono'", fontSize: '9px', letterSpacing: '0.1em', marginBottom: 6 }}>
+          AUTO-PROMOTE TIMEOUT (MINUTES)
+        </p>
+        <Input value={String(form.auto_promote_timeout_minutes)} onChange={v => set('auto_promote_timeout_minutes', Number(v) || 5)} placeholder="5" style={{ maxWidth: 80 }} />
+      </div>
+
+      <div style={{ padding: '6px 20px 14px', display: 'flex', alignItems: 'center', gap: 10 }}>
+        {dirty && <Btn label="SAVE" onClick={handleSave} />}
+        <Btn label={testing ? 'TESTING…' : 'TEST CONNECTION'} onClick={testConnection} />
+        {peerStatus && (
+          <span style={{ color: peerStatus.ok ? '#1db954' : '#ff3d3d', fontFamily: "'Share Tech Mono'", fontSize: '9px' }}>
+            {peerStatus.ok ? '● REACHABLE' : `● ${peerStatus.error || 'NOT CONFIGURED'}`}
+          </span>
+        )}
+      </div>
+
+      {/* ── MOBILE PHONE ──────────────────────────────── */}
+      <SectionHeader label="MOBILE PHONE" />
+      <div style={{ padding: '0 20px 10px' }}>
+        <p style={{ color: '#3a6070', fontFamily: "'JetBrains Mono'", fontSize: '9px', margin: 0, lineHeight: 1.6 }}>
+          Scan this QR with the iZACH Android app (Settings → Scan QR Code) to pair.
+        </p>
+      </div>
+      <div style={{ padding: '0 20px 12px', display: 'flex', gap: 16, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+        {qr ? (
+          <img src={qr} alt="Pairing QR" style={{ width: 140, height: 140, borderRadius: 4, border: '1px solid #0d2a3a' }} />
+        ) : (
+          <div style={{ width: 140, height: 140, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#1a4a5a', fontFamily: "'JetBrains Mono'", fontSize: '9px', border: '1px solid #0d2a3a', borderRadius: 4 }}>
+            loading…
+          </div>
+        )}
+        <div style={{ flex: 1, minWidth: 180 }}>
+          <p style={{ color: '#3a6070', fontFamily: "'Share Tech Mono'", fontSize: '9px', letterSpacing: '0.1em', marginBottom: 4 }}>
+            PAIRING SECRET (manual entry)
+          </p>
+          <p style={{ color: '#00e5ff', fontFamily: "'JetBrains Mono'", fontSize: '10px', wordBreak: 'break-all', marginBottom: 8 }}>
+            {secret || '—'}
+          </p>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <Btn label="COPY SECRET" onClick={copySecret} />
+            <Btn label="↻ REFRESH" onClick={loadQr} />
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Connected Services Section — Calendar, Email, Spotify, WhatsApp ──
+function ConnectedServicesSection() {
+  const [cal,   setCal]   = useState({ connected: false })
+  const [email, setEmail] = useState({ connected: false })
+  const [emailForm, setEmailForm] = useState({
+    email_agent_enabled: false, email_watch_otp: true, email_watch_replies: true,
+    email_watch_keywords: true, email_track_orders: true,
+  })
+  const [watchlist, setWatchlist] = useState('')
+  const [orders,    setOrders]    = useState([])
+  const [waMsg,     setWaMsg]     = useState('')
+  const [waBusy,    setWaBusy]    = useState(false)
+
+  const refreshCal = useCallback(async () => {
+    try { setCal(await fetch(`${BASE}/calendar/auth/status`).then(r => r.json())) } catch { setCal({ connected: false }) }
+  }, [])
+  const refreshEmail = useCallback(async () => {
+    try { setEmail(await fetch(`${BASE}/email/auth/status`).then(r => r.json())) } catch { setEmail({ connected: false }) }
+  }, [])
+  const loadEmailExtras = useCallback(async () => {
+    try {
+      const [wl, ord, s] = await Promise.all([
+        fetch(`${BASE}/email/watchlist`).then(r => r.json()).catch(() => ({})),
+        fetch(`${BASE}/email/orders`).then(r => r.json()).catch(() => ({})),
+        fetch(`${BASE}/settings`).then(r => r.json()).catch(() => ({})),
+      ])
+      setWatchlist((wl.watchlist || []).join(', '))
+      setOrders(ord.orders || [])
+      const s2 = s.settings || {}
+      setEmailForm({
+        email_agent_enabled: s2.email_agent_enabled ?? false,
+        email_watch_otp: s2.email_watch_otp ?? true,
+        email_watch_replies: s2.email_watch_replies ?? true,
+        email_watch_keywords: s2.email_watch_keywords ?? true,
+        email_track_orders: s2.email_track_orders ?? true,
+      })
+    } catch {}
+  }, [])
+
+  useEffect(() => { refreshCal(); refreshEmail(); loadEmailExtras() }, [refreshCal, refreshEmail, loadEmailExtras])
+
+  async function calConnect() {
+    await fetch(`${BASE}/calendar/auth/connect`, { method: 'POST' }).catch(() => {})
+    const poll = setInterval(async () => {
+      const r = await fetch(`${BASE}/calendar/auth/status`).then(r => r.json()).catch(() => null)
+      if (r) { setCal(r); if (r.connected) clearInterval(poll) }
+    }, 2500)
+    setTimeout(() => clearInterval(poll), 120000)
+  }
+  async function calDisconnect() {
+    await fetch(`${BASE}/calendar/auth/disconnect`, { method: 'POST' }).catch(() => {})
+    refreshCal()
+  }
+
+  async function emailConnect() {
+    await fetch(`${BASE}/email/auth/connect`, { method: 'POST' }).catch(() => {})
+    const poll = setInterval(async () => {
+      const r = await fetch(`${BASE}/email/auth/status`).then(r => r.json()).catch(() => null)
+      if (r) { setEmail(r); if (r.connected) clearInterval(poll) }
+    }, 2500)
+    setTimeout(() => clearInterval(poll), 120000)
+  }
+  async function emailDisconnect() {
+    await fetch(`${BASE}/email/auth/disconnect`, { method: 'POST' }).catch(() => {})
+    refreshEmail()
+  }
+
+  function setEmailToggle(key, val) {
+    setEmailForm(f => ({ ...f, [key]: val }))
+    fetch(`${BASE}/settings`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ [key]: val }) }).catch(() => {})
+  }
+
+  async function saveWatchlist() {
+    const items = watchlist.split(',').map(s => s.trim()).filter(Boolean)
+    await fetch(`${BASE}/email/watchlist`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ watchlist: items }) }).catch(() => {})
+  }
+
+  async function restartWhatsapp() {
+    setWaBusy(true); setWaMsg('Restarting…')
+    try {
+      const d = await fetch(`${BASE}/whatsapp/restart-bridge`, { method: 'POST' }).then(r => r.json())
+      setWaMsg(d.ok ? `Bridge ${d.status || 'restarted'}.` : (d.error || 'Error'))
+    } catch { setWaMsg('Backend offline.') }
+    setWaBusy(false)
+  }
+
+  return (
+    <div>
+      {/* ── GOOGLE CALENDAR ────────────────────────────── */}
+      <SectionHeader label="GOOGLE CALENDAR" />
+      <div style={{ padding: '0 20px 10px', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        <span style={{ color: cal.connected ? '#1db954' : '#3a6070', fontFamily: "'Share Tech Mono'", fontSize: '10px' }}>
+          {cal.connected ? `● CONNECTED${cal.user ? ` — ${cal.user}` : ''}` : '● NOT CONNECTED'}
+        </span>
+        <Btn label={cal.connected ? 'DISCONNECT' : '⊕ CONNECT GOOGLE CALENDAR'} onClick={cal.connected ? calDisconnect : calConnect} danger={cal.connected} color={cal.connected ? undefined : '#1db954'} />
+      </div>
+
+      {/* ── SPOTIFY ─────────────────────────────────────── */}
+      <SectionHeader label="SPOTIFY" />
+      <SpotifyConnectRow />
+
+      {/* ── EMAIL AGENT ─────────────────────────────────── */}
+      <SectionHeader label="EMAIL AGENT" />
+      <div style={{ padding: '0 20px 10px', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        <span style={{ color: email.connected ? '#1db954' : '#3a6070', fontFamily: "'Share Tech Mono'", fontSize: '10px' }}>
+          {email.connected ? `● CONNECTED${email.user ? ` — ${email.user}` : ''}` : '● NOT CONNECTED'}
+        </span>
+        <Btn label={email.connected ? 'DISCONNECT' : '⊕ CONNECT GMAIL (read-only)'} onClick={email.connected ? emailDisconnect : emailConnect} danger={email.connected} color={email.connected ? undefined : '#1db954'} />
+      </div>
+      <Toggle label="Email Agent (master switch — off by default)" checked={emailForm.email_agent_enabled} onChange={v => setEmailToggle('email_agent_enabled', v)} />
+      <Toggle label="Watch for OTPs"              checked={emailForm.email_watch_otp}      onChange={v => setEmailToggle('email_watch_otp', v)} />
+      <Toggle label="Watch for Replies"           checked={emailForm.email_watch_replies}  onChange={v => setEmailToggle('email_watch_replies', v)} />
+      <Toggle label="Watch Keywords/Senders"      checked={emailForm.email_watch_keywords} onChange={v => setEmailToggle('email_watch_keywords', v)} />
+      <Toggle label="Track Orders/Shipments"      checked={emailForm.email_track_orders}   onChange={v => setEmailToggle('email_track_orders', v)} />
+      <div style={{ padding: '6px 20px 4px' }}>
+        <p style={{ color: '#3a6070', fontFamily: "'Share Tech Mono'", fontSize: '9px', letterSpacing: '0.1em', marginBottom: 6 }}>
+          WATCHLIST
+        </p>
+        <Row>
+          <Input value={watchlist} onChange={setWatchlist} placeholder="e.g. Dell Support Assist, Amazon Delivery" />
+          <Btn label="SAVE" onClick={saveWatchlist} />
+        </Row>
+      </div>
+      <div style={{ padding: '4px 20px 12px' }}>
+        <p style={{ color: '#00e5ff', fontFamily: "'Share Tech Mono'", fontSize: '9px', letterSpacing: '0.1em', marginBottom: 4 }}>
+          TRACKED ORDERS
+        </p>
+        {orders.length === 0 ? (
+          <p style={{ color: '#1a4a5a', fontFamily: "'JetBrains Mono'", fontSize: '9px' }}>No tracked orders yet.</p>
+        ) : orders.slice(0, 5).map((o, i) => (
+          <p key={i} style={{ color: '#5a9ab0', fontFamily: "'JetBrains Mono'", fontSize: '9px', margin: '2px 0' }}>
+            {o.description || 'Package'} via {o.carrier || '?'} — {(o.status || '').replace(/_/g, ' ')}{o.delivery_date ? `, ETA ${o.delivery_date}` : ''}
+          </p>
+        ))}
+      </div>
+
+      {/* ── WHATSAPP ────────────────────────────────────── */}
+      <SectionHeader label="WHATSAPP" />
+      <div style={{ padding: '0 20px 14px' }}>
+        <Btn label={waBusy ? 'RESTARTING…' : 'RESTART WHATSAPP BRIDGE'} onClick={restartWhatsapp} />
+        {waMsg && <p style={{ color: '#ffb300', fontFamily: "'JetBrains Mono'", fontSize: '9px', marginTop: 6 }}>{waMsg}</p>}
+      </div>
+    </div>
+  )
+}
+
+// ── Others Section — Privacy, System Actions, Export, Skills ───
+function OthersSection({ settings, onSave }) {
+  const [form, setForm] = useState({
+    command_history_enabled: settings.command_history_enabled ?? true,
+    log_retention_days:      settings.log_retention_days      ?? 30,
+  })
+  const [dirty, setDirty]   = useState(false)
+  const [actMsg, setActMsg] = useState('')
+
+  const set = (key, val) => { setForm(f => ({ ...f, [key]: val })); setDirty(true) }
+  const handleSave = () => { onSave(form); setDirty(false) }
+
+  async function runAction(path, label) {
+    setActMsg(`${label}…`)
+    try {
+      const d = await fetch(`${BASE}${path}`, { method: 'POST' }).then(r => r.json())
+      setActMsg(d.ok ? (d.message || Array.isArray(d.cleared) ? (d.cleared || []).join(', ') || 'Cleared.' : 'Done.') : (d.error || 'Failed'))
+    } catch (e) { setActMsg(`Error: ${e.message}`) }
+  }
+
+  async function exportChat(fmt) {
+    try {
+      const r = await fetch(`${BASE}/export-chat?format=${fmt}`)
+      const blob = await r.blob()
+      const url  = URL.createObjectURL(blob)
+      const a    = document.createElement('a')
+      a.href     = url
+      a.download = fmt === 'pdf' ? 'iZACH-chat-export.pdf' : 'iZACH-chat-export.txt'
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    } catch {}
+  }
+
+  return (
+    <div>
+      {/* ── PRIVACY ────────────────────────────────────── */}
+      <SectionHeader label="PRIVACY" />
+      <Toggle label="Save command history to MongoDB" checked={form.command_history_enabled} onChange={v => set('command_history_enabled', v)} />
+      <SelectField
+        label="LOG RETENTION"
+        value={form.log_retention_days}
+        onChange={v => set('log_retention_days', Number(v))}
+        options={[
+          { value: 7,  label: '7 days' },
+          { value: 30, label: '30 days' },
+          { value: 90, label: '90 days' },
+          { value: 0,  label: 'Forever' },
+        ]}
+      />
+      {dirty && (
+        <div style={{ padding: '4px 20px 14px' }}>
+          <Btn label="SAVE" onClick={handleSave} />
+        </div>
+      )}
+
+      {/* ── SYSTEM ACTIONS ─────────────────────────────── */}
+      <SectionHeader label="SYSTEM ACTIONS" />
+      <div style={{ padding: '0 20px 6px', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <Btn label="ANALYZE LOGS"  onClick={() => runAction('/analyze?mode=overwrite', 'Analyzing')} />
+        <Btn label="SYNC OBSIDIAN" onClick={() => runAction('/obsidian/sync', 'Syncing')} />
+        <Btn label="CLEAR CACHE"   onClick={() => runAction('/cache/clear', 'Clearing')} />
+      </div>
+      {actMsg && (
+        <div style={{ padding: '0 20px 10px', color: '#5a9ab0', fontFamily: "'JetBrains Mono'", fontSize: '9px' }}>
+          {actMsg}
+        </div>
+      )}
+
+      {/* ── EXPORT ─────────────────────────────────────── */}
+      <SectionHeader label="EXPORT" />
+      <div style={{ padding: '0 20px 14px', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <Btn label="EXPORT CHAT (TXT)" onClick={() => exportChat('txt')} />
+        <Btn label="EXPORT CHAT (PDF)" onClick={() => exportChat('pdf')} />
+      </div>
+
+      {/* ── SKILLS ─────────────────────────────────────── */}
+      <SkillsSection />
+    </div>
+  )
+}
+
+// ── About iZACH Section — dashboard + version info ──────────────
+function AboutSection() {
+  const [dash, setDash] = useState(null)
+
+  const load = useCallback(async () => {
+    const results = {}
+    try {
+      const d = await fetch(`${BASE}/browser/recordings`).then(r => r.json())
+      const recs = d.recordings || []
+      const scheduled = recs.filter(r => r.schedule_cron).length
+      results.RECORDINGS = `${recs.length} saved${scheduled ? ` · ${scheduled} scheduled` : ''}`
+    } catch { results.RECORDINGS = 'unavailable' }
+    try {
+      const d = await fetch(`${BASE}/smart-memory?category=automation`).then(r => r.json())
+      const items = d.memories || d.data || []
+      const active = items.filter(i => i.enabled !== false).length
+      results.AUTOMATIONS = `${active}/${items.length} active`
+    } catch { results.AUTOMATIONS = 'unavailable' }
+    try {
+      const d = await fetch(`${BASE}/dnd`).then(r => r.json())
+      results['DO NOT DISTURB'] = d.active ? 'ON' : 'OFF'
+    } catch { results['DO NOT DISTURB'] = 'unavailable' }
+    try {
+      const d = await fetch(`${BASE}/downloads/active`).then(r => r.json())
+      const active = (d.downloads || d.active || []).length
+      results.DOWNLOADS = active ? `${active} in progress` : 'idle'
+    } catch { results.DOWNLOADS = 'unavailable' }
+    try {
+      const d = await fetch(`${BASE}/phone/status`).then(r => r.json())
+      results.PHONE = d.connected ? `paired · ${d.device_name || 'device'}` : 'not connected'
+    } catch { results.PHONE = 'unavailable' }
+    setDash(results)
+  }, [])
+  useEffect(() => { load() }, [load])
+
+  const ABOUT = [
+    ['Version',      'v3.2.0 — Forge UI'],
+    ['AI Providers', 'Groq (primary) + Gemini (fallback)'],
+    ['Voice Engine', 'Edge-TTS — Christopher Neural'],
+    ['Developer',    'Vansh Kishore Sharma'],
+  ]
+
+  return (
+    <div>
+      {/* ── WHAT'S RUNNING ─────────────────────────────── */}
+      <SectionHeader label="WHAT'S RUNNING" />
+      <div style={{ padding: '0 20px 8px' }}>
+        {['RECORDINGS', 'AUTOMATIONS', 'DO NOT DISTURB', 'DOWNLOADS', 'PHONE'].map(label => (
+          <div key={label} style={{ display: 'flex', gap: 10, padding: '3px 0' }}>
+            <span style={{ color: '#3a6070', fontFamily: "'Share Tech Mono'", fontSize: '9px', letterSpacing: '0.1em', width: 130 }}>{label}</span>
+            <span style={{ color: '#c8e8f0', fontFamily: "'JetBrains Mono'", fontSize: '9px' }}>{dash ? (dash[label] ?? '—') : 'loading…'}</span>
+          </div>
+        ))}
+        <div style={{ marginTop: 8 }}>
+          <Btn label="↻ REFRESH" onClick={load} />
+        </div>
+      </div>
+
+      {/* ── ABOUT iZACH ────────────────────────────────── */}
+      <SectionHeader label="ABOUT iZACH" />
+      <div style={{ padding: '0 20px 14px' }}>
+        {ABOUT.map(([label, val]) => (
+          <div key={label} style={{ display: 'flex', gap: 10, padding: '3px 0' }}>
+            <span style={{ color: '#3a6070', fontFamily: "'Share Tech Mono'", fontSize: '9px', letterSpacing: '0.1em', width: 130 }}>{label}</span>
+            <span style={{ color: '#c8e8f0', fontFamily: "'JetBrains Mono'", fontSize: '9px' }}>{val}</span>
+          </div>
+        ))}
+      </div>
     </div>
   )
 }
@@ -2228,15 +2770,21 @@ export default function SettingsPanel({
   const [tab, setTab] = useState('memory')
 
   const tabs = [
-    { id: 'memory',   label: 'MEMORY'   },
-    { id: 'skills',   label: 'SKILLS'   },
-    { id: 'general',  label: 'SETTINGS' },
-    { id: 'bgmode',   label: 'BG MODE'  },
-    { id: 'websites', label: 'WEBSITES' },
-    { id: 'keys',     label: 'KEYS & ID'},
+    { id: 'memory',   label: 'MEMORY' },
+    { id: 'personal', label: 'PERSONALISATION' },
+    { id: 'appearance', label: 'APPEARANCE' },
+    { id: 'device',   label: 'DEVICE CONNECTION' },
+    { id: 'notif',    label: 'NOTIFICATIONS AND ANNOUNCEMENTS' },
+    { id: 'services', label: 'CONNECTED SERVICES' },
+    { id: 'boot',     label: 'BOOT SETTINGS' },
+    { id: 'keys',     label: 'KEYS & ID' },
     { id: 'contacts', label: 'CONTACTS' },
     { id: 'security', label: 'SECURITY' },
     { id: 'commands', label: 'COMMANDS' },
+    { id: 'links',    label: 'CUSTOM LINKS' },
+    { id: 'others',   label: 'OTHERS' },
+    { id: 'advanced', label: 'ADVANCED' },
+    { id: 'about',    label: 'ABOUT iZACH' },
   ]
 
   return (
@@ -2245,26 +2793,30 @@ export default function SettingsPanel({
       background: '#0a1628', borderLeft: '1px solid #0d2a3a',
       overflowY: 'auto',
     }}>
-      {/* Tab bar */}
-      <div style={{
+      {/* Tab bar — horizontally scrollable (15 tabs, mirrors Cortex UI's .sp-tabs) */}
+      <div className="settings-tab-scroll" style={{
         display: 'flex',
         borderBottom: '1px solid #0d2a3a',
         flexShrink: 0,
+        overflowX: 'auto',
+        overflowY: 'hidden',
+        scrollbarWidth: 'thin',
       }}>
         {tabs.map(t => (
           <button
             key={t.id}
             onClick={() => setTab(t.id)}
             style={{
-              flex: 1,
-              padding: '10px 0',
+              flexShrink: 0,
+              whiteSpace: 'nowrap',
+              padding: '10px 16px',
               background: tab === t.id ? 'rgba(0,229,255,0.07)' : 'transparent',
               border: 'none',
               borderBottom: tab === t.id ? '2px solid #00e5ff' : '2px solid transparent',
               color: tab === t.id ? '#00e5ff' : '#3a6070',
               fontFamily: "'Share Tech Mono'",
-              fontSize: '10px',
-              letterSpacing: '0.15em',
+              fontSize: '9px',
+              letterSpacing: '0.12em',
               cursor: 'pointer',
               transition: 'all 0.18s',
               boxShadow: tab === t.id ? 'inset 0 -1px 8px rgba(0,229,255,0.08)' : 'none',
@@ -2291,18 +2843,23 @@ export default function SettingsPanel({
             />
           </>
         )}
-        {tab === 'skills' && <SkillsSection />}
-        {tab === 'general' && (
-          <GeneralSection
-            settings={settings}
-            onSave={onSaveSettings}
-          />
+        {tab === 'personal' && (
+          <PersonalisationSection settings={settings} onSave={onSaveSettings} />
         )}
-        {tab === 'bgmode' && (
-          <BackgroundModeSection settings={settings} onSave={onSaveSettings} />
+        {tab === 'appearance' && (
+          <AppearanceSection settings={settings} onSave={onSaveSettings} />
         )}
-        {tab === 'websites' && (
-          <CustomWebsitesSection />
+        {tab === 'device' && (
+          <DeviceConnectionSection settings={settings} onSave={onSaveSettings} />
+        )}
+        {tab === 'notif' && (
+          <NotificationsSection settings={settings} onSave={onSaveSettings} />
+        )}
+        {tab === 'services' && (
+          <ConnectedServicesSection />
+        )}
+        {tab === 'boot' && (
+          <BootSettingsSection settings={settings} onSave={onSaveSettings} />
         )}
         {tab === 'keys' && (
           <KeysTab />
@@ -2336,6 +2893,18 @@ export default function SettingsPanel({
         )}
         {tab === 'commands' && (
           <CommandsSection />
+        )}
+        {tab === 'links' && (
+          <CustomWebsitesSection />
+        )}
+        {tab === 'others' && (
+          <OthersSection settings={settings} onSave={onSaveSettings} />
+        )}
+        {tab === 'advanced' && (
+          <AdvancedSection settings={settings} onSave={onSaveSettings} />
+        )}
+        {tab === 'about' && (
+          <AboutSection />
         )}
       </div>
     </div>
