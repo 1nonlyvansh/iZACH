@@ -78,7 +78,7 @@ function _recoverFromStaleClient(client, reason) {
 // termination. Puppeteer/whatsapp-web.js don't time this out on their own,
 // so without this watchdog it just hangs at "connecting" forever with no
 // way to recover short of manually deleting the session directory by hand.
-const INIT_TIMEOUT_MS = 90000;
+const INIT_TIMEOUT_MS = 180000;
 
 // Chromium leaves SingletonLock/SingletonCookie/SingletonSocket files in the
 // profile dir while running; a clean browser.close() removes them, but an
@@ -121,7 +121,7 @@ function createClient() {
     activeClient = client;
 
     const initWatchdog = setTimeout(() => {
-        console.log(`[WHATSAPP] Still not ready/QR after ${INIT_TIMEOUT_MS / 1000}s — session likely corrupted. Clearing and retrying fresh.`);
+        console.log(`[WHATSAPP] Still not ready/QR after ${INIT_TIMEOUT_MS / 1000}s — restarting the client.`);
         // A prior session's isReady/sendReady could still be true here (this
         // watchdog fires on RE-init, not just first boot) — without resetting
         // them, callers keep seeing "connected" while the client is actually
@@ -129,12 +129,14 @@ function createClient() {
         isReady = false;
         sendReady = false;
         notifyIZACH('/whatsapp/status', { status: 'disconnected' });
-        try {
-            fs.rmSync(SESSION_PATH, { recursive: true, force: true });
-            console.log('[BRIDGE] Session cleared.');
-        } catch (e) {
-            console.log(`[BRIDGE] Could not clear session: ${e.message}`);
-        }
+        // Don't wipe the session here — a slow first run, a network blip, or
+        // CPU contention (not actual corruption) can all eat 90-180s and
+        // previously forced a full QR rescan every time. _clearStaleChromiumLocks()
+        // (called at the top of createClient(), below) already handles the
+        // "stale lock from an ungraceful kill" case that used to masquerade
+        // as corruption. Only the 'already running'/'Execution context' init
+        // error path further down actually wipes — that's real corruption,
+        // not just a slow init.
         client.destroy()
             .catch(() => {})
             .finally(() => createClient());
@@ -415,7 +417,12 @@ app.post('/restart', async (req, res) => {
     }
 });
 
-app.listen(3000, () => console.log('[BRIDGE] Running on port 3000'));
+// 127.0.0.1 only — this API has no auth, and nothing legitimate needs LAN
+// access to it directly (main.py talks to it locally on the same machine;
+// cross-machine callers go through main.py's own authenticated routes).
+// Binding 0.0.0.0 let any device on the LAN POST /send-message and send
+// WhatsApp messages as the logged-in account.
+app.listen(3000, '127.0.0.1', () => console.log('[BRIDGE] Running on 127.0.0.1:3000'));
 createClient();
 
 process.on('SIGINT', async () => {

@@ -480,7 +480,16 @@ app.on('window-all-closed', () => {
   }
   const { exec } = require('child_process')
   if (process.platform === 'win32') {
-    exec('taskkill /F /IM python.exe /T', () => {})
+    // 'taskkill /F /IM python.exe /T' matches by image name only — it kills
+    // EVERY python.exe running on the machine, not just iZACH's own backend
+    // (any other Python app/venv/IDE process the user has open dies too).
+    // Filter by command line instead, same specificity as the Mac branch's
+    // pkill -f below (matches main.py's exact path, not just the exe name).
+    const backendMainWin = path.join(PROJECT_ROOT, 'main.py').replace(/\\/g, '\\\\')
+    const psKill = `Get-CimInstance Win32_Process -Filter "Name='python.exe'" | ` +
+      `Where-Object { $_.CommandLine -like '*${backendMainWin}*' } | ` +
+      `ForEach-Object { Stop-Process -Id $_.ProcessId -Force }`
+    exec(`powershell -NoProfile -Command "${psKill}"`, () => {})
   } else if (process.platform === 'darwin') {
     // main.cjs doesn't spawn these services itself (launch_izach.py does, each
     // in its own Terminal window), so there are no child PIDs to track directly

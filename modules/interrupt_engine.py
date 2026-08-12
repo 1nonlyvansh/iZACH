@@ -145,9 +145,19 @@ class InterruptEngine:
         """
         mic = None
         try:
-            # Try device 0 first, fallback to system default
+            # Try the user's selected mic (Settings → mic selector) first,
+            # then device 0, then system default — this used to hardcode
+            # (0, None) only, so barge-in detection listened on the wrong
+            # physical mic for anyone who'd picked a non-default one.
+            _selected = None
+            try:
+                import main as _main
+                _selected = getattr(_main, "_mic_device_index", None)
+            except Exception:
+                pass
+            _candidates = [_selected, 0, None] if _selected is not None else [0, None]
             # Serialize PyAudio init — concurrent Pa_Initialize() causes access violation on Windows
-            for device_idx in (0, None):
+            for device_idx in _candidates:
                 try:
                     with PYAUDIO_INIT_LOCK:
                         mic = sr.Microphone(device_index=device_idx)

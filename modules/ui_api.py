@@ -252,6 +252,30 @@ MAX_LOG = 200
 # ── psutil CPU primer (first call always returns 0 — call once at import) ──
 psutil.cpu_percent(interval=None)
 
+# ── Background CPU sampler ──────────────────────────────────────
+# /status was calling psutil.cpu_percent(interval=0.1) synchronously on every
+# request (~4s polling from the UI) — 100ms of blocking per request just to
+# avoid the "first call returns 0" psutil quirk. A background thread samples
+# non-blocking (interval=None, cheap) every 2s instead; /status just reads
+# the cached value. Also primes a single persistent Process object for the
+# per-process reading — a fresh psutil.Process(pid) created per-request (the
+# old code) always reports 0.0 on interval=None since it has no prior sample
+# to diff against; interval=0.1 was the workaround for that too.
+_cpu_cache = {"system": 0.0, "proc": 0.0}
+_cpu_proc = psutil.Process(os.getpid())
+_cpu_proc.cpu_percent(interval=None)  # prime
+
+def _cpu_sampler_loop():
+    while True:
+        try:
+            _cpu_cache["system"] = psutil.cpu_percent(interval=None)
+            _cpu_cache["proc"] = round(_cpu_proc.cpu_percent(interval=None), 1)
+        except Exception:
+            pass
+        time.sleep(2)
+
+threading.Thread(target=_cpu_sampler_loop, daemon=True, name="CPUSampler").start()
+
 
 def register_ui_api(app, chain_fn, speak_fn, get_response_fn, spotify_handler=None):
     """
@@ -561,18 +585,16 @@ def ui_command():
 @ui_bp.route("/status", methods=["GET"])
 def ui_status():
     try:
-        # interval=0.1 gives a real reading every call (never 0)
-        cpu = psutil.cpu_percent(interval=0.1)
+        # Non-blocking — reads the background sampler's cache instead of
+        # blocking this request thread on psutil's interval sleep.
+        cpu = _cpu_cache["system"]
         ram = psutil.virtual_memory()
 
         # iZACH process own stats
-        proc_cpu = 0.0
+        proc_cpu = _cpu_cache["proc"]
         proc_mem = 0.0
         try:
-            import os as _os
-            p = psutil.Process(_os.getpid())
-            proc_cpu = round(p.cpu_percent(interval=0.1), 1)
-            proc_mem = round(p.memory_percent(), 1)
+            proc_mem = round(_cpu_proc.memory_percent(), 1)
         except Exception:
             pass
 
@@ -1446,6 +1468,18 @@ def api_keys_post():
                         groq_key=_new_groq if "GROQ_API_KEY" in updates else None,
                         gemini_keys=_new_gem if any(k in updates for k in ("GEMINI_KEY_1", "GEMINI_KEY_2", "GEMINI_KEY_3")) else None,
                     )
+
+                # web_automation.py builds its own Groq client on first use
+                # and caches it forever (module-level `if _groq_client is
+                # None`) — without this, a rotated GROQ_API_KEY silently
+                # kept using the old key for web-page summarization until
+                # the next full restart.
+                if "GROQ_API_KEY" in updates:
+                    try:
+                        import modules.web_automation as _wa_mod
+                        _wa_mod._groq_client = None
+                    except Exception:
+                        pass
 
                 # Hot-swap inside the OrchestratorAgent singleton
                 if "GROQ_API_KEY" in updates:

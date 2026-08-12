@@ -254,20 +254,43 @@ def restart_as_primary():
     5050/5051."""
     time.sleep(1.5)  # let the HTTP /peer/handoff response return to the caller first
     try:
-        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        main_py = os.path.join(project_root, "main.py")
-        if IS_MAC:
-            python_bin = os.path.join(project_root, ".venv", "bin", "python3")
-            subprocess.Popen([python_bin, main_py], cwd=project_root, start_new_session=True)
-        elif IS_WINDOWS:
+        pygame_mod = sys.modules.get("pygame")
+        if pygame_mod is not None:
+            pygame_mod.mixer.quit()
+    except Exception:
+        pass
+
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    main_py = os.path.join(project_root, "main.py")
+    if IS_MAC:
+        # execv replaces THIS process image in place (same PID) instead of
+        # spawning a new one and exiting — no window where both processes
+        # could momentarily hold 5050/5051 at once, since exec closes this
+        # process's sockets as part of the replacement rather than racing a
+        # separately-spawned child to bind before this one releases them.
+        # Safe here specifically because this is a headless Mac process to
+        # begin with (no console/window identity to preserve across the
+        # swap) — see the Windows branch below for why it differs there.
+        python_bin = os.path.join(project_root, ".venv", "bin", "python3")
+        try:
+            os.execv(python_bin, [python_bin, main_py])
+        except Exception as e:
+            print(f"[DUAL-INSTANCE] restart_as_primary execv failed: {e}")
+            os._exit(1)
+    elif IS_WINDOWS:
+        # Not execv here — Windows' UX deliberately gives iZACH its own
+        # visible console window (CREATE_NEW_CONSOLE, see launch_izach.py);
+        # execv would keep reusing whatever console (or none) this process
+        # already has instead of opening a fresh one. Spawn + exit instead.
+        try:
             python_bin = os.path.join(project_root, ".venv", "Scripts", "python.exe")
             subprocess.Popen(
                 [python_bin, main_py], cwd=project_root,
                 creationflags=subprocess.CREATE_NEW_CONSOLE,
             )
-    except Exception as e:
-        print(f"[DUAL-INSTANCE] restart_as_primary failed to spawn replacement: {e}")
-    os._exit(0)
+        except Exception as e:
+            print(f"[DUAL-INSTANCE] restart_as_primary failed to spawn replacement: {e}")
+        os._exit(0)
 
 
 def verify_peer_token(token: str) -> bool:
